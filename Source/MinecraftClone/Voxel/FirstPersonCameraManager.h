@@ -1,0 +1,18 @@
+#pragma once
+
+#include "CoreMinimal.h"
+#include "Camera/PlayerCameraManager.h"
+#include "FirstPersonCameraManager.generated.h"
+
+/**
+ * Basic First Person camera manager.
+ * Limits min/max look pitch.
+ */
+UCLASS()
+class MINECRAFTCLONE_API AFirstPersonCameraManager : public APlayerCameraManager
+{
+	GENERATED_BODY()
+
+public:
+	AFirstPersonCameraManager();
+};
