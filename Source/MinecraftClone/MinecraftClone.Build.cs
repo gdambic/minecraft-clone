@@ -15,14 +15,18 @@ public class MinecraftClone : ModuleRules
 			"InputCore",
 			"EnhancedInput",
 			"UMG",
-			"Slate"
+			"Slate",
+			"AIModule",
+			"GameplayTasks",
+			"NavigationSystem"
 		});
 
 		PrivateDependencyModuleNames.AddRange(new string[] { });
 
 		PublicIncludePaths.AddRange(new string[] {
 			"MinecraftClone",
-			"MinecraftClone/Voxel"
+			"MinecraftClone/Voxel",
+			"MinecraftClone/Voxel/AI"
 		});
 
 		// Uncomment if you are using Slate UI

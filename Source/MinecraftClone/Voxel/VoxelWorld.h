@@ -7,6 +7,7 @@
 #include "VoxelWorld.generated.h"
 
 class ABlock;
+class AZombie;
 
 UCLASS()
 class MINECRAFTCLONE_API AVoxelWorld : public AActor
@@ -48,6 +49,12 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "World|Trees")
 	int32 TreeCount;
 
+	// === ENEMIES ===
+
+	/** Blueprint klasa za zombija - postaviti BP_Zombie */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "World|Enemies")
+	TSubclassOf<AZombie> ZombieClass;
+
 	// === LEAF DECAY ===
 
 	/** Poziva se kad se log uništi - pokreće provjeru decay-a obližnjeg lišća */
@@ -87,6 +94,9 @@ private:
 
 	// === TREES ===
 	void GenerateTrees();
+
+	// === ENEMIES ===
+	void SpawnEnemies();
 
 	// === LEAF DECAY ===
 

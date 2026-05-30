@@ -2,6 +2,7 @@
 #include "Block.h"
 #include "TreeGenerator.h"
 #include "TimerManager.h"
+#include "Zombie.h"
 
 AVoxelWorld::AVoxelWorld()
 {
@@ -58,6 +59,9 @@ void AVoxelWorld::GenerateWorld()
 
 	// Generiraj stabla
 	GenerateTrees();
+
+	// Spawn enemies
+	SpawnEnemies();
 
 	// Pokreni timer za leaf decay (svakih 2.5 sekundi)
 	GetWorld()->GetTimerManager().SetTimer(
@@ -188,6 +192,37 @@ TArray<EBlockType> AVoxelWorld::GetPlaceableBlockTypes() const
 void AVoxelWorld::GenerateTrees()
 {
 	FTreeGenerator::GenerateRandomTrees(this, TreeCount, WorldSizeX, WorldSizeY, SurfaceLevel);
+}
+
+// === ENEMIES ===
+
+void AVoxelWorld::SpawnEnemies()
+{
+	if (!ZombieClass)
+	{
+		return;
+	}
+
+	// Spawn zombie na nasumičnoj poziciji na površini
+	int32 RandX = FMath::RandRange(10, WorldSizeX - 10);
+	int32 RandY = FMath::RandRange(10, WorldSizeY - 10);
+	int32 SpawnZ = SurfaceLevel + 1;
+	UE_LOG(LogTemp, Warning, TEXT("DEBUG SpawnEnemies: SpawnZ = %d"), SpawnZ);
+
+	FVector WorldPos = GridToWorld(RandX, RandY, SpawnZ);
+	UE_LOG(LogTemp, Warning, TEXT("DEBUG SpawnEnemies: WorldPos after GridToWorld = %s"), *WorldPos.ToString());
+	// Podignuti malo iznad površine da izbjegnemo collision
+	WorldPos.Z += 88.0f;
+	UE_LOG(LogTemp, Warning, TEXT("DEBUG SpawnEnemies: WorldPos after +50 = %s"), *WorldPos.ToString());
+
+	FActorSpawnParameters SpawnParams;
+	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
+	AZombie* Zombie = GetWorld()->SpawnActor<AZombie>(ZombieClass, WorldPos, FRotator::ZeroRotator, SpawnParams);
+
+	if (Zombie)
+	{
+		UE_LOG(LogTemp, Log, TEXT("VoxelWorld: Spawned zombie at (%d, %d, %d)"), RandX, RandY, SpawnZ);
+	}
 }
 
 // === LEAF DECAY ===
