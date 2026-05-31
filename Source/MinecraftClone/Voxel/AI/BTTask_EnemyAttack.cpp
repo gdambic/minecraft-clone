@@ -22,17 +22,17 @@ EBTNodeResult::Type UBTTask_EnemyAttack::ExecuteTask(UBehaviorTreeComponent& Own
 	AActor* Target = Cast<AActor>(Blackboard->GetValueAsObject(TargetActorKey.SelectedKeyName));
 	if (!Target) return EBTNodeResult::Failed;
 
-	// Check distance to target
+	// Check distance to target - return Succeeded to stay in Chase loop
 	float Distance = FVector::Dist(Enemy->GetActorLocation(), Target->GetActorLocation());
 	if (Distance > Enemy->AttackRange)
 	{
-		return EBTNodeResult::Failed;
+		return EBTNodeResult::Succeeded;
 	}
 
-	// Check cooldown
+	// Check cooldown - return Succeeded to stay in Chase loop (don't trigger Wander)
 	if (!Enemy->CanAttack())
 	{
-		return EBTNodeResult::Failed;
+		return EBTNodeResult::Succeeded;
 	}
 
 	// Perform the attack
