@@ -19,12 +19,16 @@ class MINECRAFTCLONE_API AZombie : public AEnemyBase
 public:
 	AZombie();
 
-	/** Visual mesh component (cube placeholder) */
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
-	UStaticMeshComponent* CubeMesh;
+	/** Is zombie currently playing attack animation */
+	UPROPERTY(BlueprintReadWrite, Category = "Animation")
+	bool bIsAttacking = false;
 
 	/** Perform melee attack - displays HIT message */
 	virtual void PerformAttack() override;
+
+	/** Called by Animation Notify to reset attack state */
+	UFUNCTION(BlueprintCallable, Category = "Animation")
+	void OnAttackAnimationEnd();
 
 protected:
 	virtual void BeginPlay() override;

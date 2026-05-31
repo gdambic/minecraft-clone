@@ -20,28 +20,13 @@ AZombie::AZombie()
 	GetCapsuleComponent()->SetCanEverAffectNavigation(false);
 	GetCapsuleComponent()->bDynamicObstacle = false;
 
-	// Create cube mesh for visual representation
-	CubeMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("CubeMesh"));
-	CubeMesh->SetupAttachment(RootComponent);
-	CubeMesh->SetRelativeLocation(FVector(0.0f, 0.0f, 0.0f));
-
-	// Load default cube mesh
-	static ConstructorHelpers::FObjectFinder<UStaticMesh> CubeMeshAsset(
-		TEXT("/Engine/BasicShapes/Cube.Cube"));
-	if (CubeMeshAsset.Succeeded())
+	// Skeletal mesh is set in Blueprint (BP_Zombie)
+	// GetMesh() returns the inherited USkeletalMeshComponent from ACharacter
+	if (GetMesh())
 	{
-		CubeMesh->SetStaticMesh(CubeMeshAsset.Object);
-		// Scale to humanoid proportions (slightly smaller than 1 block)
-		CubeMesh->SetRelativeScale3D(FVector(0.6f, 0.6f, 1.6f));
-		// Center the mesh on the capsule
-		CubeMesh->SetRelativeLocation(FVector(0.0f, 0.0f, -8.0f));
+		GetMesh()->SetCollisionResponseToChannel(ECC_Camera, ECR_Ignore);
+		GetMesh()->SetCanEverAffectNavigation(false);
 	}
-
-	// Set collision to ignore camera
-	CubeMesh->SetCollisionResponseToChannel(ECC_Camera, ECR_Ignore);
-
-	// Don't let the cube mesh affect NavMesh generation
-	CubeMesh->SetCanEverAffectNavigation(false);
 }
 
 void AZombie::BeginPlay()
@@ -60,6 +45,9 @@ void AZombie::PerformAttack()
 	// Call base to update LastAttackTime
 	Super::PerformAttack();
 
+	// Trigger attack animation
+	bIsAttacking = true;
+
 	// Display HIT message on screen
 	if (GEngine)
 	{
@@ -76,4 +64,9 @@ void AZombie::PerformAttack()
 	// {
 	//     Player->TakeDamage(AttackDamage, ...);
 	// }
+}
+
+void AZombie::OnAttackAnimationEnd()
+{
+	bIsAttacking = false;
 }
