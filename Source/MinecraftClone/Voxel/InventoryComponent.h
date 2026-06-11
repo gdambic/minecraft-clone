@@ -45,6 +45,12 @@ public:
 	static constexpr int32 TotalSlots = 36;
 	static constexpr int32 HotbarStartIndex = 27;
 
+	/** Konstante za crafting slotove */
+	static constexpr int32 CraftingInputSize = 4;
+	static constexpr int32 CraftingInputStartIndex = 36;  // 36, 37, 38, 39
+	static constexpr int32 CraftingOutputIndex = 40;
+	static constexpr int32 TotalCraftingSlots = 5;  // 4 input + 1 output
+
 	UInventoryComponent();
 
 	// ==================== Slot-based API ====================
@@ -69,9 +75,21 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Inventory")
 	const TArray<FInventorySlot>& GetAllSlots() const { return Slots; }
 
-	/** Provjeri je li slot index validan */
+	/** Provjeri je li slot index validan (uključuje i crafting slotove) */
 	UFUNCTION(BlueprintPure, Category = "Inventory")
 	bool IsValidSlotIndex(int32 SlotIndex) const;
+
+	/** Provjeri je li slot index crafting slot */
+	UFUNCTION(BlueprintPure, Category = "Inventory")
+	bool IsCraftingSlotIndex(int32 SlotIndex) const;
+
+	/** Provjeri je li slot index crafting input slot (36-39) */
+	UFUNCTION(BlueprintPure, Category = "Inventory")
+	bool IsCraftingInputSlot(int32 SlotIndex) const;
+
+	/** Provjeri je li slot index crafting output slot (40) */
+	UFUNCTION(BlueprintPure, Category = "Inventory")
+	bool IsCraftingOutputSlot(int32 SlotIndex) const;
 
 	/** Pronađi prvi prazan slot (vraća -1 ako nema) */
 	UFUNCTION(BlueprintCallable, Category = "Inventory")
@@ -152,6 +170,13 @@ private:
 	/** Array od 36 slotova: 0-26 = main inventory, 27-35 = hotbar */
 	UPROPERTY(VisibleAnywhere, Category = "Inventory")
 	TArray<FInventorySlot> Slots;
+
+	/** Array od 5 crafting slotova: 0-3 = input (2x2), 4 = output */
+	UPROPERTY(VisibleAnywhere, Category = "Inventory")
+	TArray<FInventorySlot> CraftingSlots;
+
+	/** Pretvori crafting slot index (36-40) u array index (0-4) */
+	int32 CraftingSlotToArrayIndex(int32 SlotIndex) const;
 
 	/** Item koji igrač trenutno drži (za UI drag & drop) */
 	UPROPERTY(VisibleAnywhere, Category = "Inventory")

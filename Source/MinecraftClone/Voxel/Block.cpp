@@ -12,6 +12,9 @@ ABlock::ABlock()
 	MeshComponent = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("MeshComponent"));
 	RootComponent = MeshComponent;
 
+	// VAŽNO: Omogući da blokovi utječu na NavMesh
+	MeshComponent->SetCanEverAffectNavigation(true);
+
 	// Mesh, materijal i ostala svojstva se postavljaju kroz BP_Block u editoru
 
 	BlockType = EBlockType::Dirt;

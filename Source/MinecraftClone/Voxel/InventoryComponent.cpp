@@ -7,6 +7,9 @@ UInventoryComponent::UInventoryComponent()
 
 	// Inicijaliziraj 36 praznih slotova
 	Slots.SetNum(TotalSlots);
+
+	// Inicijaliziraj 5 crafting slotova (4 input + 1 output)
+	CraftingSlots.SetNum(TotalCraftingSlots);
 }
 
 void UInventoryComponent::BeginPlay()
@@ -18,7 +21,11 @@ void UInventoryComponent::BeginPlay()
 
 FInventorySlot UInventoryComponent::GetSlot(int32 SlotIndex) const
 {
-	if (IsValidSlotIndex(SlotIndex))
+	if (IsCraftingSlotIndex(SlotIndex))
+	{
+		return CraftingSlots[CraftingSlotToArrayIndex(SlotIndex)];
+	}
+	if (SlotIndex >= 0 && SlotIndex < TotalSlots)
 	{
 		return Slots[SlotIndex];
 	}
@@ -32,16 +39,25 @@ void UInventoryComponent::SetSlot(int32 SlotIndex, EItemType Type, int32 Quantit
 		return;
 	}
 
-	FInventorySlot OldSlot = Slots[SlotIndex];
-
-	if (Type == EItemType::None || Quantity <= 0)
+	// Dohvati referencu na odgovarajući slot
+	FInventorySlot* TargetSlot = nullptr;
+	if (IsCraftingSlotIndex(SlotIndex))
 	{
-		Slots[SlotIndex].Clear();
+		TargetSlot = &CraftingSlots[CraftingSlotToArrayIndex(SlotIndex)];
 	}
 	else
 	{
-		Slots[SlotIndex].ItemType = Type;
-		Slots[SlotIndex].Quantity = Quantity;
+		TargetSlot = &Slots[SlotIndex];
+	}
+
+	if (Type == EItemType::None || Quantity <= 0)
+	{
+		TargetSlot->Clear();
+	}
+	else
+	{
+		TargetSlot->ItemType = Type;
+		TargetSlot->Quantity = Quantity;
 	}
 
 	BroadcastSlotChanged(SlotIndex);
@@ -64,10 +80,32 @@ bool UInventoryComponent::SwapSlots(int32 SlotA, int32 SlotB)
 		return true; // Ništa za napraviti
 	}
 
+	// Dohvati reference na odgovarajuće slotove
+	FInventorySlot* SlotPtrA = nullptr;
+	FInventorySlot* SlotPtrB = nullptr;
+
+	if (IsCraftingSlotIndex(SlotA))
+	{
+		SlotPtrA = &CraftingSlots[CraftingSlotToArrayIndex(SlotA)];
+	}
+	else
+	{
+		SlotPtrA = &Slots[SlotA];
+	}
+
+	if (IsCraftingSlotIndex(SlotB))
+	{
+		SlotPtrB = &CraftingSlots[CraftingSlotToArrayIndex(SlotB)];
+	}
+	else
+	{
+		SlotPtrB = &Slots[SlotB];
+	}
+
 	// Swap
-	FInventorySlot TempSlot = Slots[SlotA];
-	Slots[SlotA] = Slots[SlotB];
-	Slots[SlotB] = TempSlot;
+	FInventorySlot TempSlot = *SlotPtrA;
+	*SlotPtrA = *SlotPtrB;
+	*SlotPtrB = TempSlot;
 
 	BroadcastSlotChanged(SlotA);
 	BroadcastSlotChanged(SlotB);
@@ -77,7 +115,28 @@ bool UInventoryComponent::SwapSlots(int32 SlotA, int32 SlotB)
 
 bool UInventoryComponent::IsValidSlotIndex(int32 SlotIndex) const
 {
-	return SlotIndex >= 0 && SlotIndex < TotalSlots;
+	// Inventory slotovi (0-35) ili crafting slotovi (36-40)
+	return (SlotIndex >= 0 && SlotIndex < TotalSlots) || IsCraftingSlotIndex(SlotIndex);
+}
+
+bool UInventoryComponent::IsCraftingSlotIndex(int32 SlotIndex) const
+{
+	return SlotIndex >= CraftingInputStartIndex && SlotIndex <= CraftingOutputIndex;
+}
+
+bool UInventoryComponent::IsCraftingInputSlot(int32 SlotIndex) const
+{
+	return SlotIndex >= CraftingInputStartIndex && SlotIndex < CraftingInputStartIndex + CraftingInputSize;
+}
+
+bool UInventoryComponent::IsCraftingOutputSlot(int32 SlotIndex) const
+{
+	return SlotIndex == CraftingOutputIndex;
+}
+
+int32 UInventoryComponent::CraftingSlotToArrayIndex(int32 SlotIndex) const
+{
+	return SlotIndex - CraftingInputStartIndex;
 }
 
 int32 UInventoryComponent::FindFirstEmptySlot() const
@@ -130,7 +189,7 @@ void UInventoryComponent::BroadcastSlotChanged(int32 SlotIndex)
 {
 	if (IsValidSlotIndex(SlotIndex))
 	{
-		OnSlotChanged.Broadcast(SlotIndex, Slots[SlotIndex]);
+		OnSlotChanged.Broadcast(SlotIndex, GetSlot(SlotIndex));
 	}
 }
 
@@ -320,58 +379,97 @@ FItemData UInventoryComponent::GetItemData(EItemType ItemType, UDataTable* ItemD
 
 bool UInventoryComponent::PickUpItem(int32 SlotIndex)
 {
+	UE_LOG(LogTemp, Warning, TEXT("PickUpItem called with SlotIndex: %d"), SlotIndex);
+
 	// Ako već držimo item, ne možemo uzeti drugi
 	if (!HeldItem.IsEmpty())
 	{
+		UE_LOG(LogTemp, Warning, TEXT("PickUpItem FAILED: Already holding item"));
 		return false;
 	}
 
 	// Provjeri valjanost indexa
 	if (!IsValidSlotIndex(SlotIndex))
 	{
+		UE_LOG(LogTemp, Warning, TEXT("PickUpItem FAILED: Invalid slot index %d"), SlotIndex);
 		return false;
 	}
 
-	// Ako je slot prazan, nema što uzeti
-	if (Slots[SlotIndex].IsEmpty())
+	UE_LOG(LogTemp, Warning, TEXT("PickUpItem: IsCraftingSlot=%d"), IsCraftingSlotIndex(SlotIndex) ? 1 : 0);
+
+	// Dohvati referencu na odgovarajući slot
+	FInventorySlot* TargetSlot = nullptr;
+	if (IsCraftingSlotIndex(SlotIndex))
 	{
+		TargetSlot = &CraftingSlots[CraftingSlotToArrayIndex(SlotIndex)];
+	}
+	else
+	{
+		TargetSlot = &Slots[SlotIndex];
+	}
+
+	// Ako je slot prazan, nema što uzeti
+	if (TargetSlot->IsEmpty())
+	{
+		UE_LOG(LogTemp, Warning, TEXT("PickUpItem FAILED: Slot %d is empty"), SlotIndex);
 		return false;
 	}
 
 	// Uzmi item u ruku
-	HeldItem = Slots[SlotIndex];
+	HeldItem = *TargetSlot;
 	HeldItemSlotIndex = SlotIndex;
 
 	// Isprazni slot
-	Slots[SlotIndex].Clear();
+	TargetSlot->Clear();
 	BroadcastSlotChanged(SlotIndex);
 
+	UE_LOG(LogTemp, Warning, TEXT("PickUpItem SUCCESS: Picked up %d items from slot %d"), HeldItem.Quantity, SlotIndex);
 	return true;
 }
 
 bool UInventoryComponent::PlaceItem(int32 SlotIndex)
 {
+	UE_LOG(LogTemp, Warning, TEXT("PlaceItem called with SlotIndex: %d"), SlotIndex);
+
 	// Ako ne držimo ništa, nema što spustiti
 	if (HeldItem.IsEmpty())
 	{
+		UE_LOG(LogTemp, Warning, TEXT("PlaceItem FAILED: Not holding any item"));
 		return false;
 	}
 
 	// Provjeri valjanost indexa
 	if (!IsValidSlotIndex(SlotIndex))
 	{
+		UE_LOG(LogTemp, Warning, TEXT("PlaceItem FAILED: Invalid slot index %d, IsCrafting=%d"), SlotIndex, IsCraftingSlotIndex(SlotIndex) ? 1 : 0);
 		return false;
 	}
 
-	// Ako slot nije prazan, ne možemo spustiti (za sada - swap dolazi kasnije)
-	if (!Slots[SlotIndex].IsEmpty())
+	UE_LOG(LogTemp, Warning, TEXT("PlaceItem: Valid slot, IsCraftingSlot=%d"), IsCraftingSlotIndex(SlotIndex) ? 1 : 0);
+
+	// Dohvati referencu na odgovarajući slot
+	FInventorySlot* TargetSlot = nullptr;
+	if (IsCraftingSlotIndex(SlotIndex))
 	{
+		TargetSlot = &CraftingSlots[CraftingSlotToArrayIndex(SlotIndex)];
+	}
+	else
+	{
+		TargetSlot = &Slots[SlotIndex];
+	}
+
+	// Ako slot nije prazan, ne možemo spustiti (za sada - swap dolazi kasnije)
+	if (!TargetSlot->IsEmpty())
+	{
+		UE_LOG(LogTemp, Warning, TEXT("PlaceItem FAILED: Slot %d is not empty"), SlotIndex);
 		return false;
 	}
 
 	// Spusti item u slot
-	Slots[SlotIndex] = HeldItem;
+	*TargetSlot = HeldItem;
 	BroadcastSlotChanged(SlotIndex);
+
+	UE_LOG(LogTemp, Warning, TEXT("PlaceItem SUCCESS: Placed item in slot %d"), SlotIndex);
 
 	// Isprazni ruku
 	HeldItem.Clear();
@@ -391,14 +489,25 @@ void UInventoryComponent::ReturnHeldItem()
 	// Ako imamo valjan originalni slot, vrati tamo
 	if (IsValidSlotIndex(HeldItemSlotIndex))
 	{
-		// Ako je originalni slot sada zauzet, swap
-		if (!Slots[HeldItemSlotIndex].IsEmpty())
+		// Dohvati referencu na originalni slot
+		FInventorySlot* OriginalSlot = nullptr;
+		if (IsCraftingSlotIndex(HeldItemSlotIndex))
 		{
-			FInventorySlot TempSlot = Slots[HeldItemSlotIndex];
-			Slots[HeldItemSlotIndex] = HeldItem;
+			OriginalSlot = &CraftingSlots[CraftingSlotToArrayIndex(HeldItemSlotIndex)];
+		}
+		else
+		{
+			OriginalSlot = &Slots[HeldItemSlotIndex];
+		}
+
+		// Ako je originalni slot sada zauzet, swap
+		if (!OriginalSlot->IsEmpty())
+		{
+			FInventorySlot TempSlot = *OriginalSlot;
+			*OriginalSlot = HeldItem;
 			BroadcastSlotChanged(HeldItemSlotIndex);
 
-			// Pokušaj staviti swapani item negdje
+			// Pokušaj staviti swapani item negdje (samo u inventory, ne u crafting)
 			int32 EmptySlot = FindFirstEmptySlot();
 			if (EmptySlot != -1)
 			{
@@ -409,13 +518,13 @@ void UInventoryComponent::ReturnHeldItem()
 		}
 		else
 		{
-			Slots[HeldItemSlotIndex] = HeldItem;
+			*OriginalSlot = HeldItem;
 			BroadcastSlotChanged(HeldItemSlotIndex);
 		}
 	}
 	else
 	{
-		// Nema originalni slot, pronađi bilo koji prazan
+		// Nema originalni slot, pronađi bilo koji prazan (samo u inventory)
 		int32 EmptySlot = FindFirstEmptySlot();
 		if (EmptySlot != -1)
 		{
