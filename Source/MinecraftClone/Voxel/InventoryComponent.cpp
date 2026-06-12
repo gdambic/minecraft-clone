@@ -139,6 +139,34 @@ int32 UInventoryComponent::CraftingSlotToArrayIndex(int32 SlotIndex) const
 	return SlotIndex - CraftingInputStartIndex;
 }
 
+void UInventoryComponent::UpdateCraftingOutput()
+{
+	// Pronađi prvi non-empty input slot
+	FInventorySlot* OutputSlot = &CraftingSlots[CraftingSlotToArrayIndex(CraftingOutputIndex)];
+
+	for (int32 i = 0; i < CraftingInputSize; ++i)
+	{
+		if (!CraftingSlots[i].IsEmpty())
+		{
+			// Kopiraj prvi pronađeni item u output
+			OutputSlot->ItemType = CraftingSlots[i].ItemType;
+			OutputSlot->Quantity = 1; // Output je uvijek 1 za sada
+			BroadcastSlotChanged(CraftingOutputIndex);
+			UE_LOG(LogTemp, Warning, TEXT("UpdateCraftingOutput: Set output to %d from input slot %d"),
+				(int32)OutputSlot->ItemType, CraftingInputStartIndex + i);
+			return;
+		}
+	}
+
+	// Ako nema inputa, isprazni output
+	if (!OutputSlot->IsEmpty())
+	{
+		OutputSlot->Clear();
+		BroadcastSlotChanged(CraftingOutputIndex);
+		UE_LOG(LogTemp, Warning, TEXT("UpdateCraftingOutput: Cleared output (no inputs)"));
+	}
+}
+
 int32 UInventoryComponent::FindFirstEmptySlot() const
 {
 	// Prvo traži prazan slot u hotbaru (27-35) - Minecraft stil
@@ -397,6 +425,47 @@ bool UInventoryComponent::PickUpItem(int32 SlotIndex)
 
 	UE_LOG(LogTemp, Warning, TEXT("PickUpItem: IsCraftingSlot=%d"), IsCraftingSlotIndex(SlotIndex) ? 1 : 0);
 
+	// Specijalna logika za output slot
+	if (IsCraftingOutputSlot(SlotIndex))
+	{
+		FInventorySlot* OutputSlot = &CraftingSlots[CraftingSlotToArrayIndex(SlotIndex)];
+
+		if (OutputSlot->IsEmpty())
+		{
+			UE_LOG(LogTemp, Warning, TEXT("PickUpItem FAILED: Output slot is empty"));
+			return false;
+		}
+
+		// Uzmi item iz output slota
+		HeldItem = *OutputSlot;
+		HeldItemSlotIndex = SlotIndex;
+		OutputSlot->Clear();
+		BroadcastSlotChanged(SlotIndex);
+
+		// Pronađi i isprazni prvi non-empty input slot (potroši ingredient)
+		for (int32 i = 0; i < CraftingInputSize; ++i)
+		{
+			if (!CraftingSlots[i].IsEmpty())
+			{
+				int32 InputSlotIndex = CraftingInputStartIndex + i;
+				CraftingSlots[i].Quantity -= 1;
+				if (CraftingSlots[i].Quantity <= 0)
+				{
+					CraftingSlots[i].Clear();
+				}
+				BroadcastSlotChanged(InputSlotIndex);
+				UE_LOG(LogTemp, Warning, TEXT("PickUpItem: Consumed 1 item from input slot %d"), InputSlotIndex);
+				break;
+			}
+		}
+
+		// Ažuriraj output za sljedeći item
+		UpdateCraftingOutput();
+
+		UE_LOG(LogTemp, Warning, TEXT("PickUpItem SUCCESS: Picked up crafted item from output slot"));
+		return true;
+	}
+
 	// Dohvati referencu na odgovarajući slot
 	FInventorySlot* TargetSlot = nullptr;
 	if (IsCraftingSlotIndex(SlotIndex))
@@ -423,6 +492,12 @@ bool UInventoryComponent::PickUpItem(int32 SlotIndex)
 	TargetSlot->Clear();
 	BroadcastSlotChanged(SlotIndex);
 
+	// Ako je crafting input slot, ažuriraj output
+	if (IsCraftingInputSlot(SlotIndex))
+	{
+		UpdateCraftingOutput();
+	}
+
 	UE_LOG(LogTemp, Warning, TEXT("PickUpItem SUCCESS: Picked up %d items from slot %d"), HeldItem.Quantity, SlotIndex);
 	return true;
 }
@@ -446,6 +521,13 @@ bool UInventoryComponent::PlaceItem(int32 SlotIndex)
 	}
 
 	UE_LOG(LogTemp, Warning, TEXT("PlaceItem: Valid slot, IsCraftingSlot=%d"), IsCraftingSlotIndex(SlotIndex) ? 1 : 0);
+
+	// Ne dozvoli stavljanje itema u output slot
+	if (IsCraftingOutputSlot(SlotIndex))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("PlaceItem FAILED: Cannot place items in output slot"));
+		return false;
+	}
 
 	// Dohvati referencu na odgovarajući slot
 	FInventorySlot* TargetSlot = nullptr;
@@ -474,6 +556,12 @@ bool UInventoryComponent::PlaceItem(int32 SlotIndex)
 	// Isprazni ruku
 	HeldItem.Clear();
 	HeldItemSlotIndex = -1;
+
+	// Ako je crafting input slot, ažuriraj output
+	if (IsCraftingInputSlot(SlotIndex))
+	{
+		UpdateCraftingOutput();
+	}
 
 	return true;
 }

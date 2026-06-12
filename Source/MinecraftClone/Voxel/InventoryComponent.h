@@ -91,6 +91,10 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Inventory")
 	bool IsCraftingOutputSlot(int32 SlotIndex) const;
 
+	/** Ažuriraj crafting output na temelju inputa (kopira prvi pronađeni item) */
+	UFUNCTION(BlueprintCallable, Category = "Inventory|Crafting")
+	void UpdateCraftingOutput();
+
 	/** Pronađi prvi prazan slot (vraća -1 ako nema) */
 	UFUNCTION(BlueprintCallable, Category = "Inventory")
 	int32 FindFirstEmptySlot() const;
