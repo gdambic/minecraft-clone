@@ -8,6 +8,7 @@
 #include "InventoryComponent.generated.h"
 
 class UDataTable;
+struct FCraftingRecipe;
 
 /** Struktura za pojedinačni slot inventara */
 USTRUCT(BlueprintType)
@@ -190,6 +191,15 @@ private:
 	UPROPERTY(VisibleAnywhere, Category = "Inventory")
 	int32 HeldItemSlotIndex = -1;
 
+	/** Trenutni aktivni recept (nullptr ako nema matcha) */
+	const FCraftingRecipe* CurrentRecipe = nullptr;
+
 	/** Emitira OnSlotChanged delegate */
 	void BroadcastSlotChanged(int32 SlotIndex);
+
+	/** Dohvati crafting grid kao array EItemType vrijednosti */
+	TArray<EItemType> GetCraftingGridAsArray() const;
+
+	/** Potroši ingredijente prema trenutnom receptu */
+	void ConsumeRecipeIngredients();
 };

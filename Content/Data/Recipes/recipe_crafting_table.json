@@ -1,0 +1,13 @@
+{
+    "id": "crafting_table",
+    "type": "shaped",
+    "pattern": [
+        "PP",
+        "PP"
+    ],
+    "key": {
+        "P": { "item": "OakPlanks" }
+    },
+    "result": { "item": "CraftingTable", "count": 1 },
+    "gridSize": 2
+}

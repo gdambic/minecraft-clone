@@ -1,0 +1,13 @@
+{
+    "id": "sticks_birch",
+    "type": "shaped",
+    "pattern": [
+        "P",
+        "P"
+    ],
+    "key": {
+        "P": { "item": "BirchPlanks" }
+    },
+    "result": { "item": "Stick", "count": 4 },
+    "gridSize": 2
+}

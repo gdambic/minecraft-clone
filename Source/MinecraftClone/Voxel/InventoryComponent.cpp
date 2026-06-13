@@ -2,6 +2,8 @@
 #include "Engine/DataTable.h"
 #include "Engine/Engine.h"
 #include "BlockRegistry.h"
+#include "CraftingRecipe.h"
+#include "CraftingRecipeRegistry.h"
 #include "Kismet/GameplayStatics.h"
 
 UInventoryComponent::UInventoryComponent()
@@ -144,29 +146,121 @@ int32 UInventoryComponent::CraftingSlotToArrayIndex(int32 SlotIndex) const
 
 void UInventoryComponent::UpdateCraftingOutput()
 {
-	// Pronađi prvi non-empty input slot
 	FInventorySlot* OutputSlot = &CraftingSlots[CraftingSlotToArrayIndex(CraftingOutputIndex)];
+
+	// Dohvati CraftingRecipeRegistry
+	UCraftingRecipeRegistry* RecipeRegistry = UCraftingRecipeRegistry::Get(GetOwner());
+	if (!RecipeRegistry)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("UpdateCraftingOutput: No recipe registry available"));
+		CurrentRecipe = nullptr;
+		if (!OutputSlot->IsEmpty())
+		{
+			OutputSlot->Clear();
+			BroadcastSlotChanged(CraftingOutputIndex);
+		}
+		return;
+	}
+
+	// Dohvati crafting grid kao array
+	TArray<EItemType> CraftingGrid = GetCraftingGridAsArray();
+
+	// Pronađi odgovarajući recept
+	CurrentRecipe = RecipeRegistry->FindMatchingRecipe(CraftingGrid, 2);  // 2x2 grid
+
+	if (CurrentRecipe)
+	{
+		// Postavi output prema receptu
+		OutputSlot->ItemType = CurrentRecipe->Result.ItemType;
+		OutputSlot->Quantity = CurrentRecipe->Result.Count;
+		BroadcastSlotChanged(CraftingOutputIndex);
+		UE_LOG(LogTemp, Log, TEXT("UpdateCraftingOutput: Matched recipe '%s', output: %d x %d"),
+			*CurrentRecipe->RecipeId, (int32)OutputSlot->ItemType, OutputSlot->Quantity);
+	}
+	else
+	{
+		// Nema matcha - isprazni output
+		if (!OutputSlot->IsEmpty())
+		{
+			OutputSlot->Clear();
+			BroadcastSlotChanged(CraftingOutputIndex);
+			UE_LOG(LogTemp, Log, TEXT("UpdateCraftingOutput: No matching recipe, cleared output"));
+		}
+	}
+}
+
+TArray<EItemType> UInventoryComponent::GetCraftingGridAsArray() const
+{
+	TArray<EItemType> Grid;
+	Grid.SetNum(CraftingInputSize);
 
 	for (int32 i = 0; i < CraftingInputSize; ++i)
 	{
-		if (!CraftingSlots[i].IsEmpty())
-		{
-			// Kopiraj prvi pronađeni item u output
-			OutputSlot->ItemType = CraftingSlots[i].ItemType;
-			OutputSlot->Quantity = 1; // Output je uvijek 1 za sada
-			BroadcastSlotChanged(CraftingOutputIndex);
-			UE_LOG(LogTemp, Warning, TEXT("UpdateCraftingOutput: Set output to %d from input slot %d"),
-				(int32)OutputSlot->ItemType, CraftingInputStartIndex + i);
-			return;
-		}
+		Grid[i] = CraftingSlots[i].ItemType;
 	}
 
-	// Ako nema inputa, isprazni output
-	if (!OutputSlot->IsEmpty())
+	return Grid;
+}
+
+void UInventoryComponent::ConsumeRecipeIngredients()
+{
+	if (!CurrentRecipe)
 	{
-		OutputSlot->Clear();
-		BroadcastSlotChanged(CraftingOutputIndex);
-		UE_LOG(LogTemp, Warning, TEXT("UpdateCraftingOutput: Cleared output (no inputs)"));
+		return;
+	}
+
+	if (CurrentRecipe->Type == ECraftingRecipeType::Shapeless)
+	{
+		// Za shapeless recepte, potroši potrebne količine
+		TMap<EItemType, int32> ToConsume;
+		for (const FCraftingIngredient& Ingredient : CurrentRecipe->Ingredients)
+		{
+			ToConsume.FindOrAdd(Ingredient.ItemType) += Ingredient.Count;
+		}
+
+		for (int32 i = 0; i < CraftingInputSize && ToConsume.Num() > 0; ++i)
+		{
+			if (CraftingSlots[i].IsEmpty())
+			{
+				continue;
+			}
+
+			int32* ConsumeCount = ToConsume.Find(CraftingSlots[i].ItemType);
+			if (ConsumeCount && *ConsumeCount > 0)
+			{
+				int32 Take = FMath::Min(*ConsumeCount, CraftingSlots[i].Quantity);
+				CraftingSlots[i].Quantity -= Take;
+				*ConsumeCount -= Take;
+
+				if (*ConsumeCount <= 0)
+				{
+					ToConsume.Remove(CraftingSlots[i].ItemType);
+				}
+
+				if (CraftingSlots[i].Quantity <= 0)
+				{
+					CraftingSlots[i].Clear();
+				}
+
+				BroadcastSlotChanged(CraftingInputStartIndex + i);
+			}
+		}
+	}
+	else // Shaped
+	{
+		// Za shaped recepte, potroši po 1 iz svakog slota koji ima item
+		for (int32 i = 0; i < CraftingInputSize; ++i)
+		{
+			if (!CraftingSlots[i].IsEmpty())
+			{
+				CraftingSlots[i].Quantity -= 1;
+				if (CraftingSlots[i].Quantity <= 0)
+				{
+					CraftingSlots[i].Clear();
+				}
+				BroadcastSlotChanged(CraftingInputStartIndex + i);
+			}
+		}
 	}
 }
 
@@ -461,22 +555,8 @@ bool UInventoryComponent::PickUpItem(int32 SlotIndex)
 		OutputSlot->Clear();
 		BroadcastSlotChanged(SlotIndex);
 
-		// Pronađi i isprazni prvi non-empty input slot (potroši ingredient)
-		for (int32 i = 0; i < CraftingInputSize; ++i)
-		{
-			if (!CraftingSlots[i].IsEmpty())
-			{
-				int32 InputSlotIndex = CraftingInputStartIndex + i;
-				CraftingSlots[i].Quantity -= 1;
-				if (CraftingSlots[i].Quantity <= 0)
-				{
-					CraftingSlots[i].Clear();
-				}
-				BroadcastSlotChanged(InputSlotIndex);
-				UE_LOG(LogTemp, Warning, TEXT("PickUpItem: Consumed 1 item from input slot %d"), InputSlotIndex);
-				break;
-			}
-		}
+		// Potroši ingredijente prema trenutnom receptu
+		ConsumeRecipeIngredients();
 
 		// Ažuriraj output za sljedeći item
 		UpdateCraftingOutput();

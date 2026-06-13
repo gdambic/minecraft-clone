@@ -1,0 +1,13 @@
+{
+    "id": "crafting_table_birch",
+    "type": "shaped",
+    "pattern": [
+        "PP",
+        "PP"
+    ],
+    "key": {
+        "P": { "item": "BirchPlanks" }
+    },
+    "result": { "item": "CraftingTable", "count": 1 },
+    "gridSize": 2
+}

@@ -1,0 +1,9 @@
+{
+    "id": "oak_planks",
+    "type": "shapeless",
+    "ingredients": [
+        { "item": "OakLog", "count": 1 }
+    ],
+    "result": { "item": "OakPlanks", "count": 4 },
+    "gridSize": 2
+}

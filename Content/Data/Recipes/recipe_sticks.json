@@ -1,0 +1,13 @@
+{
+    "id": "sticks",
+    "type": "shaped",
+    "pattern": [
+        "P",
+        "P"
+    ],
+    "key": {
+        "P": { "item": "OakPlanks" }
+    },
+    "result": { "item": "Stick", "count": 4 },
+    "gridSize": 2
+}

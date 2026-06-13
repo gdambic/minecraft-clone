@@ -13,5 +13,8 @@ enum class EItemType : uint8
 	BirchLog,     // Deblo breze
 	OakSapling,   // Sadnica hrasta
 	BirchSapling,  // Sadnica breze
-	OakPlanks
+	OakPlanks,
+	BirchPlanks,   // Daske od breze
+	Stick,         // Štap
+	CraftingTable  // Crafting stol
 };

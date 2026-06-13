@@ -1,0 +1,9 @@
+{
+    "id": "birch_planks",
+    "type": "shapeless",
+    "ingredients": [
+        { "item": "BirchLog", "count": 1 }
+    ],
+    "result": { "item": "BirchPlanks", "count": 4 },
+    "gridSize": 2
+}

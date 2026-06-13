@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "BlockType.h"
 #include "ItemType.h"
+#include "Engine/Texture2D.h"
 #include "BlockDefinition.generated.h"
 
 /**
@@ -55,7 +56,7 @@ struct MINECRAFTCLONE_API FBlockDefinition
 };
 
 /**
- * Definicija itema - sadrži podatke za item drop vizuale.
+ * Definicija itema - sadrži podatke za item drop vizuale i UI.
  * Registrira se u UBlockRegistry.
  */
 USTRUCT(BlueprintType)
@@ -78,6 +79,14 @@ struct MINECRAFTCLONE_API FItemDefinition
 	/** Putanja do materijala */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Item")
 	FSoftObjectPath Material;
+
+	/** Ikona za inventory/hotbar UI */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Item")
+	TSoftObjectPtr<UTexture2D> Icon;
+
+	/** Maksimalan stack size (64 = default Minecraft stil) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Item")
+	int32 MaxStackSize = 64;
 
 	/** Je li definicija validna */
 	bool IsValid() const { return ItemType != EItemType::None; }

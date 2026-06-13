@@ -179,6 +179,36 @@ void UBlockRegistry::RegisterAllBlocks()
 		RegisterBlock(Def);
 	}
 
+	// === BIRCH PLANKS ===
+	{
+		FBlockDefinition Def;
+		Def.BlockType = EBlockType::BirchPlanks;
+		Def.DropItemType = EItemType::BirchPlanks;
+		Def.PlaceableFromItem = EItemType::BirchPlanks;
+		Def.DropChance = 1.0f;
+		Def.TimeToDestroy = 2.0f;
+		Def.DisplayName = NSLOCTEXT("Blocks", "BirchPlanks", "Birch Planks");
+		Def.Mesh = FSoftObjectPath(MeshPath);
+		Def.Material = FSoftObjectPath(OakPlankMaterial);  // Koristi isti materijal za sada
+		Def.HighlightMaterial = FSoftObjectPath(HighlightPath);
+		RegisterBlock(Def);
+	}
+
+	// === CRAFTING TABLE ===
+	{
+		FBlockDefinition Def;
+		Def.BlockType = EBlockType::CraftingTable;
+		Def.DropItemType = EItemType::CraftingTable;
+		Def.PlaceableFromItem = EItemType::CraftingTable;
+		Def.DropChance = 1.0f;
+		Def.TimeToDestroy = 2.5f;
+		Def.DisplayName = NSLOCTEXT("Blocks", "CraftingTable", "Crafting Table");
+		Def.Mesh = FSoftObjectPath(MeshPath);
+		Def.Material = FSoftObjectPath(OakPlankMaterial);  // Koristi isti materijal za sada
+		Def.HighlightMaterial = FSoftObjectPath(HighlightPath);
+		RegisterBlock(Def);
+	}
+
 }
 
 void UBlockRegistry::RegisterAllItems()
@@ -271,6 +301,36 @@ void UBlockRegistry::RegisterAllItems()
 		Def.DisplayName = NSLOCTEXT("Items", "OakPlanks", "Oak Planks");
 		Def.Mesh = FSoftObjectPath(MeshPath);
 		Def.Material = FSoftObjectPath(OakPlankMaterial);
+		RegisterItem(Def);
+	}
+
+	// === BIRCH PLANKS ===
+	{
+		FItemDefinition Def;
+		Def.ItemType = EItemType::BirchPlanks;
+		Def.DisplayName = NSLOCTEXT("Items", "BirchPlanks", "Birch Planks");
+		Def.Mesh = FSoftObjectPath(MeshPath);
+		Def.Material = FSoftObjectPath(OakPlankMaterial);  // Koristi isti materijal za sada
+		RegisterItem(Def);
+	}
+
+	// === STICK ===
+	{
+		FItemDefinition Def;
+		Def.ItemType = EItemType::Stick;
+		Def.DisplayName = NSLOCTEXT("Items", "Stick", "Stick");
+		Def.Mesh = FSoftObjectPath(MeshPath);
+		Def.Material = FSoftObjectPath(OakLogMaterial);  // Koristi log materijal
+		RegisterItem(Def);
+	}
+
+	// === CRAFTING TABLE ===
+	{
+		FItemDefinition Def;
+		Def.ItemType = EItemType::CraftingTable;
+		Def.DisplayName = NSLOCTEXT("Items", "CraftingTable", "Crafting Table");
+		Def.Mesh = FSoftObjectPath(MeshPath);
+		Def.Material = FSoftObjectPath(OakPlankMaterial);  // Koristi planks materijal
 		RegisterItem(Def);
 	}
 
