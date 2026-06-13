@@ -57,6 +57,7 @@ void UBlockRegistry::RegisterAllBlocks()
 	const FString OakLogMaterial = TEXT("/Game/Fab/Megascans/Surfaces/Tree_Bark_vimmdcofw/Raw/vimmdcofw_tier_0/Materials/MI_vimmdcofw.MI_vimmdcofw");
 	const FString BirchLogMaterial = TEXT("/Game/Fab/Megascans/Surfaces/Pine_Bark_vmbibe2g/Raw/vmbibe2g_tier_0/Materials/MI_vmbibe2g.MI_vmbibe2g");
 	const FString LeavesMaterial = TEXT("/Game/Fab/Megascans/Surfaces/Uncut_Grass_oilpt20/Raw/oilpt20_tier_0/Materials/MI_oilpt20.MI_oilpt20");
+	const FString OakPlankMaterial = TEXT("/Game/Fab/Megascans/Surfaces/Wooden_Planks_vlznbajfw/Raw/vlznbajfw_tier_0/Materials/MI_vlznbajfw.MI_vlznbajfw");
 
 	// === DIRT ===
 	{
@@ -162,6 +163,22 @@ void UBlockRegistry::RegisterAllBlocks()
 		Def.HighlightMaterial = FSoftObjectPath(HighlightPath);
 		RegisterBlock(Def);
 	}
+
+	// === OAK PLANKS ===
+	{
+		FBlockDefinition Def;
+		Def.BlockType = EBlockType::OakPlanks;
+		Def.DropItemType = EItemType::OakPlanks;
+		Def.PlaceableFromItem = EItemType::OakPlanks;
+		Def.DropChance = 1.0f;
+		Def.TimeToDestroy = 2.0f;
+		Def.DisplayName = NSLOCTEXT("Blocks", "OakPlanks", "Oak Planks");
+		Def.Mesh = FSoftObjectPath(MeshPath);
+		Def.Material = FSoftObjectPath(OakPlankMaterial);
+		Def.HighlightMaterial = FSoftObjectPath(HighlightPath);
+		RegisterBlock(Def);
+	}
+
 }
 
 void UBlockRegistry::RegisterAllItems()
@@ -175,6 +192,7 @@ void UBlockRegistry::RegisterAllItems()
 	const FString OakLogMaterial = TEXT("/Game/Fab/Megascans/Surfaces/Tree_Bark_vimmdcofw/Raw/vimmdcofw_tier_0/Materials/MI_vimmdcofw.MI_vimmdcofw");
 	const FString BirchLogMaterial = TEXT("/Game/Fab/Megascans/Surfaces/Pine_Bark_vmbibe2g/Raw/vmbibe2g_tier_0/Materials/MI_vmbibe2g.MI_vmbibe2g");
 	const FString LeavesMaterial = TEXT("/Game/Fab/Megascans/Surfaces/Uncut_Grass_oilpt20/Raw/oilpt20_tier_0/Materials/MI_oilpt20.MI_oilpt20");
+	const FString OakPlankMaterial = TEXT("/Game/Fab/Megascans/Surfaces/Wooden_Planks_vlznbajfw/Raw/vlznbajfw_tier_0/Materials/MI_vlznbajfw.MI_vlznbajfw");
 
 	// === DIRT ===
 	{
@@ -245,6 +263,17 @@ void UBlockRegistry::RegisterAllItems()
 		Def.Material = FSoftObjectPath(LeavesMaterial);
 		RegisterItem(Def);
 	}
+
+	// === OAK PLANKS ===
+	{
+		FItemDefinition Def;
+		Def.ItemType = EItemType::OakPlanks;
+		Def.DisplayName = NSLOCTEXT("Items", "OakPlanks", "Oak Planks");
+		Def.Mesh = FSoftObjectPath(MeshPath);
+		Def.Material = FSoftObjectPath(OakPlankMaterial);
+		RegisterItem(Def);
+	}
+
 }
 
 // === Block API ===

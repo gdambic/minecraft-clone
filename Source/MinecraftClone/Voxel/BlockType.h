@@ -12,5 +12,6 @@ enum class EBlockType : uint8
 	OakLog,      // Deblo hrasta
 	BirchLog,    // Deblo breze
 	OakLeaves,   // Lišće hrasta
-	BirchLeaves  // Lišće breze
+	BirchLeaves,  // Lišće breze
+	OakPlanks
 };

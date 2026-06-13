@@ -12,5 +12,6 @@ enum class EItemType : uint8
 	OakLog,       // Deblo hrasta
 	BirchLog,     // Deblo breze
 	OakSapling,   // Sadnica hrasta
-	BirchSapling  // Sadnica breze
+	BirchSapling,  // Sadnica breze
+	OakPlanks
 };
