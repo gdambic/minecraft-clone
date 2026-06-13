@@ -6,6 +6,9 @@
 #include "Engine/Engine.h"
 #include "Block.h"
 #include "BlockType.h"
+#include "BlockRegistry.h"
+#include "Engine/StaticMesh.h"
+#include "Materials/MaterialInterface.h"
 
 AItemDrop::AItemDrop()
 {
@@ -154,4 +157,67 @@ void AItemDrop::OnOverlapBegin(UPrimitiveComponent* OverlappedComponent, AActor*
 			Destroy();
 		}
 	}
+}
+
+void AItemDrop::InitializeFromRegistry(EItemType Type)
+{
+	ItemType = Type;
+
+	UBlockRegistry* Registry = UBlockRegistry::Get(this);
+	if (!Registry)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("ItemDrop::InitializeFromRegistry: Registry not found!"));
+		return;
+	}
+
+	const FItemDefinition* ItemDef = Registry->GetItemDefinition(Type);
+	if (!ItemDef)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("ItemDrop::InitializeFromRegistry: No definition for item type %d"), (int32)Type);
+		return;
+	}
+
+	// Postavi mesh
+	if (!ItemDef->Mesh.IsNull() && MeshComponent)
+	{
+		UStaticMesh* LoadedMesh = Cast<UStaticMesh>(ItemDef->Mesh.TryLoad());
+		if (LoadedMesh)
+		{
+			MeshComponent->SetStaticMesh(LoadedMesh);
+		}
+	}
+
+	// Postavi materijal
+	if (!ItemDef->Material.IsNull() && MeshComponent)
+	{
+		UMaterialInterface* LoadedMaterial = Cast<UMaterialInterface>(ItemDef->Material.TryLoad());
+		if (LoadedMaterial)
+		{
+			MeshComponent->SetMaterial(0, LoadedMaterial);
+		}
+	}
+}
+
+AItemDrop* AItemDrop::SpawnItemDrop(const UObject* WorldContextObject, EItemType Type, FVector Location)
+{
+	if (!WorldContextObject || Type == EItemType::None)
+	{
+		return nullptr;
+	}
+
+	UWorld* World = WorldContextObject->GetWorld();
+	if (!World)
+	{
+		return nullptr;
+	}
+
+	FActorSpawnParameters SpawnParams;
+	AItemDrop* NewDrop = World->SpawnActor<AItemDrop>(AItemDrop::StaticClass(), Location, FRotator::ZeroRotator, SpawnParams);
+
+	if (NewDrop)
+	{
+		NewDrop->InitializeFromRegistry(Type);
+	}
+
+	return NewDrop;
 }

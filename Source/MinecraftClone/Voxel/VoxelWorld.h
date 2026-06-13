@@ -17,10 +17,6 @@ class MINECRAFTCLONE_API AVoxelWorld : public AActor
 public:
 	AVoxelWorld();
 
-	/** Blueprint klase za svaki tip bloka - konfigurira se u BP_VoxelWorld */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "World")
-	TMap<EBlockType, TSubclassOf<ABlock>> BlockClasses;
-
 	/** Z nivo površine (Grass). Ispod je Stone. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "World")
 	int32 SurfaceLevel;

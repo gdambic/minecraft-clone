@@ -1,5 +1,8 @@
 #include "InventoryComponent.h"
 #include "Engine/DataTable.h"
+#include "Engine/Engine.h"
+#include "BlockRegistry.h"
+#include "Kismet/GameplayStatics.h"
 
 UInventoryComponent::UInventoryComponent()
 {
@@ -334,52 +337,68 @@ bool UInventoryComponent::HasItem(EItemType Type, int32 Amount) const
 
 EBlockType UInventoryComponent::ItemTypeToBlockType(EItemType ItemType)
 {
-	switch (ItemType)
+	// Dohvati registry - moramo koristiti GEngine jer smo u static funkciji
+	UBlockRegistry* Registry = nullptr;
+	if (GEngine && GEngine->GameViewport)
 	{
-	case EItemType::Dirt:
-		return EBlockType::Dirt;
-	case EItemType::Stone:
-		return EBlockType::Stone;
-	case EItemType::Grass:
-		return EBlockType::Grass;
-	case EItemType::OakLog:
-		return EBlockType::OakLog;
-	case EItemType::BirchLog:
-		return EBlockType::BirchLog;
-	default:
-		return EBlockType::Air; // Ne može se postaviti
+		UWorld* World = GEngine->GameViewport->GetWorld();
+		if (World)
+		{
+			Registry = UBlockRegistry::Get(World);
+		}
 	}
+
+	if (Registry)
+	{
+		return Registry->GetBlockTypeForItem(ItemType);
+	}
+
+	// Fallback ako registry nije dostupan
+	return EBlockType::Air;
 }
 
 EItemType UInventoryComponent::BlockTypeToItemType(EBlockType BlockType)
 {
-	switch (BlockType)
+	// Dohvati registry - moramo koristiti GEngine jer smo u static funkciji
+	UBlockRegistry* Registry = nullptr;
+	if (GEngine && GEngine->GameViewport)
 	{
-	case EBlockType::Dirt:
-		return EItemType::Dirt;
-	case EBlockType::Stone:
-		return EItemType::Stone;
-	case EBlockType::Grass:
-		return EItemType::Grass;
-	case EBlockType::OakLog:
-		return EItemType::OakLog;
-	case EBlockType::BirchLog:
-		return EItemType::BirchLog;
-	default:
-		return EItemType::None; // Nema odgovarajući item
+		UWorld* World = GEngine->GameViewport->GetWorld();
+		if (World)
+		{
+			Registry = UBlockRegistry::Get(World);
+		}
 	}
+
+	if (Registry)
+	{
+		return Registry->GetItemTypeForBlock(BlockType);
+	}
+
+	// Fallback ako registry nije dostupan
+	return EItemType::None;
 }
 
 bool UInventoryComponent::CanItemBePlaced(EItemType ItemType)
 {
-	// Saplings se ne mogu postaviti
-	if (ItemType == EItemType::OakSapling || ItemType == EItemType::BirchSapling)
+	// Dohvati registry - moramo koristiti GEngine jer smo u static funkciji
+	UBlockRegistry* Registry = nullptr;
+	if (GEngine && GEngine->GameViewport)
 	{
-		return false;
+		UWorld* World = GEngine->GameViewport->GetWorld();
+		if (World)
+		{
+			Registry = UBlockRegistry::Get(World);
+		}
 	}
 
-	// Provjeri ima li odgovarajući BlockType
-	return ItemTypeToBlockType(ItemType) != EBlockType::Air;
+	if (Registry)
+	{
+		return Registry->CanItemBePlaced(ItemType);
+	}
+
+	// Fallback ako registry nije dostupan
+	return false;
 }
 
 FItemData UInventoryComponent::GetItemData(EItemType ItemType, UDataTable* ItemDataTable)

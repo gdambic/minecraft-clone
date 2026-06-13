@@ -4,6 +4,9 @@
 #include "ItemDrop.h"
 #include "VoxelWorld.h"
 #include "Kismet/GameplayStatics.h"
+#include "BlockRegistry.h"
+#include "Engine/StaticMesh.h"
+#include "Materials/MaterialInterface.h"
 
 ABlock::ABlock()
 {
@@ -15,15 +18,15 @@ ABlock::ABlock()
 	// VAŽNO: Omogući da blokovi utječu na NavMesh
 	MeshComponent->SetCanEverAffectNavigation(true);
 
-	// Mesh, materijal i ostala svojstva se postavljaju kroz BP_Block u editoru
-
-	BlockType = EBlockType::Dirt;
+	// Default vrijednosti - mogu se override-ati kroz InitializeFromRegistry()
+	BlockType = EBlockType::Air;
 	GridPosition = FIntVector(0, 0, 0);
 
 	// Default destruction time
 	TimeToDestroy = 1.5f;
 
-	// Default drop chance (100%)
+	// Default drop
+	DropItemType = EItemType::None;
 	DropChance = 1.0f;
 }
 
@@ -128,13 +131,12 @@ bool ABlock::AddDestroyProgress(float DeltaTime)
 		}
 
 		// Spawnaj drop prije nego što postane Air (ako prođe šansu)
-		if (DropClass && FMath::FRand() < DropChance)
+		if (DropItemType != EItemType::None && FMath::FRand() < DropChance)
 		{
 			// Centriraj drop u središte bloka (origin je na kutu)
 			const float HalfBlock = BlockSize / 2.0f;
 			FVector SpawnLocation = GetActorLocation() + FVector(HalfBlock, HalfBlock, HalfBlock);
-			FActorSpawnParameters SpawnParams;
-			GetWorld()->SpawnActor<AItemDrop>(DropClass, SpawnLocation, FRotator::ZeroRotator, SpawnParams);
+			AItemDrop::SpawnItemDrop(this, DropItemType, SpawnLocation);
 		}
 
 		SetBlockType(EBlockType::Air);
@@ -169,4 +171,62 @@ int32 ABlock::GetIntegrityPercent() const
 		return 33;
 	}
 	return 0;
+}
+
+void ABlock::InitializeFromRegistry(EBlockType Type)
+{
+	BlockType = Type;
+
+	UBlockRegistry* Registry = UBlockRegistry::Get(this);
+	if (!Registry)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("ABlock::InitializeFromRegistry: Registry not found!"));
+		return;
+	}
+
+	const FBlockDefinition* BlockDef = Registry->GetBlockDefinition(Type);
+	if (!BlockDef)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("ABlock::InitializeFromRegistry: No definition for block type %d"), (int32)Type);
+		return;
+	}
+
+	// Postavi gameplay vrijednosti
+	TimeToDestroy = BlockDef->TimeToDestroy;
+	DropItemType = BlockDef->DropItemType;
+	DropChance = BlockDef->DropChance;
+
+	// Postavi mesh
+	if (!BlockDef->Mesh.IsNull() && MeshComponent)
+	{
+		UStaticMesh* LoadedMesh = Cast<UStaticMesh>(BlockDef->Mesh.TryLoad());
+		if (LoadedMesh)
+		{
+			MeshComponent->SetStaticMesh(LoadedMesh);
+		}
+	}
+
+	// Postavi materijal
+	if (!BlockDef->Material.IsNull() && MeshComponent)
+	{
+		UMaterialInterface* LoadedMaterial = Cast<UMaterialInterface>(BlockDef->Material.TryLoad());
+		if (LoadedMaterial)
+		{
+			MeshComponent->SetMaterial(0, LoadedMaterial);
+			// Spremi kao OriginalMaterial za highlight swap
+			OriginalMaterial = LoadedMaterial;
+		}
+	}
+
+	// Postavi highlight materijal
+	if (!BlockDef->HighlightMaterial.IsNull())
+	{
+		UMaterialInterface* LoadedHighlight = Cast<UMaterialInterface>(BlockDef->HighlightMaterial.TryLoad());
+		if (LoadedHighlight)
+		{
+			HighlightMaterial = LoadedHighlight;
+		}
+	}
+
+	UpdateVisibility();
 }

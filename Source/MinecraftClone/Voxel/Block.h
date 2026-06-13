@@ -3,9 +3,11 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
 #include "BlockType.h"
+#include "ItemType.h"
 #include "Block.generated.h"
 
 class AItemDrop;
+class UBlockRegistry;
 
 UCLASS()
 class MINECRAFTCLONE_API ABlock : public AActor
@@ -53,13 +55,19 @@ public:
 
 	// === DROP ===
 
-	/** Blueprint klasa dropa koji se spawna kad se blok uništi - postavlja se u BP */
+	/** Tip itema koji pada kad se blok uništi */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Block|Drop")
-	TSubclassOf<AItemDrop> DropClass;
+	EItemType DropItemType;
 
 	/** Šansa za drop (0.0-1.0), default 1.0 = uvijek */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Block|Drop", meta = (ClampMin = "0.0", ClampMax = "1.0"))
 	float DropChance;
+
+	// === REGISTRY INITIALIZATION ===
+
+	/** Inicijaliziraj blok iz registry-a (postavlja mesh, materijal, TimeToDestroy, DropItemType, DropChance) */
+	UFUNCTION(BlueprintCallable, Category = "Block")
+	void InitializeFromRegistry(EBlockType Type);
 
 	/** Dodaj progress uništavanju, vraća true ako je blok uništen */
 	UFUNCTION(BlueprintCallable, Category = "Block")

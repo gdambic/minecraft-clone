@@ -3,6 +3,7 @@
 #include "TreeGenerator.h"
 #include "TimerManager.h"
 #include "Zombie.h"
+#include "BlockRegistry.h"
 
 AVoxelWorld::AVoxelWorld()
 {
@@ -26,10 +27,11 @@ void AVoxelWorld::BeginPlay()
 
 void AVoxelWorld::GenerateWorld()
 {
-	// Provjeri jesu li BlockClasses postavljeni
-	if (BlockClasses.Num() == 0)
+	// Provjeri je li registry dostupan
+	UBlockRegistry* Registry = UBlockRegistry::Get(this);
+	if (!Registry)
 	{
-		UE_LOG(LogTemp, Error, TEXT("VoxelWorld: BlockClasses map is empty! Please configure it in BP_VoxelWorld."));
+		UE_LOG(LogTemp, Error, TEXT("VoxelWorld: BlockRegistry not found!"));
 		return;
 	}
 
@@ -83,11 +85,11 @@ void AVoxelWorld::SpawnBlock(int32 X, int32 Y, int32 Z, EBlockType Type)
 		return;
 	}
 
-	// Dohvati odgovarajući BlockClass za ovaj tip
-	TSubclassOf<ABlock>* FoundClass = BlockClasses.Find(Type);
-	if (!FoundClass || !*FoundClass)
+	// Provjeri ima li registry definiciju za ovaj tip
+	UBlockRegistry* Registry = UBlockRegistry::Get(this);
+	if (!Registry || !Registry->GetBlockDefinition(Type))
 	{
-		UE_LOG(LogTemp, Warning, TEXT("BlockClass not set for type %d"), (int32)Type);
+		UE_LOG(LogTemp, Warning, TEXT("BlockRegistry: No definition for block type %d"), (int32)Type);
 		return;
 	}
 
@@ -96,13 +98,13 @@ void AVoxelWorld::SpawnBlock(int32 X, int32 Y, int32 Z, EBlockType Type)
 	FActorSpawnParameters SpawnParams;
 	SpawnParams.Owner = this;
 
-	// Koristi odgovarajući BlockClass za tip bloka
-	ABlock* NewBlock = GetWorld()->SpawnActor<ABlock>(*FoundClass, WorldPos, FRotator::ZeroRotator, SpawnParams);
+	// Spawn generički ABlock i inicijaliziraj iz registry-a
+	ABlock* NewBlock = GetWorld()->SpawnActor<ABlock>(ABlock::StaticClass(), WorldPos, FRotator::ZeroRotator, SpawnParams);
 
 	if (NewBlock)
 	{
 		NewBlock->SetGridPosition(GridPos);
-		NewBlock->SetBlockType(Type);
+		NewBlock->InitializeFromRegistry(Type);
 		Blocks.Add(GridPos, NewBlock);
 	}
 }
@@ -131,11 +133,11 @@ FVector AVoxelWorld::GridToWorld(int32 X, int32 Y, int32 Z)
 
 ABlock* AVoxelWorld::PlaceBlockAt(FIntVector GridPosition, EBlockType Type)
 {
-	// Dohvati odgovarajući BlockClass za ovaj tip
-	TSubclassOf<ABlock>* FoundClass = BlockClasses.Find(Type);
-	if (!FoundClass || !*FoundClass)
+	// Provjeri ima li registry definiciju za ovaj tip
+	UBlockRegistry* Registry = UBlockRegistry::Get(this);
+	if (!Registry || !Registry->GetBlockDefinition(Type))
 	{
-		UE_LOG(LogTemp, Error, TEXT("PlaceBlockAt: BlockClass NOT FOUND for type %d at (%d,%d,%d)"),
+		UE_LOG(LogTemp, Error, TEXT("PlaceBlockAt: No registry definition for type %d at (%d,%d,%d)"),
 			(int32)Type, GridPosition.X, GridPosition.Y, GridPosition.Z);
 		return nullptr;
 	}
@@ -156,18 +158,18 @@ ABlock* AVoxelWorld::PlaceBlockAt(FIntVector GridPosition, EBlockType Type)
 		}
 	}
 
-	// Spawnaj novi blok s odgovarajućim Blueprintom
+	// Spawnaj generički ABlock i inicijaliziraj iz registry-a
 	FVector WorldPos = GridToWorld(GridPosition.X, GridPosition.Y, GridPosition.Z);
 
 	FActorSpawnParameters SpawnParams;
 	SpawnParams.Owner = this;
 
-	ABlock* NewBlock = GetWorld()->SpawnActor<ABlock>(*FoundClass, WorldPos, FRotator::ZeroRotator, SpawnParams);
+	ABlock* NewBlock = GetWorld()->SpawnActor<ABlock>(ABlock::StaticClass(), WorldPos, FRotator::ZeroRotator, SpawnParams);
 
 	if (NewBlock)
 	{
 		NewBlock->SetGridPosition(GridPosition);
-		NewBlock->SetBlockType(Type);
+		NewBlock->InitializeFromRegistry(Type);
 		Blocks.Add(GridPosition, NewBlock);
 	}
 
@@ -177,13 +179,21 @@ ABlock* AVoxelWorld::PlaceBlockAt(FIntVector GridPosition, EBlockType Type)
 TArray<EBlockType> AVoxelWorld::GetPlaceableBlockTypes() const
 {
 	TArray<EBlockType> Result;
-	for (const auto& Pair : BlockClasses)
+
+	UBlockRegistry* Registry = UBlockRegistry::Get(this);
+	if (Registry)
 	{
-		if (Pair.Key != EBlockType::Air && Pair.Value)
+		TArray<FBlockDefinition> AllBlocks = Registry->GetAllBlockDefinitions();
+		for (const FBlockDefinition& BlockDef : AllBlocks)
 		{
-			Result.Add(Pair.Key);
+			// Blok se može postaviti ako ima PlaceableFromItem definiran
+			if (BlockDef.PlaceableFromItem != EItemType::None)
+			{
+				Result.Add(BlockDef.BlockType);
+			}
 		}
 	}
+
 	return Result;
 }
 

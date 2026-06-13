@@ -6,8 +6,9 @@
 #include "ItemDrop.generated.h"
 
 class USphereComponent;
+class UBlockRegistry;
 
-UCLASS(Abstract)
+UCLASS()
 class MINECRAFTCLONE_API AItemDrop : public AActor
 {
 	GENERATED_BODY()
@@ -48,6 +49,16 @@ public:
 	/** Je li item na tlu */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "ItemDrop")
 	bool bIsGrounded;
+
+	// === REGISTRY INITIALIZATION ===
+
+	/** Inicijaliziraj item drop iz registry-a (postavlja mesh, materijal, ItemType) */
+	UFUNCTION(BlueprintCallable, Category = "ItemDrop")
+	void InitializeFromRegistry(EItemType Type);
+
+	/** Statički helper za spawn item dropa - koristi registry */
+	UFUNCTION(BlueprintCallable, Category = "ItemDrop", meta = (WorldContext = "WorldContextObject"))
+	static AItemDrop* SpawnItemDrop(const UObject* WorldContextObject, EItemType Type, FVector Location);
 
 protected:
 	virtual void BeginPlay() override;
