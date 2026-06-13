@@ -31,8 +31,36 @@
 | bIsEmpty | Boolean | ✗ | true |
 
 **Funkcije implementirane:**
-- `SetSlotData(ItemType, Quantity)` - učitava ikonu iz DT_ItemData, prikazuje količinu
+- `SetSlotData(ItemType, Quantity)` - učitava ikonu iz DT_ItemData, prikazuje količinu, **postavlja tooltip**
 - `SetSelected(bSelected)` - žuta boja kad selektirano, siva kad nije
+
+#### Tooltip implementacija (u SetSlotData funkciji)
+
+Postojeći Branch već razlikuje prazan/pun slot. Dodaj `Set Tool Tip Text` u obje grane:
+
+**True grana (prazan slot)** - nakon `SET bIsEmpty = true`:
+```
+[SET bIsEmpty = true] → [Set Tool Tip Text]
+                            Target: Self
+                            In Text: "" (prazan string)
+```
+
+**False grana (ima item)** - nakon `Break Item Data`:
+```
+[Break Item Data]
+    ├── Icon → [Set Brush from Texture] (već postoji)
+    │
+    └── Display Name → [Set Tool Tip Text]
+                           Target: Self
+                           In Text: Display Name
+```
+
+**Čvorovi za dodati:** samo 2x `Set Tool Tip Text`
+- Jedan u True grani s praznim tekstom (briše tooltip za prazne slotove)
+- Jedan u False grani s DisplayName iz ItemData
+
+**Napomena:** Tooltip delay je podešen u Project Settings na 0.4 sekunde
+(DefaultEngine.ini → [/Script/Slate.SlateSettings] ToolTipDelay=0.4)
 
 ---
 
