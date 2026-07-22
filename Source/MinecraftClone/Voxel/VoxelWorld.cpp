@@ -3,6 +3,7 @@
 #include "TreeGenerator.h"
 #include "TimerManager.h"
 #include "Zombie.h"
+#include "Sheep.h"
 #include "BlockRegistry.h"
 
 AVoxelWorld::AVoxelWorld()
@@ -64,6 +65,9 @@ void AVoxelWorld::GenerateWorld()
 
 	// Spawn enemies
 	SpawnEnemies();
+
+	// Spawn passive mobs
+	SpawnMobs();
 
 	// Pokreni timer za leaf decay (svakih 2.5 sekundi)
 	GetWorld()->GetTimerManager().SetTimer(
@@ -233,6 +237,42 @@ void AVoxelWorld::SpawnEnemies()
 	{
 		UE_LOG(LogTemp, Log, TEXT("VoxelWorld: Spawned zombie at (%d, %d, %d)"), RandX, RandY, SpawnZ);
 	}
+}
+
+// === MOBS ===
+
+void AVoxelWorld::SpawnMobs()
+{
+	if (!SheepClass)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("VoxelWorld: SheepClass not set, skipping mob spawn"));
+		return;
+	}
+
+	int32 SpawnZ = SurfaceLevel + 1;
+
+	for (int32 i = 0; i < SheepCount; i++)
+	{
+		// Random pozicija na površini (izbjegavaj rubove)
+		int32 RandX = FMath::RandRange(10, WorldSizeX - 10);
+		int32 RandY = FMath::RandRange(10, WorldSizeY - 10);
+
+		FVector WorldPos = GridToWorld(RandX, RandY, SpawnZ);
+		// Podignuti iznad površine da izbjegnemo collision
+		WorldPos.Z += 50.0f;
+
+		FActorSpawnParameters SpawnParams;
+		SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
+
+		ASheep* Sheep = GetWorld()->SpawnActor<ASheep>(SheepClass, WorldPos, FRotator::ZeroRotator, SpawnParams);
+
+		if (Sheep)
+		{
+			UE_LOG(LogTemp, Log, TEXT("VoxelWorld: Spawned sheep %d at (%d, %d, %d)"), i + 1, RandX, RandY, SpawnZ);
+		}
+	}
+
+	UE_LOG(LogTemp, Log, TEXT("VoxelWorld: Spawned %d sheep"), SheepCount);
 }
 
 // === LEAF DECAY ===

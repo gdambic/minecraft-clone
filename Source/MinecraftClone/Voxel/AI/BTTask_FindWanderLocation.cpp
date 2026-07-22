@@ -2,7 +2,7 @@
 #include "AIController.h"
 #include "BehaviorTree/BlackboardComponent.h"
 #include "NavigationSystem.h"
-#include "../EnemyBase.h"
+#include "../CreatureBase.h"
 
 UBTTask_FindWanderLocation::UBTTask_FindWanderLocation()
 {
@@ -14,8 +14,8 @@ EBTNodeResult::Type UBTTask_FindWanderLocation::ExecuteTask(UBehaviorTreeCompone
 	AAIController* AIController = OwnerComp.GetAIOwner();
 	if (!AIController) return EBTNodeResult::Failed;
 
-	AEnemyBase* Enemy = Cast<AEnemyBase>(AIController->GetPawn());
-	if (!Enemy) return EBTNodeResult::Failed;
+	ACreatureBase* Creature = Cast<ACreatureBase>(AIController->GetPawn());
+	if (!Creature) return EBTNodeResult::Failed;
 
 	UBlackboardComponent* Blackboard = OwnerComp.GetBlackboardComponent();
 	if (!Blackboard) return EBTNodeResult::Failed;
@@ -25,10 +25,10 @@ EBTNodeResult::Type UBTTask_FindWanderLocation::ExecuteTask(UBehaviorTreeCompone
 	if (!NavSys) return EBTNodeResult::Failed;
 
 	// Get random point within wander radius
-	FVector Origin = Enemy->GetActorLocation();
+	FVector Origin = Creature->GetActorLocation();
 	FNavLocation RandomLocation;
 
-	bool bFound = NavSys->GetRandomReachablePointInRadius(Origin, Enemy->WanderRadius, RandomLocation);
+	bool bFound = NavSys->GetRandomReachablePointInRadius(Origin, Creature->GetWanderRadius(), RandomLocation);
 
 	if (bFound)
 	{

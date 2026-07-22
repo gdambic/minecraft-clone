@@ -8,6 +8,7 @@
 
 class ABlock;
 class AZombie;
+class ASheep;
 
 UCLASS()
 class MINECRAFTCLONE_API AVoxelWorld : public AActor
@@ -51,6 +52,16 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "World|Enemies")
 	TSubclassOf<AZombie> ZombieClass;
 
+	// === MOBS (Passive) ===
+
+	/** Blueprint klasa za ovcu - postaviti BP_Sheep */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "World|Mobs")
+	TSubclassOf<ASheep> SheepClass;
+
+	/** Broj ovaca za spawnati */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "World|Mobs")
+	int32 SheepCount = 3;
+
 	// === LEAF DECAY ===
 
 	/** Poziva se kad se log uništi - pokreće provjeru decay-a obližnjeg lišća */
@@ -93,6 +104,9 @@ private:
 
 	// === ENEMIES ===
 	void SpawnEnemies();
+
+	// === MOBS ===
+	void SpawnMobs();
 
 	// === LEAF DECAY ===
 

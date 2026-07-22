@@ -16,5 +16,6 @@ enum class EItemType : uint8
 	OakPlanks,
 	BirchPlanks,   // Daske od breze
 	Stick,         // Štap
-	CraftingTable  // Crafting stol
+	CraftingTable, // Crafting stol
+	Wool           // Vuna (od ovce)
 };
