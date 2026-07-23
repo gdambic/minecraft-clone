@@ -4,6 +4,7 @@
 #include "GameFramework/Character.h"
 #include "BlockType.h"
 #include "ItemType.h"
+#include "WeaponData.h"
 #include "FirstPersonCharacter.generated.h"
 
 class UCameraComponent;
@@ -11,6 +12,8 @@ class UInputAction;
 class ABlock;
 class AVoxelWorld;
 class UInventoryComponent;
+class ACreatureBase;
+class UFirstPersonArmComponent;
 struct FInputActionValue;
 
 /** Delegate koji se broadcasta kada se promijeni odabrani item */
@@ -34,6 +37,10 @@ class MINECRAFTCLONE_API AFirstPersonCharacter : public ACharacter
 	/** Inventory component */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components", meta = (AllowPrivateAccess = "true"))
 	UInventoryComponent* InventoryComponent;
+
+	/** First person arm component for hand visualization and swing animation */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components", meta = (AllowPrivateAccess = "true"))
+	UFirstPersonArmComponent* FirstPersonArmComponent;
 
 protected:
 	/** Jump Input Action */
@@ -126,6 +133,35 @@ protected:
 
 	/** Je li igrač trenutno drži attack tipku */
 	bool bIsAttacking = false;
+
+	// === MELEE COMBAT ===
+
+	/** Range for melee attacks (3 blocks = 300 UU) */
+	UPROPERTY(EditDefaultsOnly, Category = "Combat")
+	float MeleeRange = 300.0f;
+
+	/** Base knockback force applied to hit targets */
+	UPROPERTY(EditDefaultsOnly, Category = "Combat")
+	float AttackKnockback = 400.0f;
+
+	/** Vertical knockback component */
+	UPROPERTY(EditDefaultsOnly, Category = "Combat")
+	float KnockbackVertical = 150.0f;
+
+	/** Time of last attack for cooldown tracking */
+	float LastAttackTime = 0.0f;
+
+	/** Perform raycast to find creature in melee range */
+	ACreatureBase* MeleeTrace() const;
+
+	/** Execute melee attack on target creature */
+	void PerformMeleeAttack();
+
+	/** Get weapon data for currently equipped item */
+	FWeaponData GetEquippedWeaponData() const;
+
+	/** Calculate damage multiplier based on cooldown progress (Minecraft formula) */
+	float CalculateDamageMultiplier(float CooldownProgress) const;
 
 	/** Raycast za detekciju bloka */
 	void UpdateBlockLookAt();

@@ -17,5 +17,11 @@ enum class EItemType : uint8
 	BirchPlanks,   // Daske od breze
 	Stick,         // Štap
 	CraftingTable, // Crafting stol
-	Wool           // Vuna (od ovce)
+	Wool,          // Vuna (od ovce)
+
+	// Weapons - Swords
+	WoodenSword,   // Drveni mač
+	StoneSword,    // Kameni mač
+	IronSword,     // Željezni mač
+	DiamondSword   // Dijamantni mač
 };

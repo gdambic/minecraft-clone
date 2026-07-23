@@ -10,6 +10,10 @@
 #include "VoxelWorld.h"
 #include "InventoryComponent.h"
 #include "FirstPersonPlayerController.h"
+#include "CreatureBase.h"
+#include "MobBase.h"
+#include "WeaponData.h"
+#include "FirstPersonArmComponent.h"
 
 AFirstPersonCharacter::AFirstPersonCharacter()
 {
@@ -42,6 +46,9 @@ AFirstPersonCharacter::AFirstPersonCharacter()
 
 	// Create inventory component
 	InventoryComponent = CreateDefaultSubobject<UInventoryComponent>(TEXT("InventoryComponent"));
+
+	// Create first person arm component
+	FirstPersonArmComponent = CreateDefaultSubobject<UFirstPersonArmComponent>(TEXT("FirstPersonArmComponent"));
 }
 
 void AFirstPersonCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
@@ -143,6 +150,17 @@ void AFirstPersonCharacter::BeginPlay()
 		InventoryComponent->SetSlot(UInventoryComponent::HotbarStartIndex + 1, EItemType::Stone, 10);
 		// Slot 29 = hotbar pozicija 2 (OakLog)
 		InventoryComponent->SetSlot(UInventoryComponent::HotbarStartIndex + 2, EItemType::OakLog, 10);
+		// Slot 30 = hotbar pozicija 3 (WoodenSword) - za testiranje melee combata
+		InventoryComponent->SetSlot(UInventoryComponent::HotbarStartIndex + 3, EItemType::WoodenSword, 1);
+		// Slot 31 = hotbar pozicija 4 (DiamondSword) - za testiranje
+		InventoryComponent->SetSlot(UInventoryComponent::HotbarStartIndex + 4, EItemType::DiamondSword, 1);
+	}
+
+	// Initialize first person arm with current held item
+	if (FirstPersonArmComponent && InventoryComponent)
+	{
+		EItemType InitialItem = GetSelectedItemType();
+		FirstPersonArmComponent->SetHeldItem(InitialItem);
 	}
 
 	Super::BeginPlay();
@@ -213,6 +231,21 @@ void AFirstPersonCharacter::UpdateBlockLookAt()
 
 void AFirstPersonCharacter::StartAttack()
 {
+	// Always play swing animation on attack input
+	if (FirstPersonArmComponent)
+	{
+		FWeaponData Weapon = GetEquippedWeaponData();
+		FirstPersonArmComponent->PlaySwingAnimation(Weapon.GetCooldown() * 0.6f);
+	}
+
+	// PRIORITY 1: Attack creature if in range
+	if (MeleeTrace() != nullptr)
+	{
+		PerformMeleeAttack();
+		return;
+	}
+
+	// PRIORITY 2: Block destruction (existing logic)
 	bIsAttacking = true;
 }
 
@@ -316,6 +349,12 @@ void AFirstPersonCharacter::ScrollInventory(const FInputActionValue& Value)
 	{
 		EItemType NewItemType = GetSelectedItemType();
 		OnSelectedItemChanged.Broadcast(SelectedItemIndex, NewItemType);
+
+		// Update first person arm held item display
+		if (FirstPersonArmComponent)
+		{
+			FirstPersonArmComponent->SetHeldItem(NewItemType);
+		}
 	}
 }
 
@@ -366,4 +405,122 @@ void AFirstPersonCharacter::ToggleInventory()
 	}
 
 	OnInventoryToggled.Broadcast(bIsInventoryOpen);
+}
+
+// === MELEE COMBAT ===
+
+ACreatureBase* AFirstPersonCharacter::MeleeTrace() const
+{
+	if (!FirstPersonCameraComponent)
+	{
+		return nullptr;
+	}
+
+	FVector Start = FirstPersonCameraComponent->GetComponentLocation();
+	FVector End = Start + FirstPersonCameraComponent->GetForwardVector() * MeleeRange;
+
+	FHitResult HitResult;
+	FCollisionQueryParams Params;
+	Params.AddIgnoredActor(this);
+
+	// Trace on Pawn channel to find creatures
+	if (GetWorld()->LineTraceSingleByChannel(HitResult, Start, End, ECC_Pawn, Params))
+	{
+		return Cast<ACreatureBase>(HitResult.GetActor());
+	}
+
+	return nullptr;
+}
+
+FWeaponData AFirstPersonCharacter::GetEquippedWeaponData() const
+{
+	if (!InventoryComponent)
+	{
+		return FWeaponData(); // Fist default
+	}
+
+	// Get item from current hotbar slot
+	int32 HotbarSlotIndex = UInventoryComponent::HotbarStartIndex + SelectedItemIndex;
+	FInventorySlot CurrentSlot = InventoryComponent->GetSlot(HotbarSlotIndex);
+
+	return UWeaponDataLibrary::GetWeaponData(CurrentSlot.ItemType);
+}
+
+float AFirstPersonCharacter::CalculateDamageMultiplier(float CooldownProgress) const
+{
+	// Minecraft formula: 0.2 + (progress^2) * 0.8
+	// At 0% progress: 0.2 (20% damage)
+	// At 50% progress: 0.4 (40% damage)
+	// At 100% progress: 1.0 (100% damage)
+	float ClampedProgress = FMath::Clamp(CooldownProgress, 0.0f, 1.0f);
+	return 0.2f + FMath::Square(ClampedProgress) * 0.8f;
+}
+
+void AFirstPersonCharacter::PerformMeleeAttack()
+{
+	const float CurrentTime = GetWorld()->GetTimeSeconds();
+
+	// Get equipped weapon data
+	FWeaponData Weapon = GetEquippedWeaponData();
+	const float Cooldown = Weapon.GetCooldown();
+
+	// Calculate time since last attack
+	const float TimeSinceAttack = CurrentTime - LastAttackTime;
+
+	// Cooldown check - prevent attack if not ready
+	if (TimeSinceAttack < Cooldown)
+	{
+		return;
+	}
+
+	// Find target
+	ACreatureBase* Target = MeleeTrace();
+	if (!Target)
+	{
+		// Update time even on miss (shorter cooldown on miss like Minecraft)
+		LastAttackTime = CurrentTime;
+		return;
+	}
+
+	// Calculate damage multiplier based on cooldown progress
+	const float CooldownProgress = FMath::Clamp(TimeSinceAttack / Cooldown, 0.0f, 1.0f);
+	const float DamageMultiplier = CalculateDamageMultiplier(CooldownProgress);
+
+	// Calculate final damage
+	const float FinalDamage = Weapon.Damage * DamageMultiplier;
+
+	// Update attack time
+	LastAttackTime = CurrentTime;
+
+	// Apply damage
+	Target->TakeDamage(FinalDamage);
+
+	// Play hit sound on successful hit
+	if (FirstPersonArmComponent)
+	{
+		FirstPersonArmComponent->PlayHitSound();
+	}
+
+	// Calculate knockback
+	FVector KnockbackDir = (Target->GetActorLocation() - GetActorLocation()).GetSafeNormal();
+	float FinalKnockback = AttackKnockback * Weapon.KnockbackMultiplier;
+	FVector KnockbackForce = KnockbackDir * FinalKnockback + FVector(0.0f, 0.0f, KnockbackVertical);
+
+	// Apply knockback
+	if (ACharacter* TargetCharacter = Cast<ACharacter>(Target))
+	{
+		TargetCharacter->LaunchCharacter(KnockbackForce, true, true);
+	}
+
+	// Notify passive mobs to trigger flee behavior
+	if (AMobBase* Mob = Cast<AMobBase>(Target))
+	{
+		Mob->OnDamageTaken(this);
+	}
+
+	UE_LOG(LogMinecraftClone, Log, TEXT("Melee hit %s for %.1f damage (weapon: %s, multiplier: %.2f)"),
+		*Target->GetName(),
+		FinalDamage,
+		Weapon.bIsWeapon ? TEXT("Sword") : TEXT("Fist"),
+		DamageMultiplier);
 }
