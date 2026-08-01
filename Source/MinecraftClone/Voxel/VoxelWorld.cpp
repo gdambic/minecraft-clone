@@ -36,6 +36,19 @@ void AVoxelWorld::GenerateWorld()
 		return;
 	}
 
+	// === [PERF] Početak mjerenja - vidi Docs/PLAN_Performance.md, sekcija 5.4 ===
+	UE_LOG(LogTemp, Warning, TEXT("[PERF] ================================================"));
+	UE_LOG(LogTemp, Warning, TEXT("[PERF] GenerateWorld  %dx%d, %d slojeva (SurfaceLevel=%d)"),
+		WorldSizeX, WorldSizeY, SurfaceLevel + 1, SurfaceLevel);
+
+	const double T0 = FPlatformTime::Seconds();
+
+	// --- Faza 1: assets (fiksni trosak, NE skalira s velicinom svijeta) ---
+	MeasureAssetLoadCost();
+
+	const double T1 = FPlatformTime::Seconds();
+
+	// --- Faza 2: teren (skalirajuci trosak) ---
 	// Generiraj teren od Z=0 do SurfaceLevel
 	for (int32 Z = 0; Z <= SurfaceLevel; Z++)
 	{
@@ -57,17 +70,45 @@ void AVoxelWorld::GenerateWorld()
 		SpawnBlock(RandX, RandY, SurfaceLevel + 1, EBlockType::Dirt);
 	}
 
+	const double T2 = FPlatformTime::Seconds();
+	const int32 TerrainBlocks = Blocks.Num();
+	const double TerrainMs = (T2 - T1) * 1000.0;
+	UE_LOG(LogTemp, Warning, TEXT("[PERF] 2/4 Teren      %8.1f ms   %6d blokova   %.4f ms/blok"),
+		TerrainMs, TerrainBlocks, TerrainBlocks > 0 ? TerrainMs / TerrainBlocks : 0.0);
+
 	UE_LOG(LogTemp, Log, TEXT("VoxelWorld: Generated %d layers (0-%d) + %d random blocks"),
 		SurfaceLevel + 1, SurfaceLevel, RandomBlockCount);
 
-	// Generiraj stabla
+	// --- Faza 3: stabla ---
 	GenerateTrees();
 
+	const double T3 = FPlatformTime::Seconds();
+	const int32 TreeBlocks = Blocks.Num() - TerrainBlocks;
+	const double TreesMs = (T3 - T2) * 1000.0;
+	UE_LOG(LogTemp, Warning, TEXT("[PERF] 3/4 Stabla     %8.1f ms   %6d blokova   %.4f ms/blok"),
+		TreesMs, TreeBlocks, TreeBlocks > 0 ? TreesMs / TreeBlocks : 0.0);
+
+	// --- Faza 4: mobovi ---
 	// Spawn enemies
 	SpawnEnemies();
 
 	// Spawn passive mobs
 	SpawnMobs();
+
+	const double T4 = FPlatformTime::Seconds();
+	UE_LOG(LogTemp, Warning, TEXT("[PERF] 4/4 Mobovi     %8.1f ms"), (T4 - T3) * 1000.0);
+
+	// --- Sazetak ---
+	const double AssetMs = (T1 - T0) * 1000.0;
+	const double SpawnMs = (T4 - T1) * 1000.0;
+	const double TotalMs = (T4 - T0) * 1000.0;
+	UE_LOG(LogTemp, Warning, TEXT("[PERF] ------------------------------------------------"));
+	UE_LOG(LogTemp, Warning, TEXT("[PERF] UKUPNO        %8.1f ms   %6d blokova"), TotalMs, Blocks.Num());
+	UE_LOG(LogTemp, Warning, TEXT("[PERF]   fiksni (assets)      %8.1f ms  (%.0f%%)"),
+		AssetMs, TotalMs > 0.0 ? AssetMs / TotalMs * 100.0 : 0.0);
+	UE_LOG(LogTemp, Warning, TEXT("[PERF]   skalirajuci (spawn)  %8.1f ms  (%.0f%%)"),
+		SpawnMs, TotalMs > 0.0 ? SpawnMs / TotalMs * 100.0 : 0.0);
+	UE_LOG(LogTemp, Warning, TEXT("[PERF] ================================================"));
 
 	// Pokreni timer za leaf decay (svakih 2.5 sekundi)
 	GetWorld()->GetTimerManager().SetTimer(
@@ -199,6 +240,49 @@ TArray<EBlockType> AVoxelWorld::GetPlaceableBlockTypes() const
 	}
 
 	return Result;
+}
+
+// === [PERF] DIJAGNOSTIKA ===
+
+void AVoxelWorld::MeasureAssetLoadCost()
+{
+	UBlockRegistry* Registry = UBlockRegistry::Get(this);
+	if (!Registry)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[PERF] 1/4 Assets     -- registry nedostupan --"));
+		return;
+	}
+
+	const TArray<FBlockDefinition> AllBlocks = Registry->GetAllBlockDefinitions();
+
+	const double Start = FPlatformTime::Seconds();
+
+	int32 Resolved = 0;
+	int32 Failed = 0;
+	for (const FBlockDefinition& Def : AllBlocks)
+	{
+		const FSoftObjectPath* Paths[3] = { &Def.Mesh, &Def.Material, &Def.HighlightMaterial };
+		for (const FSoftObjectPath* Path : Paths)
+		{
+			if (Path->IsNull())
+			{
+				continue;
+			}
+			if (Path->TryLoad())
+			{
+				Resolved++;
+			}
+			else
+			{
+				Failed++;
+				UE_LOG(LogTemp, Warning, TEXT("[PERF]     NEUSPJEH: %s"), *Path->ToString());
+			}
+		}
+	}
+
+	const double ElapsedMs = (FPlatformTime::Seconds() - Start) * 1000.0;
+	UE_LOG(LogTemp, Warning, TEXT("[PERF] 1/4 Assets     %8.1f ms   %6d ucitano, %d neuspjelo (%d definicija)"),
+		ElapsedMs, Resolved, Failed, AllBlocks.Num());
 }
 
 // === TREES ===

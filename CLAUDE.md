@@ -101,7 +101,9 @@ static EItemType BlockTypeToItemType(EBlockType BlockType);
 ## Documentation
 
 Detailed docs in Croatian available in `Docs/`:
-- `PROJECT_OVERVIEW.md` - Full architecture reference
-- `PLAN_Trees.md` - Tree system implementation (complete)
-- `PLAN_InventoryUI.md` - Inventory UI design
-- `TODO_InventoryUI_Blueprints.md` - Blueprint implementation steps
+- `PLAN_BlockRegistry.md` - Data-driven block registry design
+- `PLAN_Performance.md` - Rendering/performance analysis
+- `PLAN_MeleeCombat.md` - Melee combat system
+- `PLAN_FirstPersonHand.md` - First-person hand/viewmodel system
+- `sheep.md` - Sheep passive mob implementation
+- `Blokovi_Itemi_Minecraft.md` - Block/item reference table

@@ -1,0 +1,18 @@
+Kad smo importali gltf datoteku s modelom, teksturom i animacijama, tekstura je bila mutna. Napravili smo novi materijal s tom teksturom, i na teksturi PNG podesili:
+┌──────────────────────┬────────────────────────────┐
+│       Postavka       │         Vrijednost         │
+├──────────────────────┼────────────────────────────┤
+│ Texture Group        │ 2D Pixels (unfiltered)     │
+├──────────────────────┼────────────────────────────┤
+│ Filter               │ Nearest (Advanced sekcija) │
+├──────────────────────┼────────────────────────────┤
+│ Mip Gen Settings     │ NoMipmaps                  │
+├──────────────────────┼────────────────────────────┤
+│ Compression Settings │ UserInterface2D (RGBA)     │
+├──────────────────────┼────────────────────────────┤
+│ sRGB                 │ ✅ uključeno               │
+├──────────────────────┼────────────────────────────┤
+│ Never Stream         │ ✅                         │
+└──────────────────────┴────────────────────────────┘
+
+

@@ -99,6 +99,16 @@ private:
 	void GenerateWorld();
 	void SpawnBlock(int32 X, int32 Y, int32 Z, EBlockType Type);
 
+	// === [PERF] DIJAGNOSTIKA ===
+
+	/**
+	 * Razriješi sve FSoftObjectPath iz registry-a i izmjeri koliko to traje.
+	 * Poziva se PRIJE generiranja terena da izolira fiksni trošak (sinkroni load
+	 * Megascans materijala) od skalirajućeg (SpawnActor po bloku).
+	 * Vidi Docs/PLAN_Performance.md, sekcija 5.4.
+	 */
+	void MeasureAssetLoadCost();
+
 	// === TREES ===
 	void GenerateTrees();
 

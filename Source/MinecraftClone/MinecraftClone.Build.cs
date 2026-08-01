@@ -16,6 +16,7 @@ public class MinecraftClone : ModuleRules
 			"EnhancedInput",
 			"UMG",
 			"Slate",
+			"SlateCore",
 			"AIModule",
 			"GameplayTasks",
 			"NavigationSystem",

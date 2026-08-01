@@ -32,3 +32,9 @@ Thumbs.db
 # Misc
 *.log
 *.bak
+
+# Large third-party content (re-downloadable from Fab / Marketplace)
+# Contains 8K textures well over GitHub's 100MB per-file limit
+Content/Fab/
+Content/Characters/
+Content/Weapons/

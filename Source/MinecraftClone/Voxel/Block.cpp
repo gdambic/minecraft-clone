@@ -15,6 +15,12 @@ ABlock::ABlock()
 	MeshComponent = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("MeshComponent"));
 	RootComponent = MeshComponent;
 
+	/*static ConstructorHelpers::FObjectFinder<UStaticMesh> CubeMesh(TEXT("/Engine/BasicShapes/Cube.Cube"));
+	if (CubeMesh.Succeeded())
+	{
+		MeshComponent->SetStaticMesh(CubeMesh.Object);
+	}*/
+
 	// VAŽNO: Omogući da blokovi utječu na NavMesh
 	MeshComponent->SetCanEverAffectNavigation(true);
 
@@ -40,7 +46,7 @@ void ABlock::BeginPlay()
 		OriginalMaterial = MeshComponent->GetMaterial(0);
 	}
 
-	UpdateVisibility();
+	//UpdateVisibility();
 }
 
 void ABlock::SetBlockType(EBlockType NewType)
@@ -202,6 +208,9 @@ void ABlock::InitializeFromRegistry(EBlockType Type)
 		UStaticMesh* LoadedMesh = Cast<UStaticMesh>(BlockDef->Mesh.TryLoad());
 		if (LoadedMesh)
 		{
+			// Za kocke je LoadedMesh jednak postojećem tako da SetStaticMesh odmah exita.
+			// Kad budu neki drugi oblici u igri, onda će ovo postaviti konkretan mesh.
+			// Funkcija vraća bool koji veli je li mesh sad promijenjen.
 			MeshComponent->SetStaticMesh(LoadedMesh);
 		}
 	}
