@@ -55,6 +55,28 @@ struct MINECRAFTCLONE_API FBlockDefinition
 	bool IsValid() const { return BlockType != EBlockType::Air; }
 };
 
+class UStaticMesh;
+class UMaterialInterface;
+
+/**
+ * Razrijeseni asseti bloka - gotovi pointeri dobiveni jednim TryLoad-om po assetu.
+ * Cache-ira se u AVoxelWorld (BuildBlockAssetCache) da se izbjegne TryLoad po svakom bloku.
+ */
+USTRUCT()
+struct MINECRAFTCLONE_API FBlockAssets
+{
+	GENERATED_BODY()
+
+	UPROPERTY()
+	UStaticMesh* Mesh = nullptr;
+
+	UPROPERTY()
+	UMaterialInterface* Material = nullptr;
+
+	UPROPERTY()
+	UMaterialInterface* HighlightMaterial = nullptr;
+};
+
 /**
  * Definicija itema - sadrži podatke za item drop vizuale i UI.
  * Registrira se u UBlockRegistry.

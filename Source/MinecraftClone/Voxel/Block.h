@@ -4,6 +4,7 @@
 #include "GameFramework/Actor.h"
 #include "BlockType.h"
 #include "ItemType.h"
+#include "BlockDefinition.h"
 #include "Block.generated.h"
 
 class AItemDrop;
@@ -65,9 +66,14 @@ public:
 
 	// === REGISTRY INITIALIZATION ===
 
-	/** Inicijaliziraj blok iz registry-a (postavlja mesh, materijal, TimeToDestroy, DropItemType, DropChance) */
+	/**
+	 * Inicijaliziraj blok iz definicije i unaprijed razrijesenih asseta.
+	 * Mesh/materijali dolaze kao gotovi pointeri (razrijeseni jednom u
+	 * AVoxelWorld::BuildBlockAssetCache) - bez TryLoad-a po bloku.
+	 */
 	UFUNCTION(BlueprintCallable, Category = "Block")
-	void InitializeFromRegistry(EBlockType Type);
+	void InitializeFromRegistry(EBlockType Type, const FBlockDefinition& BlockDefinition,
+		UStaticMesh* Mesh, UMaterialInterface* Material, UMaterialInterface* InHighlightMaterial);
 
 	/** Dodaj progress uništavanju, vraća true ako je blok uništen */
 	UFUNCTION(BlueprintCallable, Category = "Block")

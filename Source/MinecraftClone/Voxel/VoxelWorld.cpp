@@ -5,6 +5,8 @@
 #include "Zombie.h"
 #include "Sheep.h"
 #include "BlockRegistry.h"
+#include "Engine/StaticMesh.h"
+#include "Materials/MaterialInterface.h"
 
 AVoxelWorld::AVoxelWorld()
 {
@@ -36,7 +38,7 @@ void AVoxelWorld::GenerateWorld()
 		return;
 	}
 
-	// === [PERF] Početak mjerenja - vidi Docs/PLAN_Performance.md, sekcija 5.4 ===
+	// === [PERF] Početak mjerenja - vidi Docs/PLAN_UbrzanjePokretanja.md, sekcija 2 ===
 	UE_LOG(LogTemp, Warning, TEXT("[PERF] ================================================"));
 	UE_LOG(LogTemp, Warning, TEXT("[PERF] GenerateWorld  %dx%d, %d slojeva (SurfaceLevel=%d)"),
 		WorldSizeX, WorldSizeY, SurfaceLevel + 1, SurfaceLevel);
@@ -44,7 +46,8 @@ void AVoxelWorld::GenerateWorld()
 	const double T0 = FPlatformTime::Seconds();
 
 	// --- Faza 1: assets (fiksni trosak, NE skalira s velicinom svijeta) ---
-	MeasureAssetLoadCost();
+	// Razrijesi mesh/materijale JEDNOM i spremi u cache - petlje ispod koriste gotove pointere
+	BuildBlockAssetCache();
 
 	const double T1 = FPlatformTime::Seconds();
 
@@ -132,11 +135,21 @@ void AVoxelWorld::SpawnBlock(int32 X, int32 Y, int32 Z, EBlockType Type)
 
 	// Provjeri ima li registry definiciju za ovaj tip
 	UBlockRegistry* Registry = UBlockRegistry::Get(this);
-	if (!Registry || !Registry->GetBlockDefinition(Type))
+	if (!Registry)
+	{
+		return;
+	}
+
+	const FBlockDefinition* BlockDefinition = Registry->GetBlockDefinition(Type);
+	
+	if (!BlockDefinition)
 	{
 		UE_LOG(LogTemp, Warning, TEXT("BlockRegistry: No definition for block type %d"), (int32)Type);
 		return;
 	}
+
+	// Gotovi pointeri iz cachea - bez TryLoad-a po bloku
+	const FBlockAssets& BlockAssets = GetBlockAssets(Type, *BlockDefinition);
 
 	FVector WorldPos = GridToWorld(X, Y, Z);
 
@@ -149,7 +162,8 @@ void AVoxelWorld::SpawnBlock(int32 X, int32 Y, int32 Z, EBlockType Type)
 	if (NewBlock)
 	{
 		NewBlock->SetGridPosition(GridPos);
-		NewBlock->InitializeFromRegistry(Type);
+		NewBlock->InitializeFromRegistry(Type, *BlockDefinition,
+			BlockAssets.Mesh, BlockAssets.Material, BlockAssets.HighlightMaterial);
 		Blocks.Add(GridPos, NewBlock);
 	}
 }
@@ -180,7 +194,14 @@ ABlock* AVoxelWorld::PlaceBlockAt(FIntVector GridPosition, EBlockType Type)
 {
 	// Provjeri ima li registry definiciju za ovaj tip
 	UBlockRegistry* Registry = UBlockRegistry::Get(this);
-	if (!Registry || !Registry->GetBlockDefinition(Type))
+	if (!Registry)
+	{
+		return nullptr;
+	}
+
+	const FBlockDefinition* BlockDefinition = Registry->GetBlockDefinition(Type);
+
+	if (!BlockDefinition)
 	{
 		UE_LOG(LogTemp, Error, TEXT("PlaceBlockAt: No registry definition for type %d at (%d,%d,%d)"),
 			(int32)Type, GridPosition.X, GridPosition.Y, GridPosition.Z);
@@ -204,6 +225,9 @@ ABlock* AVoxelWorld::PlaceBlockAt(FIntVector GridPosition, EBlockType Type)
 	}
 
 	// Spawnaj generički ABlock i inicijaliziraj iz registry-a
+	// Gotovi pointeri iz cachea - bez TryLoad-a po bloku
+	const FBlockAssets& BlockAssets = GetBlockAssets(Type, *BlockDefinition);
+
 	FVector WorldPos = GridToWorld(GridPosition.X, GridPosition.Y, GridPosition.Z);
 
 	FActorSpawnParameters SpawnParams;
@@ -214,7 +238,8 @@ ABlock* AVoxelWorld::PlaceBlockAt(FIntVector GridPosition, EBlockType Type)
 	if (NewBlock)
 	{
 		NewBlock->SetGridPosition(GridPosition);
-		NewBlock->InitializeFromRegistry(Type);
+		NewBlock->InitializeFromRegistry(Type, *BlockDefinition,
+			BlockAssets.Mesh, BlockAssets.Material, BlockAssets.HighlightMaterial);
 		Blocks.Add(GridPosition, NewBlock);
 	}
 
@@ -244,7 +269,7 @@ TArray<EBlockType> AVoxelWorld::GetPlaceableBlockTypes() const
 
 // === [PERF] DIJAGNOSTIKA ===
 
-void AVoxelWorld::MeasureAssetLoadCost()
+void AVoxelWorld::BuildBlockAssetCache()
 {
 	UBlockRegistry* Registry = UBlockRegistry::Get(this);
 	if (!Registry)
@@ -261,21 +286,29 @@ void AVoxelWorld::MeasureAssetLoadCost()
 	int32 Failed = 0;
 	for (const FBlockDefinition& Def : AllBlocks)
 	{
+		FBlockAssets Assets;
+		Assets.Mesh = Cast<UStaticMesh>(Def.Mesh.TryLoad());
+		Assets.Material = Cast<UMaterialInterface>(Def.Material.TryLoad());
+		Assets.HighlightMaterial = Cast<UMaterialInterface>(Def.HighlightMaterial.TryLoad());
+		BlockAssetCache.Add(Def.BlockType, Assets);
+
+		// Statistika za [PERF] log
 		const FSoftObjectPath* Paths[3] = { &Def.Mesh, &Def.Material, &Def.HighlightMaterial };
-		for (const FSoftObjectPath* Path : Paths)
+		const UObject* Loaded[3] = { Assets.Mesh, Assets.Material, Assets.HighlightMaterial };
+		for (int32 i = 0; i < 3; i++)
 		{
-			if (Path->IsNull())
+			if (Paths[i]->IsNull())
 			{
 				continue;
 			}
-			if (Path->TryLoad())
+			if (Loaded[i])
 			{
 				Resolved++;
 			}
 			else
 			{
 				Failed++;
-				UE_LOG(LogTemp, Warning, TEXT("[PERF]     NEUSPJEH: %s"), *Path->ToString());
+				UE_LOG(LogTemp, Warning, TEXT("[PERF]     NEUSPJEH: %s"), *Paths[i]->ToString());
 			}
 		}
 	}
@@ -283,6 +316,21 @@ void AVoxelWorld::MeasureAssetLoadCost()
 	const double ElapsedMs = (FPlatformTime::Seconds() - Start) * 1000.0;
 	UE_LOG(LogTemp, Warning, TEXT("[PERF] 1/4 Assets     %8.1f ms   %6d ucitano, %d neuspjelo (%d definicija)"),
 		ElapsedMs, Resolved, Failed, AllBlocks.Num());
+}
+
+const FBlockAssets& AVoxelWorld::GetBlockAssets(EBlockType Type, const FBlockDefinition& BlockDefinition)
+{
+	if (const FBlockAssets* Cached = BlockAssetCache.Find(Type))
+	{
+		return *Cached;
+	}
+
+	// Lazy fallback - npr. ako se blok postavlja prije nego je GenerateWorld izgradio cache
+	FBlockAssets Assets;
+	Assets.Mesh = Cast<UStaticMesh>(BlockDefinition.Mesh.TryLoad());
+	Assets.Material = Cast<UMaterialInterface>(BlockDefinition.Material.TryLoad());
+	Assets.HighlightMaterial = Cast<UMaterialInterface>(BlockDefinition.HighlightMaterial.TryLoad());
+	return BlockAssetCache.Add(Type, Assets);
 }
 
 // === TREES ===

@@ -4,7 +4,6 @@
 #include "ItemDrop.h"
 #include "VoxelWorld.h"
 #include "Kismet/GameplayStatics.h"
-#include "BlockRegistry.h"
 #include "Engine/StaticMesh.h"
 #include "Materials/MaterialInterface.h"
 
@@ -179,62 +178,37 @@ int32 ABlock::GetIntegrityPercent() const
 	return 0;
 }
 
-void ABlock::InitializeFromRegistry(EBlockType Type)
+void ABlock::InitializeFromRegistry(EBlockType Type, const FBlockDefinition& BlockDefinition,
+	UStaticMesh* Mesh, UMaterialInterface* Material, UMaterialInterface* InHighlightMaterial)
 {
 	BlockType = Type;
 
-	UBlockRegistry* Registry = UBlockRegistry::Get(this);
-	if (!Registry)
-	{
-		UE_LOG(LogTemp, Warning, TEXT("ABlock::InitializeFromRegistry: Registry not found!"));
-		return;
-	}
-
-	const FBlockDefinition* BlockDef = Registry->GetBlockDefinition(Type);
-	if (!BlockDef)
-	{
-		UE_LOG(LogTemp, Warning, TEXT("ABlock::InitializeFromRegistry: No definition for block type %d"), (int32)Type);
-		return;
-	}
-
 	// Postavi gameplay vrijednosti
-	TimeToDestroy = BlockDef->TimeToDestroy;
-	DropItemType = BlockDef->DropItemType;
-	DropChance = BlockDef->DropChance;
+	TimeToDestroy = BlockDefinition.TimeToDestroy;
+	DropItemType = BlockDefinition.DropItemType;
+	DropChance = BlockDefinition.DropChance;
 
 	// Postavi mesh
-	if (!BlockDef->Mesh.IsNull() && MeshComponent)
+	if (Mesh && MeshComponent)
 	{
-		UStaticMesh* LoadedMesh = Cast<UStaticMesh>(BlockDef->Mesh.TryLoad());
-		if (LoadedMesh)
-		{
-			// Za kocke je LoadedMesh jednak postojećem tako da SetStaticMesh odmah exita.
-			// Kad budu neki drugi oblici u igri, onda će ovo postaviti konkretan mesh.
-			// Funkcija vraća bool koji veli je li mesh sad promijenjen.
-			MeshComponent->SetStaticMesh(LoadedMesh);
-		}
+		// Za kocke je Mesh jednak postojećem tako da SetStaticMesh odmah exita.
+		// Kad budu neki drugi oblici u igri, onda će ovo postaviti konkretan mesh.
+		// Funkcija vraća bool koji veli je li mesh sad promijenjen.
+		MeshComponent->SetStaticMesh(Mesh);
 	}
 
 	// Postavi materijal
-	if (!BlockDef->Material.IsNull() && MeshComponent)
+	if (Material && MeshComponent)
 	{
-		UMaterialInterface* LoadedMaterial = Cast<UMaterialInterface>(BlockDef->Material.TryLoad());
-		if (LoadedMaterial)
-		{
-			MeshComponent->SetMaterial(0, LoadedMaterial);
-			// Spremi kao OriginalMaterial za highlight swap
-			OriginalMaterial = LoadedMaterial;
-		}
+		MeshComponent->SetMaterial(0, Material);
+		// Spremi kao OriginalMaterial za highlight swap
+		OriginalMaterial = Material;
 	}
 
 	// Postavi highlight materijal
-	if (!BlockDef->HighlightMaterial.IsNull())
+	if (InHighlightMaterial)
 	{
-		UMaterialInterface* LoadedHighlight = Cast<UMaterialInterface>(BlockDef->HighlightMaterial.TryLoad());
-		if (LoadedHighlight)
-		{
-			HighlightMaterial = LoadedHighlight;
-		}
+		HighlightMaterial = InHighlightMaterial;
 	}
 
 	UpdateVisibility();

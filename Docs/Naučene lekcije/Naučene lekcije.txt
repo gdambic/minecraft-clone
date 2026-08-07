@@ -1,4 +1,9 @@
-Kad smo importali gltf datoteku s modelom, teksturom i animacijama, tekstura je bila mutna. Napravili smo novi materijal s tom teksturom, i na teksturi PNG podesili:
+Importamo gltf datoteku s modelom, teksturom i animacijama.
+
+Obavezno stavio da forsirano kreira sekletal mesh (inače dobijemo hrpu nepovezanih static mesheva).
+
+Kad smo je primijenili na ovcu, tekstura je bila mutna. Napravili smo novi materijal s tom teksturom (TextureSample node, pa Roughness na 1), i na teksturi PNG podesili:
+
 ┌──────────────────────┬────────────────────────────┐
 │       Postavka       │         Vrijednost         │
 ├──────────────────────┼────────────────────────────┤

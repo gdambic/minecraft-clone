@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
 #include "BlockType.h"
+#include "BlockDefinition.h"
 #include "TreeGenerator.h"
 #include "VoxelWorld.generated.h"
 
@@ -105,9 +106,17 @@ private:
 	 * Razriješi sve FSoftObjectPath iz registry-a i izmjeri koliko to traje.
 	 * Poziva se PRIJE generiranja terena da izolira fiksni trošak (sinkroni load
 	 * Megascans materijala) od skalirajućeg (SpawnActor po bloku).
-	 * Vidi Docs/PLAN_Performance.md, sekcija 5.4.
+	 * Rezultate sprema u BlockAssetCache pa se TryLoad NE poziva po bloku.
+	 * Vidi Docs/PLAN_UbrzanjePokretanja.md, sekcija 2.
 	 */
-	void MeasureAssetLoadCost();
+	void BuildBlockAssetCache();
+
+	/** Dohvati razrijesene assete za tip bloka (lazy fallback ako cache jos nije izgraden) */
+	const FBlockAssets& GetBlockAssets(EBlockType Type, const FBlockDefinition& BlockDefinition);
+
+	/** Cache razrijesenih asseta po tipu bloka - puni ga BuildBlockAssetCache() */
+	UPROPERTY()
+	TMap<EBlockType, FBlockAssets> BlockAssetCache;
 
 	// === TREES ===
 	void GenerateTrees();
