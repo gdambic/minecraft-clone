@@ -52,7 +52,7 @@ void AVoxelWorld::GenerateWorld()
 	const double T1 = FPlatformTime::Seconds();
 
 	// --- Faza 2: teren (skalirajuci trosak) ---
-	// Generiraj teren od Z=0 do SurfaceLevel
+	// PROLAZ 1: samo podaci - izvor istine, bez actora (par ms)
 	for (int32 Z = 0; Z <= SurfaceLevel; Z++)
 	{
 		EBlockType Type = (Z == SurfaceLevel) ? EBlockType::Grass : EBlockType::Stone;
@@ -60,7 +60,7 @@ void AVoxelWorld::GenerateWorld()
 		{
 			for (int32 Y = 0; Y < WorldSizeY; Y++)
 			{
-				SpawnBlock(X, Y, Z, Type);
+				BlockData.Add(FIntVector(X, Y, Z), Type);
 			}
 		}
 	}
@@ -70,14 +70,25 @@ void AVoxelWorld::GenerateWorld()
 	{
 		int32 RandX = FMath::RandRange(0, WorldSizeX - 1);
 		int32 RandY = FMath::RandRange(0, WorldSizeY - 1);
-		SpawnBlock(RandX, RandY, SurfaceLevel + 1, EBlockType::Dirt);
+		BlockData.Add(FIntVector(RandX, RandY, SurfaceLevel + 1), EBlockType::Dirt);
+	}
+
+	// PROLAZ 2: actori SAMO za izlozene blokove (zakopani ostaju samo podaci)
+	for (const TPair<FIntVector, EBlockType>& Pair : BlockData)
+	{
+		if (IsBlockExposed(Pair.Key))
+		{
+			EnsureBlockActor(Pair.Key);
+		}
 	}
 
 	const double T2 = FPlatformTime::Seconds();
-	const int32 TerrainBlocks = Blocks.Num();
+	const int32 TerrainBlocks = BlockData.Num();
+	const int32 TerrainActors = Blocks.Num();
 	const double TerrainMs = (T2 - T1) * 1000.0;
-	UE_LOG(LogTemp, Warning, TEXT("[PERF] 2/4 Teren      %8.1f ms   %6d blokova   %.4f ms/blok"),
-		TerrainMs, TerrainBlocks, TerrainBlocks > 0 ? TerrainMs / TerrainBlocks : 0.0);
+	UE_LOG(LogTemp, Warning, TEXT("[PERF] 2/4 Teren      %8.1f ms   %6d blokova (%d actora, %d lazy)   %.4f ms/blok"),
+		TerrainMs, TerrainBlocks, TerrainActors, TerrainBlocks - TerrainActors,
+		TerrainBlocks > 0 ? TerrainMs / TerrainBlocks : 0.0);
 
 	UE_LOG(LogTemp, Log, TEXT("VoxelWorld: Generated %d layers (0-%d) + %d random blocks"),
 		SurfaceLevel + 1, SurfaceLevel, RandomBlockCount);
@@ -86,7 +97,7 @@ void AVoxelWorld::GenerateWorld()
 	GenerateTrees();
 
 	const double T3 = FPlatformTime::Seconds();
-	const int32 TreeBlocks = Blocks.Num() - TerrainBlocks;
+	const int32 TreeBlocks = BlockData.Num() - TerrainBlocks;
 	const double TreesMs = (T3 - T2) * 1000.0;
 	UE_LOG(LogTemp, Warning, TEXT("[PERF] 3/4 Stabla     %8.1f ms   %6d blokova   %.4f ms/blok"),
 		TreesMs, TreeBlocks, TreeBlocks > 0 ? TreesMs / TreeBlocks : 0.0);
@@ -106,7 +117,8 @@ void AVoxelWorld::GenerateWorld()
 	const double SpawnMs = (T4 - T1) * 1000.0;
 	const double TotalMs = (T4 - T0) * 1000.0;
 	UE_LOG(LogTemp, Warning, TEXT("[PERF] ------------------------------------------------"));
-	UE_LOG(LogTemp, Warning, TEXT("[PERF] UKUPNO        %8.1f ms   %6d blokova"), TotalMs, Blocks.Num());
+	UE_LOG(LogTemp, Warning, TEXT("[PERF] UKUPNO        %8.1f ms   %6d blokova (%d actora)"),
+		TotalMs, BlockData.Num(), Blocks.Num());
 	UE_LOG(LogTemp, Warning, TEXT("[PERF]   fiksni (assets)      %8.1f ms  (%.0f%%)"),
 		AssetMs, TotalMs > 0.0 ? AssetMs / TotalMs * 100.0 : 0.0);
 	UE_LOG(LogTemp, Warning, TEXT("[PERF]   skalirajuci (spawn)  %8.1f ms  (%.0f%%)"),
@@ -123,35 +135,65 @@ void AVoxelWorld::GenerateWorld()
 	);
 }
 
-void AVoxelWorld::SpawnBlock(int32 X, int32 Y, int32 Z, EBlockType Type)
+bool AVoxelWorld::IsBlockExposed(FIntVector Pos) const
 {
-	FIntVector GridPos(X, Y, Z);
+	static const FIntVector Neighbors[6] = {
+		FIntVector(1, 0, 0), FIntVector(-1, 0, 0),
+		FIntVector(0, 1, 0), FIntVector(0, -1, 0),
+		FIntVector(0, 0, 1), FIntVector(0, 0, -1)
+	};
 
-	// Provjeri postoji li već blok na toj poziciji
-	if (Blocks.Contains(GridPos))
+	for (const FIntVector& Offset : Neighbors)
 	{
-		return;
+		const FIntVector N = Pos + Offset;
+
+		// Donju stranu svijeta nitko ne vidi - tretiraj kao cvrsto.
+		// Bocne strane (X/Y izvan granica) namjerno prolaze: nema unosa
+		// u BlockData pa se racunaju kao izlozene (rub svijeta se vidi izvana).
+		if (N.Z < 0)
+		{
+			continue;
+		}
+
+		if (!BlockData.Contains(N))
+		{
+			return true;
+		}
 	}
 
-	// Provjeri ima li registry definiciju za ovaj tip
+	return false;
+}
+
+ABlock* AVoxelWorld::EnsureBlockActor(FIntVector Pos)
+{
+	if (ABlock* Existing = Blocks.FindRef(Pos))
+	{
+		return Existing;
+	}
+
+	const EBlockType* Type = BlockData.Find(Pos);
+	if (!Type)
+	{
+		return nullptr;
+	}
+
 	UBlockRegistry* Registry = UBlockRegistry::Get(this);
 	if (!Registry)
 	{
-		return;
+		return nullptr;
 	}
 
-	const FBlockDefinition* BlockDefinition = Registry->GetBlockDefinition(Type);
-	
+	const FBlockDefinition* BlockDefinition = Registry->GetBlockDefinition(*Type);
 	if (!BlockDefinition)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("BlockRegistry: No definition for block type %d"), (int32)Type);
-		return;
+		UE_LOG(LogTemp, Warning, TEXT("BlockRegistry: No definition for block type %d"), (int32)*Type);
+		return nullptr;
 	}
 
 	// Gotovi pointeri iz cachea - bez TryLoad-a po bloku
-	const FBlockAssets& BlockAssets = GetBlockAssets(Type, *BlockDefinition);
+	const FBlockAssets& BlockAssets = GetBlockAssets(*Type, *BlockDefinition);
 
-	FVector WorldPos = GridToWorld(X, Y, Z);
+	FVector WorldPos = GridToWorld(Pos.X, Pos.Y, Pos.Z);
 
 	FActorSpawnParameters SpawnParams;
 	SpawnParams.Owner = this;
@@ -161,10 +203,45 @@ void AVoxelWorld::SpawnBlock(int32 X, int32 Y, int32 Z, EBlockType Type)
 
 	if (NewBlock)
 	{
-		NewBlock->SetGridPosition(GridPos);
-		NewBlock->InitializeFromRegistry(Type, *BlockDefinition,
+		NewBlock->SetGridPosition(Pos);
+		NewBlock->InitializeFromRegistry(*Type, *BlockDefinition,
 			BlockAssets.Mesh, BlockAssets.Material, BlockAssets.HighlightMaterial);
-		Blocks.Add(GridPos, NewBlock);
+		Blocks.Add(Pos, NewBlock);
+	}
+
+	return NewBlock;
+}
+
+void AVoxelWorld::NotifyBlockDestroyed(FIntVector GridPosition, EBlockType DestroyedType)
+{
+	BlockData.Remove(GridPosition);
+
+	if (ABlock* Actor = Blocks.FindRef(GridPosition))
+	{
+		Blocks.Remove(GridPosition);
+		Actor->Destroy();
+	}
+
+	// Susjedi su mozda upravo postali izlozeni -> lazy spawn
+	// (no-op za pozicije bez podataka ili s vec spawnanim actorom)
+	static const FIntVector Neighbors[6] = {
+		FIntVector(1, 0, 0), FIntVector(-1, 0, 0),
+		FIntVector(0, 1, 0), FIntVector(0, -1, 0),
+		FIntVector(0, 0, 1), FIntVector(0, 0, -1)
+	};
+	for (const FIntVector& Offset : Neighbors)
+	{
+		EnsureBlockActor(GridPosition + Offset);
+	}
+
+	// Leaf decay notifikacije
+	if (DestroyedType == EBlockType::OakLog || DestroyedType == EBlockType::BirchLog)
+	{
+		OnLogDestroyed(GridPosition);
+	}
+	else if (DestroyedType == EBlockType::OakLeaves || DestroyedType == EBlockType::BirchLeaves)
+	{
+		OnLeafDecayed(GridPosition);
 	}
 }
 
@@ -175,12 +252,37 @@ ABlock* AVoxelWorld::GetBlock(int32 X, int32 Y, int32 Z)
 	return FoundBlock ? *FoundBlock : nullptr;
 }
 
+EBlockType AVoxelWorld::GetBlockTypeAt(FIntVector GridPosition) const
+{
+	const EBlockType* Found = BlockData.Find(GridPosition);
+	return Found ? *Found : EBlockType::Air;
+}
+
 void AVoxelWorld::SetBlockType(int32 X, int32 Y, int32 Z, EBlockType NewType)
 {
-	ABlock* Block = GetBlock(X, Y, Z);
-	if (Block)
+	FIntVector GridPos(X, Y, Z);
+
+	if (NewType == EBlockType::Air)
 	{
-		Block->SetBlockType(NewType);
+		// Air = odsutnost unosa - ukloni podatke i actor
+		BlockData.Remove(GridPos);
+		if (ABlock* Actor = Blocks.FindRef(GridPos))
+		{
+			Blocks.Remove(GridPos);
+			Actor->Destroy();
+		}
+		return;
+	}
+
+	BlockData.Add(GridPos, NewType);
+
+	if (ABlock* Actor = Blocks.FindRef(GridPos))
+	{
+		Actor->SetBlockType(NewType);
+	}
+	else if (IsBlockExposed(GridPos))
+	{
+		EnsureBlockActor(GridPos);
 	}
 }
 
@@ -192,55 +294,22 @@ FVector AVoxelWorld::GridToWorld(int32 X, int32 Y, int32 Z)
 
 ABlock* AVoxelWorld::PlaceBlockAt(FIntVector GridPosition, EBlockType Type)
 {
-	// Provjeri ima li registry definiciju za ovaj tip
-	UBlockRegistry* Registry = UBlockRegistry::Get(this);
-	if (!Registry)
+	// Zauzetost se provjerava u podacima (Air actori vise ne postoje)
+	if (BlockData.Contains(GridPosition))
 	{
 		return nullptr;
 	}
 
-	const FBlockDefinition* BlockDefinition = Registry->GetBlockDefinition(Type);
+	BlockData.Add(GridPosition, Type);
 
-	if (!BlockDefinition)
+	// Postavljeni blok je po definiciji izlozen - odmah spawnaj actor
+	ABlock* NewBlock = EnsureBlockActor(GridPosition);
+	if (!NewBlock)
 	{
-		UE_LOG(LogTemp, Error, TEXT("PlaceBlockAt: No registry definition for type %d at (%d,%d,%d)"),
+		// Npr. nema registry definicije - ne ostavljaj "duh" podatke bez actora
+		BlockData.Remove(GridPosition);
+		UE_LOG(LogTemp, Error, TEXT("PlaceBlockAt: Failed to spawn block type %d at (%d,%d,%d)"),
 			(int32)Type, GridPosition.X, GridPosition.Y, GridPosition.Z);
-		return nullptr;
-	}
-
-	// Provjeri postoji li već blok na toj poziciji
-	if (Blocks.Contains(GridPosition))
-	{
-		// Ako postoji Air blok, uništi ga i spawnaj novi s pravim tipom
-		ABlock* ExistingBlock = Blocks[GridPosition];
-		if (ExistingBlock && ExistingBlock->BlockType == EBlockType::Air)
-		{
-			Blocks.Remove(GridPosition);
-			ExistingBlock->Destroy();
-		}
-		else
-		{
-			return nullptr;
-		}
-	}
-
-	// Spawnaj generički ABlock i inicijaliziraj iz registry-a
-	// Gotovi pointeri iz cachea - bez TryLoad-a po bloku
-	const FBlockAssets& BlockAssets = GetBlockAssets(Type, *BlockDefinition);
-
-	FVector WorldPos = GridToWorld(GridPosition.X, GridPosition.Y, GridPosition.Z);
-
-	FActorSpawnParameters SpawnParams;
-	SpawnParams.Owner = this;
-
-	ABlock* NewBlock = GetWorld()->SpawnActor<ABlock>(ABlock::StaticClass(), WorldPos, FRotator::ZeroRotator, SpawnParams);
-
-	if (NewBlock)
-	{
-		NewBlock->SetGridPosition(GridPosition);
-		NewBlock->InitializeFromRegistry(Type, *BlockDefinition,
-			BlockAssets.Mesh, BlockAssets.Material, BlockAssets.HighlightMaterial);
-		Blocks.Add(GridPosition, NewBlock);
 	}
 
 	return NewBlock;
@@ -425,10 +494,9 @@ void AVoxelWorld::OnLogDestroyed(FIntVector LogPosition)
 				}
 
 				FIntVector CheckPos = LogPosition + FIntVector(X, Y, Z);
-				ABlock* Block = GetBlock(CheckPos.X, CheckPos.Y, CheckPos.Z);
+				EBlockType Type = GetBlockTypeAt(CheckPos);
 
-				if (Block && (Block->BlockType == EBlockType::OakLeaves ||
-				              Block->BlockType == EBlockType::BirchLeaves))
+				if (Type == EBlockType::OakLeaves || Type == EBlockType::BirchLeaves)
 				{
 					LeavesToCheck.AddUnique(CheckPos);
 				}
@@ -453,10 +521,9 @@ void AVoxelWorld::OnLeafDecayed(FIntVector LeafPosition)
 				}
 
 				FIntVector CheckPos = LeafPosition + FIntVector(X, Y, Z);
-				ABlock* Block = GetBlock(CheckPos.X, CheckPos.Y, CheckPos.Z);
+				EBlockType Type = GetBlockTypeAt(CheckPos);
 
-				if (Block && (Block->BlockType == EBlockType::OakLeaves ||
-				              Block->BlockType == EBlockType::BirchLeaves))
+				if (Type == EBlockType::OakLeaves || Type == EBlockType::BirchLeaves)
 				{
 					LeavesToCheck.AddUnique(CheckPos);
 				}
@@ -480,15 +547,9 @@ void AVoxelWorld::ProcessLeafDecay()
 		FIntVector LeafPos = LeavesToCheck[0];
 		LeavesToCheck.RemoveAt(0);
 
-		ABlock* LeafBlock = GetBlock(LeafPos.X, LeafPos.Y, LeafPos.Z);
-		if (!LeafBlock)
-		{
-			continue;
-		}
-
-		// Provjeri je li još uvijek lišće
-		if (LeafBlock->BlockType != EBlockType::OakLeaves &&
-		    LeafBlock->BlockType != EBlockType::BirchLeaves)
+		// Provjeri je li još uvijek lišće (u podacima)
+		EBlockType Type = GetBlockTypeAt(LeafPos);
+		if (Type != EBlockType::OakLeaves && Type != EBlockType::BirchLeaves)
 		{
 			continue;
 		}
@@ -496,8 +557,14 @@ void AVoxelWorld::ProcessLeafDecay()
 		// Provjeri ima li vezu s logom
 		if (!HasLogConnection(LeafPos))
 		{
-			// Nema veze - decay (instant uništenje koje može dropati sapling)
-			LeafBlock->AddDestroyProgress(LeafBlock->TimeToDestroy);
+			// Nema veze - decay (instant uništenje koje može dropati sapling).
+			// Lišće je praktički uvijek izloženo pa actor već postoji;
+			// EnsureBlockActor pokriva i teoretski zakopan list.
+			ABlock* LeafBlock = EnsureBlockActor(LeafPos);
+			if (LeafBlock)
+			{
+				LeafBlock->AddDestroyProgress(LeafBlock->TimeToDestroy);
+			}
 		}
 	}
 }
@@ -529,20 +596,20 @@ bool AVoxelWorld::HasLogConnection(FIntVector LeafPosition) const
 			continue;
 		}
 
-		ABlock* Block = const_cast<AVoxelWorld*>(this)->GetBlock(Current.X, Current.Y, Current.Z);
-		if (!Block || Block->BlockType == EBlockType::Air)
+		EBlockType Type = GetBlockTypeAt(Current);
+		if (Type == EBlockType::Air)
 		{
 			continue;
 		}
 
 		// Pronašli smo log - lišće je podržano
-		if (Block->BlockType == EBlockType::OakLog || Block->BlockType == EBlockType::BirchLog)
+		if (Type == EBlockType::OakLog || Type == EBlockType::BirchLog)
 		{
 			return true;
 		}
 
 		// Nastavi BFS kroz lišće
-		if (Block->BlockType == EBlockType::OakLeaves || Block->BlockType == EBlockType::BirchLeaves)
+		if (Type == EBlockType::OakLeaves || Type == EBlockType::BirchLeaves)
 		{
 			// Dodaj 6 susjeda
 			Queue.Add(Current + FIntVector(1, 0, 0));

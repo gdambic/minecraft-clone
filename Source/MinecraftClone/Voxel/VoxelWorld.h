@@ -76,6 +76,16 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "World")
 	ABlock* GetBlock(int32 X, int32 Y, int32 Z);
 
+	/** Tip bloka iz mape podataka; Air ako nema unosa. Radi i za zakopane blokove bez actora. */
+	UFUNCTION(BlueprintPure, Category = "World")
+	EBlockType GetBlockTypeAt(FIntVector GridPosition) const;
+
+	/**
+	 * Poziva ABlock nakon što je uništen (drop je već spawnan).
+	 * Uklanja podatke i actor, lazy-spawna izložene susjede i pokreće leaf decay.
+	 */
+	void NotifyBlockDestroyed(FIntVector GridPosition, EBlockType DestroyedType);
+
 	UFUNCTION(BlueprintCallable, Category = "World")
 	void SetBlockType(int32 X, int32 Y, int32 Z, EBlockType NewType);
 
@@ -94,11 +104,20 @@ protected:
 	virtual void BeginPlay() override;
 
 private:
+	/** Izvor istine: tip bloka po poziciji. NEMA unosa = Air. */
+	TMap<FIntVector, EBlockType> BlockData;
+
+	/** Spawnani actori - SAMO izloženi blokovi (podskup BlockData). */
 	UPROPERTY()
 	TMap<FIntVector, ABlock*> Blocks;
 
 	void GenerateWorld();
-	void SpawnBlock(int32 X, int32 Y, int32 Z, EBlockType Type);
+
+	/** Ima li blok barem jednu izloženu (vidljivu) stranu. Dno svijeta (Z<0) se tretira kao čvrsto. */
+	bool IsBlockExposed(FIntVector Pos) const;
+
+	/** Spawnaj actor za poziciju iz BlockData ako već nije spawnan. Vraća postojeći ili novi actor. */
+	ABlock* EnsureBlockActor(FIntVector Pos);
 
 	// === [PERF] DIJAGNOSTIKA ===
 

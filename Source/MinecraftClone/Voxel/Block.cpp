@@ -3,7 +3,6 @@
 #include "Engine/Engine.h"
 #include "ItemDrop.h"
 #include "VoxelWorld.h"
-#include "Kismet/GameplayStatics.h"
 #include "Engine/StaticMesh.h"
 #include "Materials/MaterialInterface.h"
 
@@ -80,11 +79,12 @@ void ABlock::SetHighlighted(bool bHighlight)
 
 void ABlock::UpdateVisibility()
 {
+	// Actor uvijek predstavlja cvrst blok - Air znaci da actor ne postoji
+	// (unisteni blokovi se Destroy()-aju kroz AVoxelWorld::NotifyBlockDestroyed)
 	if (MeshComponent)
 	{
-		bool bShouldBeVisible = (BlockType != EBlockType::Air);
-		MeshComponent->SetVisibility(bShouldBeVisible);
-		MeshComponent->SetCollisionEnabled(bShouldBeVisible ? ECollisionEnabled::QueryAndPhysics : ECollisionEnabled::NoCollision);
+		MeshComponent->SetVisibility(true);
+		MeshComponent->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
 	}
 }
 
@@ -109,33 +109,7 @@ bool ABlock::AddDestroyProgress(float DeltaTime)
 	// Provjeri je li uništen
 	if (DestroyProgress >= 1.0f)
 	{
-		// Dohvati VoxelWorld za decay notifikacije
-		AVoxelWorld* VoxelWorld = nullptr;
-		TArray<AActor*> VoxelWorlds;
-		UGameplayStatics::GetAllActorsOfClass(GetWorld(), AVoxelWorld::StaticClass(), VoxelWorlds);
-		if (VoxelWorlds.Num() > 0)
-		{
-			VoxelWorld = Cast<AVoxelWorld>(VoxelWorlds[0]);
-		}
-
-		// Ako je log, obavijesti VoxelWorld za leaf decay
-		if (BlockType == EBlockType::OakLog || BlockType == EBlockType::BirchLog)
-		{
-			if (VoxelWorld)
-			{
-				VoxelWorld->OnLogDestroyed(GridPosition);
-			}
-		}
-		// Ako je list, obavijesti susjede za kaskadni decay
-		else if (BlockType == EBlockType::OakLeaves || BlockType == EBlockType::BirchLeaves)
-		{
-			if (VoxelWorld)
-			{
-				VoxelWorld->OnLeafDecayed(GridPosition);
-			}
-		}
-
-		// Spawnaj drop prije nego što postane Air (ako prođe šansu)
+		// Spawnaj drop prije uklanjanja (ako prođe šansu)
 		if (DropItemType != EItemType::None && FMath::FRand() < DropChance)
 		{
 			// Centriraj drop u središte bloka (origin je na kutu)
@@ -144,7 +118,16 @@ bool ABlock::AddDestroyProgress(float DeltaTime)
 			AItemDrop::SpawnItemDrop(this, DropItemType, SpawnLocation);
 		}
 
-		SetBlockType(EBlockType::Air);
+		// Svijet uklanja podatke i ovaj actor, lazy-spawna izlozene susjede
+		// i pokrece leaf decay. Owner je postavljen pri spawnu u AVoxelWorld.
+		if (AVoxelWorld* VoxelWorld = Cast<AVoxelWorld>(GetOwner()))
+		{
+			VoxelWorld->NotifyBlockDestroyed(GridPosition, BlockType);
+		}
+		else
+		{
+			Destroy();
+		}
 		return true;
 	}
 

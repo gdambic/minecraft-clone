@@ -68,6 +68,8 @@ Primjer izlaza u Output Logu (filter: `[PERF]`):
 
 ### 4.1. Ne spawnaj zakopane blokove — lazy spawn (~4× ubrzanje) ⭐ quick win
 
+> ✅ IMPLEMENTIRANO — detalji u [PLAN_LazySpawn.md](PLAN_LazySpawn.md)
+
 - Tipove blokova držati u laganoj mapi `TMap<FIntVector, EBlockType>`
   (podaci, ne actori).
 - `ABlock` actor spawnati samo za blokove s barem jednom izloženom stranom —

@@ -93,9 +93,8 @@ void FTreeGenerator::GenerateCanopy(AVoxelWorld* World, FIntVector CenterPositio
 
 			FIntVector LeafPos = CenterPosition + FIntVector(X, Y, 0);
 
-			// Ne prepiši postojeće logove
-			ABlock* ExistingBlock = World->GetBlock(LeafPos.X, LeafPos.Y, LeafPos.Z);
-			if (ExistingBlock && ExistingBlock->BlockType != EBlockType::Air)
+			// Ne prepiši postojeće logove (provjera u podacima)
+			if (World->GetBlockTypeAt(LeafPos) != EBlockType::Air)
 			{
 				continue;
 			}
@@ -129,9 +128,8 @@ void FTreeGenerator::GenerateRandomTrees(AVoxelWorld* World, int32 TreeCount, in
 		int32 RandY = FMath::RandRange(3, WorldSizeY - 4);
 		FIntVector TreeBase(RandX, RandY, SurfaceLevel + 1);
 
-		// Provjeri ima li tla ispod
-		ABlock* GroundBlock = World->GetBlock(RandX, RandY, SurfaceLevel);
-		if (!GroundBlock || GroundBlock->BlockType == EBlockType::Air)
+		// Provjeri ima li tla ispod (u podacima - radi i za zakopane blokove)
+		if (World->GetBlockTypeAt(FIntVector(RandX, RandY, SurfaceLevel)) == EBlockType::Air)
 		{
 			NoGroundCount++;
 			continue;
@@ -165,16 +163,8 @@ bool FTreeGenerator::CanPlaceTreeAt(AVoxelWorld* World, FIntVector Position, int
 		return false;
 	}
 
-	// Provjeri ima li tla ispod
-	ABlock* GroundBlock = World->GetBlock(Position.X, Position.Y, Position.Z - 1);
-	if (!GroundBlock)
-	{
-		// Nema bloka uopće - to je OK, znači da je slobodno iznad renderiranog terena
-		// ALI trebamo tlo, pa ovo nije dobra pozicija
-		return false;
-	}
-
-	if (GroundBlock->BlockType == EBlockType::Air)
+	// Provjeri ima li tla ispod (u podacima - radi i za zakopane blokove)
+	if (World->GetBlockTypeAt(Position - FIntVector(0, 0, 1)) == EBlockType::Air)
 	{
 		return false;
 	}
