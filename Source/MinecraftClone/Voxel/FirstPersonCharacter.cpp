@@ -171,8 +171,8 @@ void AFirstPersonCharacter::Tick(float DeltaTime)
 	Super::Tick(DeltaTime);
 	UpdateBlockLookAt();
 
-	// Destruction logic
-	if (bIsAttacking && CurrentlyLookedAtBlock)
+	// Destruction logic (IsValid: blok je mogao nestati izvana, npr. leaf decay)
+	if (bIsAttacking && IsValid(CurrentlyLookedAtBlock))
 	{
 		bool bDestroyed = CurrentlyLookedAtBlock->AddDestroyProgress(DeltaTime);
 		if (bDestroyed)
@@ -201,8 +201,17 @@ void AFirstPersonCharacter::UpdateBlockLookAt()
 	ABlock* HitBlock = nullptr;
 	if (bHit)
 	{
-		HitBlock = Cast<ABlock>(HitResult.GetActor());
 		CurrentHitNormal = HitResult.ImpactNormal;
+
+		// Svijet su ISM instance + najvise jedan promovirani ABlock (fokus).
+		// Hit se prevede u grid poziciju, a fokusirani blok se promovira u
+		// actor koji preuzima highlight i kopanje.
+		FIntVector HitGridPos;
+		EBlockType HitType;
+		if (VoxelWorld && VoxelWorld->ResolveHitToGrid(HitResult, HitGridPos, HitType))
+		{
+			HitBlock = VoxelWorld->PromoteToActor(HitGridPos);
+		}
 	}
 	else
 	{
@@ -212,11 +221,12 @@ void AFirstPersonCharacter::UpdateBlockLookAt()
 	// Ako gledamo u novi blok
 	if (HitBlock != CurrentlyLookedAtBlock)
 	{
-		// Unhighlight i resetiraj progress starog bloka
-		if (CurrentlyLookedAtBlock)
+		// Stari fokus natrag u instancu (destroy actora ujedno gubi destroy
+		// progress - isto ponasanje kao dosadasnji ResetDestroyProgress).
+		// IsValid: actor je mogao nestati izvana (npr. leaf decay).
+		if (IsValid(CurrentlyLookedAtBlock) && VoxelWorld)
 		{
-			CurrentlyLookedAtBlock->SetHighlighted(false);
-			CurrentlyLookedAtBlock->ResetDestroyProgress();
+			VoxelWorld->DemoteToInstance(CurrentlyLookedAtBlock->GridPosition);
 		}
 
 		// Highlight novi blok
@@ -254,7 +264,7 @@ void AFirstPersonCharacter::StopAttack()
 	bIsAttacking = false;
 
 	// Resetiraj progress ako pustimo tipku
-	if (CurrentlyLookedAtBlock)
+	if (IsValid(CurrentlyLookedAtBlock))
 	{
 		CurrentlyLookedAtBlock->ResetDestroyProgress();
 	}
@@ -262,7 +272,7 @@ void AFirstPersonCharacter::StopAttack()
 
 void AFirstPersonCharacter::PlaceBlock()
 {
-	if (!VoxelWorld || !CurrentlyLookedAtBlock || !InventoryComponent)
+	if (!VoxelWorld || !IsValid(CurrentlyLookedAtBlock) || !InventoryComponent)
 	{
 		return;
 	}
@@ -299,8 +309,8 @@ void AFirstPersonCharacter::PlaceBlock()
 	FIntVector NewBlockPos = CurrentGridPos + NormalOffset;
 
 	// Postavi novi blok
-	ABlock* NewBlock = VoxelWorld->PlaceBlockAt(NewBlockPos, BlockToPlace);
-	if (NewBlock)
+	const bool bPlaced = VoxelWorld->PlaceBlockAt(NewBlockPos, BlockToPlace);
+	if (bPlaced)
 	{
 		// Oduzmi item iz hotbar slota
 		int32 NewQuantity = Slot.Quantity - 1;

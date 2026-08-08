@@ -1,10 +1,14 @@
 #include "VoxelWorld.h"
 #include "Block.h"
+#include "ItemDrop.h"
 #include "TreeGenerator.h"
 #include "TimerManager.h"
 #include "Zombie.h"
 #include "Sheep.h"
 #include "BlockRegistry.h"
+#include "AI/NavigationSystemBase.h"
+#include "Components/InstancedStaticMeshComponent.h"
+#include "Engine/HitResult.h"
 #include "Engine/StaticMesh.h"
 #include "Materials/MaterialInterface.h"
 
@@ -73,21 +77,29 @@ void AVoxelWorld::GenerateWorld()
 		BlockData.Add(FIntVector(RandX, RandY, SurfaceLevel + 1), EBlockType::Dirt);
 	}
 
-	// PROLAZ 2: actori SAMO za izlozene blokove (zakopani ostaju samo podaci)
+	// PROLAZ 2: ISM instance SAMO za izlozene blokove (zakopani ostaju samo
+	// podaci). Batch AddInstances po tipu - jedan poziv umjesto tisuca.
+	TMap<EBlockType, TArray<FIntVector>> ExposedByType;
 	for (const TPair<FIntVector, EBlockType>& Pair : BlockData)
 	{
 		if (IsBlockExposed(Pair.Key))
 		{
-			EnsureBlockActor(Pair.Key);
+			ExposedByType.FindOrAdd(Pair.Value).Add(Pair.Key);
 		}
+	}
+
+	int32 TerrainInstances = 0;
+	for (const TPair<EBlockType, TArray<FIntVector>>& Pair : ExposedByType)
+	{
+		AddBlockInstancesBatch(Pair.Key, Pair.Value);
+		TerrainInstances += Pair.Value.Num();
 	}
 
 	const double T2 = FPlatformTime::Seconds();
 	const int32 TerrainBlocks = BlockData.Num();
-	const int32 TerrainActors = Blocks.Num();
 	const double TerrainMs = (T2 - T1) * 1000.0;
-	UE_LOG(LogTemp, Warning, TEXT("[PERF] 2/4 Teren      %8.1f ms   %6d blokova (%d actora, %d lazy)   %.4f ms/blok"),
-		TerrainMs, TerrainBlocks, TerrainActors, TerrainBlocks - TerrainActors,
+	UE_LOG(LogTemp, Warning, TEXT("[PERF] 2/4 Teren      %8.1f ms   %6d blokova (%d instanci, %d lazy)   %.4f ms/blok"),
+		TerrainMs, TerrainBlocks, TerrainInstances, TerrainBlocks - TerrainInstances,
 		TerrainBlocks > 0 ? TerrainMs / TerrainBlocks : 0.0);
 
 	UE_LOG(LogTemp, Log, TEXT("VoxelWorld: Generated %d layers (0-%d) + %d random blocks"),
@@ -116,9 +128,14 @@ void AVoxelWorld::GenerateWorld()
 	const double AssetMs = (T1 - T0) * 1000.0;
 	const double SpawnMs = (T4 - T1) * 1000.0;
 	const double TotalMs = (T4 - T0) * 1000.0;
+	int32 TotalInstances = 0;
+	for (const TPair<EBlockType, FBlockInstanceSet>& Pair : InstanceSets)
+	{
+		TotalInstances += Pair.Value.InstanceToGrid.Num();
+	}
 	UE_LOG(LogTemp, Warning, TEXT("[PERF] ------------------------------------------------"));
-	UE_LOG(LogTemp, Warning, TEXT("[PERF] UKUPNO        %8.1f ms   %6d blokova (%d actora)"),
-		TotalMs, BlockData.Num(), Blocks.Num());
+	UE_LOG(LogTemp, Warning, TEXT("[PERF] UKUPNO        %8.1f ms   %6d blokova (%d instanci, %d actora)"),
+		TotalMs, BlockData.Num(), TotalInstances, Blocks.Num());
 	UE_LOG(LogTemp, Warning, TEXT("[PERF]   fiksni (assets)      %8.1f ms  (%.0f%%)"),
 		AssetMs, TotalMs > 0.0 ? AssetMs / TotalMs * 100.0 : 0.0);
 	UE_LOG(LogTemp, Warning, TEXT("[PERF]   skalirajuci (spawn)  %8.1f ms  (%.0f%%)"),
@@ -164,7 +181,7 @@ bool AVoxelWorld::IsBlockExposed(FIntVector Pos) const
 	return false;
 }
 
-ABlock* AVoxelWorld::EnsureBlockActor(FIntVector Pos)
+ABlock* AVoxelWorld::PromoteToActor(FIntVector Pos)
 {
 	if (ABlock* Existing = Blocks.FindRef(Pos))
 	{
@@ -197,12 +214,17 @@ ABlock* AVoxelWorld::EnsureBlockActor(FIntVector Pos)
 
 	FActorSpawnParameters SpawnParams;
 	SpawnParams.Owner = this;
+	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
 
 	// Spawn generički ABlock i inicijaliziraj iz registry-a
 	ABlock* NewBlock = GetWorld()->SpawnActor<ABlock>(ABlock::StaticClass(), WorldPos, FRotator::ZeroRotator, SpawnParams);
 
 	if (NewBlock)
 	{
+		// Invarijanta: instanca i actor nikad istovremeno - ukloni instancu
+		// tek nakon uspjesnog spawna (neuspjeh ne smije "izbrisati" vizual)
+		RemoveBlockInstance(Pos);
+
 		NewBlock->SetGridPosition(Pos);
 		NewBlock->InitializeFromRegistry(*Type, *BlockDefinition,
 			BlockAssets.Mesh, BlockAssets.Material, BlockAssets.HighlightMaterial);
@@ -212,18 +234,185 @@ ABlock* AVoxelWorld::EnsureBlockActor(FIntVector Pos)
 	return NewBlock;
 }
 
+void AVoxelWorld::DemoteToInstance(FIntVector Pos)
+{
+	ABlock* Actor = Blocks.FindRef(Pos);
+	if (!Actor)
+	{
+		return;
+	}
+
+	Blocks.Remove(Pos);
+	Actor->Destroy();
+
+	// Blok jos postoji u podacima -> vrati instancu (fokus je samo otisao dalje)
+	if (const EBlockType* Type = BlockData.Find(Pos))
+	{
+		AddBlockInstance(Pos, *Type);
+	}
+}
+
+void AVoxelWorld::AddBlockInstance(FIntVector Pos, EBlockType Type)
+{
+	FBlockInstanceSet* Set = InstanceSets.Find(Type);
+	if (!Set || !Set->Component || Set->GridToInstance.Contains(Pos))
+	{
+		return;
+	}
+
+	const int32 Index = Set->Component->AddInstance(
+		FTransform(GridToWorld(Pos.X, Pos.Y, Pos.Z)), /*bWorldSpace=*/true);
+
+	// AddInstance appenda na kraj pa indeks mora pratiti nas paralelni niz
+	if (Index != Set->InstanceToGrid.Num())
+	{
+		UE_LOG(LogTemp, Error, TEXT("AddBlockInstance: index desync (%d != %d) za tip %d"),
+			Index, Set->InstanceToGrid.Num(), (int32)Type);
+	}
+
+	Set->GridToInstance.Add(Pos, Index);
+	Set->InstanceToGrid.Add(Pos);
+}
+
+void AVoxelWorld::AddBlockInstancesBatch(EBlockType Type, const TArray<FIntVector>& Positions)
+{
+	FBlockInstanceSet* Set = InstanceSets.Find(Type);
+	if (!Set || !Set->Component || Positions.Num() == 0)
+	{
+		return;
+	}
+
+	TArray<FTransform> Transforms;
+	Transforms.Reserve(Positions.Num());
+	for (const FIntVector& Pos : Positions)
+	{
+		Transforms.Add(FTransform(GridToWorld(Pos.X, Pos.Y, Pos.Z)));
+	}
+
+	Set->Component->AddInstances(Transforms, /*bShouldReturnIndices=*/false, /*bWorldSpace=*/true);
+
+	for (const FIntVector& Pos : Positions)
+	{
+		Set->GridToInstance.Add(Pos, Set->InstanceToGrid.Num());
+		Set->InstanceToGrid.Add(Pos);
+	}
+
+	// Engine registrira komponentu u nav octree kod PRVE instance, s bounds
+	// izracunatim od te jedne instance - batch nakon toga NE re-registrira
+	// element, pa bi navmesh builder svugdje osim oko prve instance "vidio"
+	// prazninu. Osvjezi bounds pa ponovno registriraj element s punim opsegom.
+	Set->Component->UpdateBounds();
+	FNavigationSystem::UpdateComponentData(*Set->Component);
+}
+
+void AVoxelWorld::RemoveBlockInstance(FIntVector Pos)
+{
+	for (TPair<EBlockType, FBlockInstanceSet>& Pair : InstanceSets)
+	{
+		FBlockInstanceSet& Set = Pair.Value;
+		const int32* Found = Set.GridToInstance.Find(Pos);
+		if (!Found)
+		{
+			continue;
+		}
+
+		const int32 Removed = *Found;
+		const int32 Last = Set.InstanceToGrid.Num() - 1;
+
+		// Komponenta ima SetRemoveSwap(): zadnja instanca preuzima indeks Removed
+		Set.Component->RemoveInstance(Removed);
+
+		if (Removed != Last)
+		{
+			const FIntVector MovedPos = Set.InstanceToGrid[Last];
+			Set.InstanceToGrid[Removed] = MovedPos;
+			Set.GridToInstance[MovedPos] = Removed;
+		}
+		Set.InstanceToGrid.RemoveAt(Last);
+		Set.GridToInstance.Remove(Pos);
+		return;
+	}
+}
+
+void AVoxelWorld::EnsureBlockVisual(FIntVector Pos)
+{
+	const EBlockType* Type = BlockData.Find(Pos);
+	if (!Type || Blocks.Contains(Pos))
+	{
+		return;
+	}
+
+	// No-op ako instanca vec postoji
+	AddBlockInstance(Pos, *Type);
+}
+
+bool AVoxelWorld::ResolveHitToGrid(const FHitResult& Hit, FIntVector& OutPos, EBlockType& OutType) const
+{
+	// Promovirani actor
+	if (const ABlock* Block = Cast<ABlock>(Hit.GetActor()))
+	{
+		OutPos = Block->GridPosition;
+		OutType = Block->BlockType;
+		return true;
+	}
+
+	// ISM instanca: Hit.Item je indeks instance u pogodenoj komponenti
+	const UPrimitiveComponent* HitComponent = Hit.GetComponent();
+	for (const TPair<EBlockType, FBlockInstanceSet>& Pair : InstanceSets)
+	{
+		if (Pair.Value.Component != HitComponent)
+		{
+			continue;
+		}
+		if (!Pair.Value.InstanceToGrid.IsValidIndex(Hit.Item))
+		{
+			return false;
+		}
+		OutPos = Pair.Value.InstanceToGrid[Hit.Item];
+		OutType = Pair.Key;
+		return true;
+	}
+
+	return false;
+}
+
+void AVoxelWorld::DestroyBlockAt(FIntVector Pos)
+{
+	const EBlockType* Found = BlockData.Find(Pos);
+	if (!Found)
+	{
+		return;
+	}
+	const EBlockType Type = *Found;
+
+	// Drop sansa iz registry definicije (isto ponasanje kao ABlock::AddDestroyProgress)
+	UBlockRegistry* Registry = UBlockRegistry::Get(this);
+	const FBlockDefinition* Def = Registry ? Registry->GetBlockDefinition(Type) : nullptr;
+	if (Def && Def->DropItemType != EItemType::None && FMath::FRand() < Def->DropChance)
+	{
+		const float HalfBlock = BlockSize * 0.5f;
+		const FVector DropLocation = GridToWorld(Pos.X, Pos.Y, Pos.Z)
+			+ FVector(HalfBlock, HalfBlock, HalfBlock);
+		AItemDrop::SpawnItemDrop(this, Def->DropItemType, DropLocation);
+	}
+
+	NotifyBlockDestroyed(Pos, Type);
+}
+
 void AVoxelWorld::NotifyBlockDestroyed(FIntVector GridPosition, EBlockType DestroyedType)
 {
 	BlockData.Remove(GridPosition);
 
+	// Vizual je bio ili instanca (npr. leaf decay) ili promovirani actor (kopanje)
+	RemoveBlockInstance(GridPosition);
 	if (ABlock* Actor = Blocks.FindRef(GridPosition))
 	{
 		Blocks.Remove(GridPosition);
 		Actor->Destroy();
 	}
 
-	// Susjedi su mozda upravo postali izlozeni -> lazy spawn
-	// (no-op za pozicije bez podataka ili s vec spawnanim actorom)
+	// Susjedi su mozda upravo postali izlozeni -> lazy instanca
+	// (no-op za pozicije bez podataka ili s vec postojecim vizualom)
 	static const FIntVector Neighbors[6] = {
 		FIntVector(1, 0, 0), FIntVector(-1, 0, 0),
 		FIntVector(0, 1, 0), FIntVector(0, -1, 0),
@@ -231,7 +420,7 @@ void AVoxelWorld::NotifyBlockDestroyed(FIntVector GridPosition, EBlockType Destr
 	};
 	for (const FIntVector& Offset : Neighbors)
 	{
-		EnsureBlockActor(GridPosition + Offset);
+		EnsureBlockVisual(GridPosition + Offset);
 	}
 
 	// Leaf decay notifikacije
@@ -264,8 +453,9 @@ void AVoxelWorld::SetBlockType(int32 X, int32 Y, int32 Z, EBlockType NewType)
 
 	if (NewType == EBlockType::Air)
 	{
-		// Air = odsutnost unosa - ukloni podatke i actor
+		// Air = odsutnost unosa - ukloni podatke i vizual
 		BlockData.Remove(GridPos);
+		RemoveBlockInstance(GridPos);
 		if (ABlock* Actor = Blocks.FindRef(GridPos))
 		{
 			Blocks.Remove(GridPos);
@@ -279,10 +469,14 @@ void AVoxelWorld::SetBlockType(int32 X, int32 Y, int32 Z, EBlockType NewType)
 	if (ABlock* Actor = Blocks.FindRef(GridPos))
 	{
 		Actor->SetBlockType(NewType);
+		return;
 	}
-	else if (IsBlockExposed(GridPos))
+
+	// Tip se mozda promijenio -> instanca mora u drugi set
+	RemoveBlockInstance(GridPos);
+	if (IsBlockExposed(GridPos))
 	{
-		EnsureBlockActor(GridPos);
+		AddBlockInstance(GridPos, NewType);
 	}
 }
 
@@ -292,27 +486,31 @@ FVector AVoxelWorld::GridToWorld(int32 X, int32 Y, int32 Z)
 	return GetActorLocation() + FVector(X * BlockSize, Y * BlockSize, Z * BlockSize);
 }
 
-ABlock* AVoxelWorld::PlaceBlockAt(FIntVector GridPosition, EBlockType Type)
+bool AVoxelWorld::PlaceBlockAt(FIntVector GridPosition, EBlockType Type)
 {
 	// Zauzetost se provjerava u podacima (Air actori vise ne postoje)
 	if (BlockData.Contains(GridPosition))
 	{
-		return nullptr;
+		return false;
+	}
+
+	// Pokriva pozive prije GenerateWorld (no-op nakon prvog uspjesnog builda)
+	BuildBlockAssetCache();
+
+	// Bez ISM seta (nema registry definicije/mesha) ne ostavljaj "duh" podatke
+	const FBlockInstanceSet* Set = InstanceSets.Find(Type);
+	if (!Set || !Set->Component)
+	{
+		UE_LOG(LogTemp, Error, TEXT("PlaceBlockAt: No instance set for block type %d at (%d,%d,%d)"),
+			(int32)Type, GridPosition.X, GridPosition.Y, GridPosition.Z);
+		return false;
 	}
 
 	BlockData.Add(GridPosition, Type);
 
-	// Postavljeni blok je po definiciji izlozen - odmah spawnaj actor
-	ABlock* NewBlock = EnsureBlockActor(GridPosition);
-	if (!NewBlock)
-	{
-		// Npr. nema registry definicije - ne ostavljaj "duh" podatke bez actora
-		BlockData.Remove(GridPosition);
-		UE_LOG(LogTemp, Error, TEXT("PlaceBlockAt: Failed to spawn block type %d at (%d,%d,%d)"),
-			(int32)Type, GridPosition.X, GridPosition.Y, GridPosition.Z);
-	}
-
-	return NewBlock;
+	// Postavljeni blok je po definiciji izlozen - odmah dodaj instancu
+	AddBlockInstance(GridPosition, Type);
+	return true;
 }
 
 TArray<EBlockType> AVoxelWorld::GetPlaceableBlockTypes() const
@@ -340,6 +538,11 @@ TArray<EBlockType> AVoxelWorld::GetPlaceableBlockTypes() const
 
 void AVoxelWorld::BuildBlockAssetCache()
 {
+	if (bAssetCacheReady)
+	{
+		return;
+	}
+
 	UBlockRegistry* Registry = UBlockRegistry::Get(this);
 	if (!Registry)
 	{
@@ -351,6 +554,15 @@ void AVoxelWorld::BuildBlockAssetCache()
 
 	const double Start = FPlatformTime::Seconds();
 
+	// ISM komponente se attachaju na root - osiguraj da postoji
+	// (BP_VoxelWorld ima DefaultSceneRoot, ali cisti C++ spawn nema)
+	if (!GetRootComponent())
+	{
+		USceneComponent* Root = NewObject<USceneComponent>(this, TEXT("VoxelWorldRoot"));
+		SetRootComponent(Root);
+		Root->RegisterComponent();
+	}
+
 	int32 Resolved = 0;
 	int32 Failed = 0;
 	for (const FBlockDefinition& Def : AllBlocks)
@@ -360,6 +572,31 @@ void AVoxelWorld::BuildBlockAssetCache()
 		Assets.Material = Cast<UMaterialInterface>(Def.Material.TryLoad());
 		Assets.HighlightMaterial = Cast<UMaterialInterface>(Def.HighlightMaterial.TryLoad());
 		BlockAssetCache.Add(Def.BlockType, Assets);
+
+		// Jedna ISM komponenta po tipu bloka - vizual svih instanci tog tipa
+		if (Assets.Mesh)
+		{
+			const FString CompName = FString::Printf(TEXT("ISM_%s"),
+				*StaticEnum<EBlockType>()->GetNameStringByValue((int64)Def.BlockType));
+			UInstancedStaticMeshComponent* ISM =
+				NewObject<UInstancedStaticMeshComponent>(this, FName(*CompName));
+			ISM->SetStaticMesh(Assets.Mesh);
+			if (Assets.Material)
+			{
+				ISM->SetMaterial(0, Assets.Material);
+			}
+			ISM->SetMobility(GetRootComponent()->Mobility);
+			ISM->SetCollisionProfileName(TEXT("BlockAll"));
+			ISM->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+			ISM->SetCanEverAffectNavigation(true);
+			// RemoveInstance u 5.6 po defaultu radi order-preserving RemoveAt;
+			// bookkeeping u RemoveBlockInstance racuna na RemoveAtSwap semantiku
+			ISM->SetRemoveSwap();
+			ISM->SetupAttachment(GetRootComponent());
+			ISM->RegisterComponent();
+
+			InstanceSets.Add(Def.BlockType).Component = ISM;
+		}
 
 		// Statistika za [PERF] log
 		const FSoftObjectPath* Paths[3] = { &Def.Mesh, &Def.Material, &Def.HighlightMaterial };
@@ -382,9 +619,11 @@ void AVoxelWorld::BuildBlockAssetCache()
 		}
 	}
 
+	bAssetCacheReady = true;
+
 	const double ElapsedMs = (FPlatformTime::Seconds() - Start) * 1000.0;
-	UE_LOG(LogTemp, Warning, TEXT("[PERF] 1/4 Assets     %8.1f ms   %6d ucitano, %d neuspjelo (%d definicija)"),
-		ElapsedMs, Resolved, Failed, AllBlocks.Num());
+	UE_LOG(LogTemp, Warning, TEXT("[PERF] 1/4 Assets     %8.1f ms   %6d ucitano, %d neuspjelo (%d definicija, %d ISM komponenti)"),
+		ElapsedMs, Resolved, Failed, AllBlocks.Num(), InstanceSets.Num());
 }
 
 const FBlockAssets& AVoxelWorld::GetBlockAssets(EBlockType Type, const FBlockDefinition& BlockDefinition)
@@ -557,14 +796,9 @@ void AVoxelWorld::ProcessLeafDecay()
 		// Provjeri ima li vezu s logom
 		if (!HasLogConnection(LeafPos))
 		{
-			// Nema veze - decay (instant uništenje koje može dropati sapling).
-			// Lišće je praktički uvijek izloženo pa actor već postoji;
-			// EnsureBlockActor pokriva i teoretski zakopan list.
-			ABlock* LeafBlock = EnsureBlockActor(LeafPos);
-			if (LeafBlock)
-			{
-				LeafBlock->AddDestroyProgress(LeafBlock->TimeToDestroy);
-			}
+			// Nema veze - decay: instant unistenje s drop sansom (sapling)
+			// iz registry definicije, bez promoviranja u actor
+			DestroyBlockAt(LeafPos);
 		}
 	}
 }

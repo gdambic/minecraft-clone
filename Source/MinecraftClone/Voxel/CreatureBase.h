@@ -5,6 +5,7 @@
 #include "CreatureBase.generated.h"
 
 class UBehaviorTree;
+class UNavigationInvokerComponent;
 
 /**
  * Abstract base class for all creatures (enemies and passive mobs).
@@ -41,6 +42,14 @@ public:
 	/** Behavior tree asset for this creature type */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Creature|AI")
 	UBehaviorTree* BehaviorTree;
+
+	/**
+	 * Navmesh se generira samo oko invokera (config:
+	 * bGenerateNavigationOnlyAroundNavigationInvokers) - svaki mob nosi svoj
+	 * "balon" navigacije, pa AI radi bilo gdje u svijetu bez globalnog navmesha.
+	 */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Creature|AI")
+	UNavigationInvokerComponent* NavInvoker;
 
 	// ==================== Functions ====================
 

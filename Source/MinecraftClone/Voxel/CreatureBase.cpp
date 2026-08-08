@@ -1,9 +1,15 @@
 #include "CreatureBase.h"
 #include "GameFramework/CharacterMovementComponent.h"
+#include "NavigationInvokerComponent.h"
 
 ACreatureBase::ACreatureBase()
 {
 	PrimaryActorTick.bCanEverTick = true;
+
+	// Generira navmesh u radijusu oko moba (3000 gen / 3500 uklanjanje).
+	// Pokriva WanderRadius (500) s velikom rezervom; balon prati moba u chase-u.
+	NavInvoker = CreateDefaultSubobject<UNavigationInvokerComponent>(TEXT("NavInvoker"));
+	NavInvoker->SetGenerationRadii(3000.0f, 3500.0f);
 
 	// Configure character movement
 	if (UCharacterMovementComponent* MoveComp = GetCharacterMovement())

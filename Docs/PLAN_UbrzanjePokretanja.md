@@ -94,6 +94,8 @@ Primjer izlaza u Output Logu (filter: `[PERF]`):
 
 ### 4.3. Instanced Static Mesh — pravo dugoročno rješenje (~10-50×)
 
+> ✅ IMPLEMENTIRANO — detalji u [PLAN_InstancedStaticMesh.md](PLAN_InstancedStaticMesh.md)
+
 - Svi blokovi istog tipa postaju instance jednog
   `UInstancedStaticMeshComponent`-a na `AVoxelWorld` (jedan po tipu bloka).
 - Dodavanje 40.000 instanci traje desetke milisekundi; rendering pada s

@@ -35,8 +35,8 @@ void FTreeGenerator::GenerateOakTree(AVoxelWorld* World, FIntVector BasePosition
 	for (int32 Z = 0; Z < TrunkHeight; Z++)
 	{
 		FIntVector LogPos = BasePosition + FIntVector(0, 0, Z);
-		ABlock* PlacedBlock = World->PlaceBlockAt(LogPos, EBlockType::OakLog);
-		if (!PlacedBlock)
+		const bool bPlaced = World->PlaceBlockAt(LogPos, EBlockType::OakLog);
+		if (!bPlaced)
 		{
 			UE_LOG(LogTemp, Warning, TEXT("TreeGenerator: Failed to place OakLog at (%d, %d, %d)"),
 				LogPos.X, LogPos.Y, LogPos.Z);
