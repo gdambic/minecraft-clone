@@ -4,7 +4,7 @@
 #include "TreeGenerator.h"
 #include "TimerManager.h"
 #include "Zombie.h"
-#include "Sheep.h"
+#include "MobBase.h"
 #include "BlockRegistry.h"
 #include "AI/NavigationSystemBase.h"
 #include "Components/InstancedStaticMeshComponent.h"
@@ -683,36 +683,48 @@ void AVoxelWorld::SpawnEnemies()
 
 void AVoxelWorld::SpawnMobs()
 {
-	if (!SheepClass)
+	if (MobSpawns.Num() == 0)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("VoxelWorld: SheepClass not set, skipping mob spawn"));
+		UE_LOG(LogTemp, Warning, TEXT("VoxelWorld: MobSpawns list is empty, skipping mob spawn"));
 		return;
 	}
 
 	int32 SpawnZ = SurfaceLevel + 1;
 
-	for (int32 i = 0; i < SheepCount; i++)
+	for (const FMobSpawnEntry& Entry : MobSpawns)
 	{
-		// Random pozicija na površini (izbjegavaj rubove)
-		int32 RandX = FMath::RandRange(10, WorldSizeX - 10);
-		int32 RandY = FMath::RandRange(10, WorldSizeY - 10);
-
-		FVector WorldPos = GridToWorld(RandX, RandY, SpawnZ);
-		// Podignuti iznad površine da izbjegnemo collision
-		WorldPos.Z += 50.0f;
-
-		FActorSpawnParameters SpawnParams;
-		SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
-
-		ASheep* Sheep = GetWorld()->SpawnActor<ASheep>(SheepClass, WorldPos, FRotator::ZeroRotator, SpawnParams);
-
-		if (Sheep)
+		if (!Entry.MobClass)
 		{
-			UE_LOG(LogTemp, Log, TEXT("VoxelWorld: Spawned sheep %d at (%d, %d, %d)"), i + 1, RandX, RandY, SpawnZ);
+			UE_LOG(LogTemp, Warning, TEXT("VoxelWorld: MobSpawns entry has no class set, skipping"));
+			continue;
 		}
-	}
 
-	UE_LOG(LogTemp, Log, TEXT("VoxelWorld: Spawned %d sheep"), SheepCount);
+		int32 SpawnedCount = 0;
+
+		for (int32 i = 0; i < Entry.Count; i++)
+		{
+			// Random pozicija na površini (izbjegavaj rubove)
+			int32 RandX = FMath::RandRange(10, WorldSizeX - 10);
+			int32 RandY = FMath::RandRange(10, WorldSizeY - 10);
+
+			FVector WorldPos = GridToWorld(RandX, RandY, SpawnZ);
+			// Podignuti iznad površine da izbjegnemo collision
+			WorldPos.Z += 50.0f;
+
+			FActorSpawnParameters SpawnParams;
+			SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
+
+			AMobBase* Mob = GetWorld()->SpawnActor<AMobBase>(Entry.MobClass, WorldPos, FRotator::ZeroRotator, SpawnParams);
+
+			if (Mob)
+			{
+				SpawnedCount++;
+			}
+		}
+
+		UE_LOG(LogTemp, Log, TEXT("VoxelWorld: Spawned %d/%d %s"),
+			SpawnedCount, Entry.Count, *Entry.MobClass->GetName());
+	}
 }
 
 // === LEAF DECAY ===

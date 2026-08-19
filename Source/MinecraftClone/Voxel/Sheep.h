@@ -4,6 +4,8 @@
 #include "MobBase.h"
 #include "Sheep.generated.h"
 
+class UHeadLookComponent;
+
 /**
  * Sheep - passive mob that wanders, flees when attacked, and drops wool on death.
  */
@@ -14,6 +16,14 @@ class MINECRAFTCLONE_API ASheep : public AMobBase
 
 public:
 	ASheep();
+
+	virtual void Tick(float DeltaTime) override;
+
+	// ==================== Components ====================
+
+	/** Glances at the player; the AnimBP reads its HeadLook* outputs */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Sheep|HeadLook")
+	UHeadLookComponent* HeadLook;
 
 	// ==================== Loot ====================
 

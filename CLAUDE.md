@@ -147,5 +147,7 @@ Detailed docs in Croatian available in `Docs/`:
 - `PLAN_Performance.md` - Rendering/performance analysis
 - `PLAN_MeleeCombat.md` - Melee combat system
 - `PLAN_FirstPersonHand.md` - First-person hand/viewmodel system
+- `BLOCK_TEXTURES_AND_MATERIALS.md` - Teksture i materijali blokova, rotacija
+- `TEXTURE_SPEC.md` - Popis PNG datoteka koje treba nacrtati
 - `sheep.md` - Sheep passive mob implementation
 - `Blokovi_Itemi_Minecraft.md` - Block/item reference table

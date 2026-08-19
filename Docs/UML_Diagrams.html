@@ -1,0 +1,1483 @@
+<!DOCTYPE html>
+<html lang="hr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MinecraftClone — UML dijagrami klasa</title>
+<style>
+:root{
+  --bg:#f6f7f9; --panel:#ffffff; --ink:#15181d; --muted:#616a76;
+  --line:#d6dae1; --accent:#3b6ea5; --accent-soft:#e8f0f8;
+  --actor:#c2410c; --comp:#7c3aed; --struct:#0f766e; --ui:#b45309;
+  --ai:#1d4ed8; --sub:#be123c; --engine:#8a94a3;
+  --code:#f1f3f6;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#0f1216; --panel:#171b21; --ink:#e6e9ee; --muted:#98a2b0;
+    --line:#2a313a; --accent:#7fb0e0; --accent-soft:#1b2733;
+    --actor:#fb923c; --comp:#c4a5fb; --struct:#5eead4; --ui:#fcd34d;
+    --ai:#93b8ff; --sub:#fda4af; --engine:#6b7481;
+    --code:#11151a;
+  }
+}
+*{box-sizing:border-box}
+body{
+  margin:0; background:var(--bg); color:var(--ink);
+  font:15px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;
+}
+.wrap{max-width:1400px;margin:0 auto;padding:32px 24px 80px}
+header.top{border-bottom:2px solid var(--line);padding-bottom:22px;margin-bottom:28px}
+h1{font-size:30px;margin:0 0 6px;letter-spacing:-.4px}
+.sub{color:var(--muted);font-size:15px;margin:0}
+.meta{display:flex;flex-wrap:wrap;gap:10px;margin-top:16px}
+.pill{background:var(--panel);border:1px solid var(--line);border-radius:20px;padding:4px 13px;font-size:13px;color:var(--muted)}
+.pill b{color:var(--ink)}
+
+h2{font-size:21px;margin:44px 0 6px;padding-top:14px;border-top:1px solid var(--line);letter-spacing:-.2px}
+h2 .num{color:var(--accent);font-variant-numeric:tabular-nums;margin-right:8px}
+h3.secsub{font-size:15px;margin:26px 0 10px;color:var(--muted);text-transform:uppercase;letter-spacing:.7px;font-weight:600}
+p.lead{color:var(--muted);margin:6px 0 18px;max-width:80ch}
+
+/* ---------- toolbar ---------- */
+.toolbar{position:sticky;top:0;z-index:20;background:var(--bg);padding:12px 0;margin-bottom:8px;border-bottom:1px solid var(--line)}
+#search{width:100%;max-width:420px;padding:9px 13px;border:1px solid var(--line);border-radius:8px;
+  background:var(--panel);color:var(--ink);font-size:14px}
+#search:focus{outline:2px solid var(--accent);outline-offset:-1px}
+.hint{font-size:12.5px;color:var(--muted);margin-left:10px}
+
+/* ---------- UML class box ---------- */
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(370px,1fr));gap:18px;align-items:start}
+.cls{background:var(--panel);border:1px solid var(--line);border-radius:6px;overflow:hidden;
+  box-shadow:0 1px 2px rgba(0,0,0,.05)}
+.cls.hidden{display:none}
+.cls-hd{padding:10px 14px;border-bottom:2px solid var(--line);background:var(--accent-soft)}
+.cls-hd .stereo{display:block;font-size:11.5px;color:var(--muted);font-family:ui-monospace,Consolas,monospace}
+.cls-hd h3{margin:2px 0 0;font-size:16.5px;font-family:ui-monospace,Consolas,"Courier New",monospace;font-weight:700}
+.cls-hd .abs{font-style:italic}
+.cls-hd .file{font-size:11.5px;color:var(--muted);margin-top:3px;font-family:ui-monospace,Consolas,monospace}
+.cls-note{padding:8px 14px;font-size:13px;color:var(--muted);border-bottom:1px solid var(--line);background:transparent}
+.cmp{border-bottom:1px solid var(--line)}
+.cmp:last-child{border-bottom:none}
+.cmp-t{font-size:11px;letter-spacing:.9px;text-transform:uppercase;color:var(--muted);padding:6px 14px 2px;font-weight:600}
+.cls ul{list-style:none;margin:0;padding:0 14px 9px}
+.cls li{font-family:ui-monospace,Consolas,"Courier New",monospace;font-size:12.6px;padding:1.5px 0;
+  word-break:break-word;color:var(--ink)}
+.v{display:inline-block;width:11px;font-weight:700}
+.pub{color:#16a34a}.prot{color:#d97706}.priv{color:#dc2626}
+.stat{text-decoration:underline;text-underline-offset:2px}
+.virt{font-style:italic}
+.ty{color:var(--muted)}
+
+/* accent per category */
+.cat-actor .cls-hd{border-bottom-color:var(--actor)} .cat-actor .cls-hd h3{color:var(--actor)}
+.cat-comp  .cls-hd{border-bottom-color:var(--comp)}  .cat-comp  .cls-hd h3{color:var(--comp)}
+.cat-struct .cls-hd{border-bottom-color:var(--struct)} .cat-struct .cls-hd h3{color:var(--struct)}
+.cat-ui .cls-hd{border-bottom-color:var(--ui)} .cat-ui .cls-hd h3{color:var(--ui)}
+.cat-ai .cls-hd{border-bottom-color:var(--ai)} .cat-ai .cls-hd h3{color:var(--ai)}
+.cat-sub .cls-hd{border-bottom-color:var(--sub)} .cat-sub .cls-hd h3{color:var(--sub)}
+
+/* ---------- inheritance tree ---------- */
+.tree, .tree ul{list-style:none;margin:0;padding:0}
+.tree ul{margin-left:20px;border-left:1px solid var(--line);padding-left:0}
+.tree li{position:relative;padding:3px 0 3px 20px;font-family:ui-monospace,Consolas,monospace;font-size:13.5px}
+.tree ul>li::before{content:"";position:absolute;left:0;top:15px;width:16px;height:1px;background:var(--line)}
+.tree>li{padding-left:0}
+.node{display:inline-block;padding:2px 9px;border:1px solid var(--line);border-radius:4px;background:var(--panel)}
+.node.engine{color:var(--engine);border-style:dashed;background:transparent}
+.node.a{color:var(--actor);border-color:var(--actor)}
+.node.c{color:var(--comp);border-color:var(--comp)}
+.node.u{color:var(--ui);border-color:var(--ui)}
+.node.ai{color:var(--ai);border-color:var(--ai)}
+.node.s{color:var(--sub);border-color:var(--sub)}
+.node.st{color:var(--struct);border-color:var(--struct)}
+.node em{font-style:italic;opacity:.85}
+.tree .cmt{color:var(--muted);font-size:12.5px;margin-left:8px;font-family:inherit}
+.treecols{display:grid;grid-template-columns:repeat(auto-fit,minmax(330px,1fr));gap:22px}
+.treebox{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:16px 18px}
+.treebox h4{margin:0 0 12px;font-size:13px;text-transform:uppercase;letter-spacing:.8px;color:var(--muted)}
+
+/* ---------- relations table ---------- */
+.rel-wrap{overflow-x:auto;background:var(--panel);border:1px solid var(--line);border-radius:6px}
+table{border-collapse:collapse;width:100%;font-size:13.5px;min-width:720px}
+th,td{text-align:left;padding:8px 14px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-size:11.5px;text-transform:uppercase;letter-spacing:.7px;color:var(--muted);font-weight:600;background:var(--accent-soft)}
+tr:last-child td{border-bottom:none}
+td.mono,th.mono{font-family:ui-monospace,Consolas,monospace}
+.arrow{font-family:ui-monospace,Consolas,monospace;color:var(--accent);white-space:nowrap;font-weight:600}
+
+/* ---------- enum cards ---------- */
+.enum{background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--struct);border-radius:6px;padding:12px 16px}
+.enum h4{margin:0 0 2px;font-family:ui-monospace,Consolas,monospace;font-size:15px;color:var(--struct)}
+.enum .stereo{font-size:11.5px;color:var(--muted);font-family:ui-monospace,Consolas,monospace}
+.enum ol{margin:8px 0 0;padding-left:26px;font-family:ui-monospace,Consolas,monospace;font-size:12.8px}
+.enum ol li{padding:1px 0}
+.enum ol li span{color:var(--muted);font-family:inherit}
+
+/* ---------- legend ---------- */
+.legend{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:10px 26px;
+  background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:16px 20px;margin-bottom:8px}
+.legend div{font-size:13.3px;color:var(--muted)}
+.legend code{background:var(--code);padding:1px 6px;border-radius:3px;font-size:12.5px;color:var(--ink)}
+
+footer{margin-top:56px;padding-top:18px;border-top:1px solid var(--line);color:var(--muted);font-size:13px}
+@media print{
+  .toolbar{display:none} body{background:#fff}
+  .cls,.treebox,.rel-wrap{break-inside:avoid}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="top">
+  <h1>MinecraftClone — UML dijagrami klasa</h1>
+  <p class="sub">Strukturni pregled C++ modula <code>MinecraftClone</code> (Unreal Engine 5.6) — sve klase, strukture i enumeracije iz <code>Source/MinecraftClone/</code>.</p>
+  <div class="meta">
+    <span class="pill"><b>36</b> klasa</span>
+    <span class="pill"><b>10</b> struktura</span>
+    <span class="pill"><b>5</b> enumeracija</span>
+    <span class="pill"><b>4</b> delegata</span>
+    <span class="pill">Koordinate: <b>X</b>=širina, <b>Y</b>=dužina, <b>Z</b>=visina (gore)</span>
+    <span class="pill">Blok = <b>100</b> UU</span>
+  </div>
+</header>
+
+<div class="toolbar">
+  <input id="search" type="search" placeholder="Filtriraj klase… (npr. Inventory, Block, AI)" autocomplete="off">
+  <span class="hint">filtrira kartice klasa u odjeljcima 3–9</span>
+</div>
+
+<h2><span class="num">1.</span>Legenda notacije</h2>
+<div class="legend">
+  <div><code class="v pub">+</code> public &nbsp;·&nbsp; <code class="v prot">#</code> protected &nbsp;·&nbsp; <code class="v priv">−</code> private</div>
+  <div><code style="text-decoration:underline">podcrtano</code> = <code>static</code></div>
+  <div><em>kurziv</em> = <code>virtual</code> ili apstraktna klasa</div>
+  <div><code>«AActor»</code> = bazna klasa iz Unreal Enginea</div>
+  <div><span class="arrow">◁—</span> nasljeđivanje (generalizacija)</div>
+  <div><span class="arrow">◆—</span> kompozicija (vlasništvo, dijeli životni vijek)</div>
+  <div><span class="arrow">◇—</span> agregacija (referenca, neovisan životni vijek)</div>
+  <div><span class="arrow">- - ▷</span> ovisnost (koristi / spawna)</div>
+  <div>Isprekidani sivi okvir u stablu = klasa Unreal Enginea, nije dio projekta</div>
+</div>
+
+<h2><span class="num">2.</span>Hijerarhija nasljeđivanja</h2>
+<p class="lead">Sve klase projekta izvode se iz Unreal baznih klasa. Vlastita apstraktna hijerarhija projekta je <code>ACreatureBase</code> → <code>AEnemyBase</code>/<code>AMobBase</code> → konkretna bića.</p>
+
+<div class="treecols">
+
+  <div class="treebox">
+    <h4>Akteri svijeta (AActor)</h4>
+    <ul class="tree">
+      <li><span class="node engine">AActor</span>
+        <ul>
+          <li><span class="node a">AVoxelWorld</span><span class="cmt">upravitelj svijeta</span></li>
+          <li><span class="node a">ABlock</span><span class="cmt">promovirani (fokusirani) blok</span></li>
+          <li><span class="node a">AItemDrop</span><span class="cmt">bačeni item</span></li>
+          <li><span class="node a">ADayNightCycle</span><span class="cmt">ciklus dan/noć</span></li>
+          <li><span class="node a">AEnemySpawnPoint</span><span class="cmt">spawn točka</span></li>
+        </ul>
+      </li>
+    </ul>
+  </div>
+
+  <div class="treebox">
+    <h4>Likovi i bića (ACharacter)</h4>
+    <ul class="tree">
+      <li><span class="node engine">APawn → ACharacter</span>
+        <ul>
+          <li><span class="node a"><em>AFirstPersonCharacter</em></span><span class="cmt">igrač (abstract)</span></li>
+          <li><span class="node a"><em>AMinecraftCloneCharacter</em></span><span class="cmt">third-person predložak</span></li>
+          <li><span class="node a"><em>ACreatureBase</em></span><span class="cmt">zajednička baza bića</span>
+            <ul>
+              <li><span class="node a"><em>AEnemyBase</em></span>
+                <ul><li><span class="node a">AZombie</span></li></ul>
+              </li>
+              <li><span class="node a"><em>AMobBase</em></span>
+                <ul><li><span class="node a">ASheep</span></li></ul>
+              </li>
+            </ul>
+          </li>
+        </ul>
+      </li>
+    </ul>
+  </div>
+
+  <div class="treebox">
+    <h4>Kontroleri, GameMode, kamera</h4>
+    <ul class="tree">
+      <li><span class="node engine">AController → APlayerController</span>
+        <ul>
+          <li><span class="node ai"><em>AFirstPersonPlayerController</em></span></li>
+          <li><span class="node ai"><em>AMinecraftClonePlayerController</em></span></li>
+        </ul>
+      </li>
+      <li><span class="node engine">AController → AAIController</span>
+        <ul>
+          <li><span class="node ai">AEnemyAIController</span></li>
+          <li><span class="node ai">AMobAIController</span></li>
+        </ul>
+      </li>
+      <li><span class="node engine">AGameModeBase</span>
+        <ul>
+          <li><span class="node ai"><em>AFirstPersonGameMode</em></span></li>
+          <li><span class="node ai"><em>AMinecraftCloneGameMode</em></span></li>
+        </ul>
+      </li>
+      <li><span class="node engine">APlayerCameraManager</span>
+        <ul><li><span class="node ai">AFirstPersonCameraManager</span></li></ul>
+      </li>
+    </ul>
+  </div>
+
+  <div class="treebox">
+    <h4>Komponente i subsystemi</h4>
+    <ul class="tree">
+      <li><span class="node engine">UActorComponent</span>
+        <ul>
+          <li><span class="node c">UInventoryComponent</span></li>
+          <li><span class="node c">UFirstPersonArmComponent</span></li>
+        </ul>
+      </li>
+      <li><span class="node engine">USubsystem → UGameInstanceSubsystem</span>
+        <ul>
+          <li><span class="node s">UBlockRegistry</span></li>
+          <li><span class="node s">UCraftingRecipeRegistry</span></li>
+        </ul>
+      </li>
+      <li><span class="node engine">UBlueprintFunctionLibrary</span>
+        <ul><li><span class="node s">UWeaponDataLibrary</span></li></ul>
+      </li>
+      <li><span class="node st">FTreeGenerator</span><span class="cmt">obična statička utility klasa</span></li>
+    </ul>
+  </div>
+
+  <div class="treebox">
+    <h4>Korisničko sučelje (UUserWidget)</h4>
+    <ul class="tree">
+      <li><span class="node engine">UWidget → UUserWidget</span>
+        <ul>
+          <li><span class="node u">UHotbarWidget</span></li>
+          <li><span class="node u">UFullInventoryWidget</span></li>
+          <li><span class="node u">UInventorySlotWidget</span></li>
+          <li><span class="node u">UBlockInventoryWidget</span></li>
+          <li><span class="node u">UBlockInventoryItemWidget</span></li>
+        </ul>
+      </li>
+    </ul>
+  </div>
+
+  <div class="treebox">
+    <h4>Behavior Tree čvorovi</h4>
+    <ul class="tree">
+      <li><span class="node engine">UBTNode → UBTService</span>
+        <ul>
+          <li><span class="node ai">UBTService_FindPlayer</span></li>
+          <li><span class="node ai">UBTService_DetectThreat</span></li>
+        </ul>
+      </li>
+      <li><span class="node engine">UBTNode → UBTTaskNode</span>
+        <ul>
+          <li><span class="node ai">UBTTask_EnemyAttack</span></li>
+          <li><span class="node ai">UBTTask_RotateToTarget</span></li>
+          <li><span class="node ai">UBTTask_FindWanderLocation</span></li>
+          <li><span class="node ai">UBTTask_FindFleeLocation</span></li>
+        </ul>
+      </li>
+    </ul>
+  </div>
+
+</div>
+
+<!-- ============================================================= -->
+<h2><span class="num">3.</span>Jezgra voxel svijeta</h2>
+<p class="lead">Teren se renderira kao <em>instanced static mesh</em>. <code>ABlock</code> actor postoji samo za blok koji igrač gleda (promocija/degradacija); izvor istine o tipovima blokova je mapa <code>BlockData</code> u <code>AVoxelWorld</code>.</p>
+
+<div class="grid">
+
+  <div class="cls cat-actor" data-name="AVoxelWorld world voxel grid teren generate">
+    <div class="cls-hd">
+      <span class="stereo">«AActor»</span>
+      <h3>AVoxelWorld</h3>
+      <div class="file">Voxel/VoxelWorld.h</div>
+    </div>
+    <div class="cls-note">Upravitelj svijeta: generiranje terena, ISM instance, promocija blokova u actore, leaf decay, spawn bića.</div>
+    <div class="cmp"><div class="cmp-t">Atributi</div><ul>
+      <li><span class="v pub">+</span> SurfaceLevel <span class="ty">: int32</span></li>
+      <li><span class="v pub">+</span> WorldSizeX / WorldSizeY / WorldSizeZ <span class="ty">: int32</span></li>
+      <li><span class="v pub">+</span> BlockSize <span class="ty">: float</span></li>
+      <li><span class="v pub">+</span> RandomBlockCount <span class="ty">: int32</span></li>
+      <li><span class="v pub">+</span> TreeCount <span class="ty">: int32</span></li>
+      <li><span class="v pub">+</span> ZombieClass <span class="ty">: TSubclassOf&lt;AZombie&gt;</span></li>
+      <li><span class="v pub">+</span> SheepClass <span class="ty">: TSubclassOf&lt;ASheep&gt;</span></li>
+      <li><span class="v pub">+</span> SheepCount <span class="ty">: int32 = 3</span></li>
+      <li><span class="v priv">−</span> BlockData <span class="ty">: TMap&lt;FIntVector, EBlockType&gt;</span></li>
+      <li><span class="v priv">−</span> Blocks <span class="ty">: TMap&lt;FIntVector, ABlock*&gt;</span></li>
+      <li><span class="v priv">−</span> InstanceSets <span class="ty">: TMap&lt;EBlockType, FBlockInstanceSet&gt;</span></li>
+      <li><span class="v priv">−</span> BlockAssetCache <span class="ty">: TMap&lt;EBlockType, FBlockAssets&gt;</span></li>
+      <li><span class="v priv">−</span> bAssetCacheReady <span class="ty">: bool</span></li>
+      <li><span class="v priv">−</span> LeavesToCheck <span class="ty">: TArray&lt;FIntVector&gt;</span></li>
+      <li><span class="v priv">−</span> LeafDecayTimerHandle <span class="ty">: FTimerHandle</span></li>
+    </ul></div>
+    <div class="cmp"><div class="cmp-t">Operacije</div><ul>
+      <li><span class="v pub">+</span> GetBlockTypeAt(FIntVector) <span class="ty">: EBlockType</span></li>
+      <li><span class="v pub">+</span> GetBlock(int32, int32, int32) <span class="ty">: ABlock*</span></li>
+      <li><span class="v pub">+</span> SetBlockType(int32, int32, int32, EBlockType) <span class="ty">: void</span></li>
+      <li><span class="v pub">+</span> PlaceBlockAt(FIntVector, EBlockType) <span class="ty">: bool</span></li>
+      <li><span class="v pub">+</span> GridToWorld(int32, int32, int32) <span class="ty">: FVector</span></li>
+      <li><span class="v pub">+</span> ResolveHitToGrid(FHitResult&amp;, FIntVector&amp;, EBlockType&amp;) <span class="ty">: bool</span></li>
+      <li><span class="v pub">+</span> PromoteToActor(FIntVector) <span class="ty">: ABlock*</span></li>
+      <li><span class="v pub">+</span> DemoteToInstance(FIntVector) <span class="ty">: void</span></li>
+      <li><span class="v pub">+</span> DestroyBlockAt(FIntVector) <span class="ty">: void</span></li>
+      <li><span class="v pub">+</span> NotifyBlockDestroyed(FIntVector, EBlockType) <span class="ty">: void</span></li>
+      <li><span class="v pub">+</span> OnLogDestroyed(FIntVector) <span class="ty">: void</span></li>
+      <li><span class="v pub">+</span> OnLeafDecayed(FIntVector) <span class="ty">: void</span></li>
+      <li><span class="v pub">+</span> GetPlaceableBlockTypes() <span class="ty">: TArray&lt;EBlockType&gt;</span></li>
+      <li><span class="v prot">#</span> <span class="virt">BeginPlay()</span> <span class="ty">: void</span></li>
+      <li><span class="v priv">−</span> GenerateWorld() / GenerateTrees() <span class="ty">: void</span></li>
+      <li><span class="v priv">−</span> SpawnEnemies() / SpawnMobs() <span class="ty">: void</span></li>
+      <li><span class="v priv">−</span> IsBlockExposed(FIntVector) <span class="ty">: bool</span></li>
+      <li><span class="v priv">−</span> AddBlockInstance(FIntVector, EBlockType) <span class="ty">: void</span></li>
+      <li><span class="v priv">−</span> AddBlockInstancesBatch(EBlockType, TArray&lt;FIntVector&gt;&amp;) <span class="ty">: void</span></li>
+      <li><span class="v priv">−</span> RemoveBlockInstance(FIntVector) <span class="ty">: void</span></li>
+      <li><span class="v priv">−</span> EnsureBlockVisual(FIntVector) <span class="ty">: void</span></li>
+      <li><span class="v priv">−</span> BuildBlockAssetCache() <span class="ty">: void</span></li>
+      <li><span class="v priv">−</span> GetBlockAssets(EBlockType, FBlockDefinition&amp;) <span class="ty">: FBlockAssets&amp;</span></li>
+      <li><span class="v priv">−</span> ProcessLeafDecay() <span class="ty">: void</span></li>
+      <li><span class="v priv">−</span> HasLogConnection(FIntVector) <span class="ty">: bool</span></li>
+    </ul></div>
+  </div>
+
+  <div class="cls cat-actor" data-name="ABlock blok destruction highlight drop">
+    <div class="cls-hd">
+      <span class="stereo">«AActor»</span>
+      <h3>ABlock</h3>
+      <div class="file">Voxel/Block.h</div>
+    </div>
+    <div class="cls-note">Pojedinačni voxel actor — postoji samo dok je blok u fokusu igrača. Nosi highlight, progres kopanja i drop.</div>
+    <div class="cmp"><div class="cmp-t">Atributi</div><ul>
+      <li><span class="v pub">+</span> <span class="stat">BlockSize</span> <span class="ty">: constexpr float = 100.0f</span></li>
+      <li><span class="v pub">+</span> MeshComponent <span class="ty">: UStaticMeshComponent*</span></li>
+      <li><span class="v pub">+</span> BlockType <span class="ty">: EBlockType</span></li>
+      <li><span class="v pub">+</span> GridPosition <span class="ty">: FIntVector</span></li>
+      <li><span class="v pub">+</span> HighlightMaterial <span class="ty">: UMaterialInterface*</span></li>
+      <li><span class="v pub">+</span> TimeToDestroy <span class="ty">: float</span></li>
+      <li><span class="v pub">+</span> DropItemType <span class="ty">: EItemType</span></li>
+      <li><span class="v pub">+</span> DropChance <span class="ty">: float</span></li>
+      <li><span class="v priv">−</span> OriginalMaterial <span class="ty">: UMaterialInterface*</span></li>
+      <li><span class="v priv">−</span> bIsHighlighted <span class="ty">: bool</span></li>
+      <li><span class="v priv">−</span> DestroyProgress <span class="ty">: float</span></li>
+      <li><span class="v priv">−</span> LastReportedStep <span class="ty">: int32</span></li>
+    </ul></div>
+    <div class="cmp"><div class="cmp-t">Operacije</div><ul>
+      <li><span class="v pub">+</span> SetBlockType(EBlockType) <span class="ty">: void</span></li>
+      <li><span class="v pub">+</span> SetGridPosition(FIntVector) <span class="ty">: void</span></li>
+      <li><span class="v pub">+</span> SetHighlighted(bool) <span class="ty">: void</span></li>
+      <li><span class="v pub">+</span> IsHighlighted() <span class="ty">: bool</span></li>
+      <li><span class="v pub">+</span> InitializeFromRegistry(EBlockType, FBlockDefinition&amp;, UStaticMesh*, UMaterialInterface*, UMaterialInterface*) <span class="ty">: void</span></li>
+      <li><span class="v pub">+</span> AddDestroyProgress(float) <span class="ty">: bool</span></li>
+      <li><span class="v pub">+</span> ResetDestroyProgress() <span class="ty">: void</span></li>
+      <li><span class="v pub">+</span> GetIntegrityPercent() <span class="ty">: int32</span></li>
+      <li><span class="v prot">#</span> <span class="virt">BeginPlay()</span> <span class="ty">: void</span></li>
+      <li><span class="v priv">−</span> UpdateVisibility() <span class="ty">: void</span></li>
+    </ul></div>
+  </div>
+
+  <div class="cls cat-actor" data-name="AItemDrop item drop pickup">
+    <div class="cls-hd">
+      <span class="stereo">«AActor»</span>
+      <h3>AItemDrop</h3>
+      <div class="file">Voxel/ItemDrop.h</div>
+    </div>
+    <div class="cls-note">Bačeni item s rotacijom, padanjem, despawnom i automatskim pickupom preko sfernog kolidera.</div>
+    <div class="cmp"><div class="cmp-t">Atributi</div><ul>
+      <li><span class="v pub">+</span> MeshComponent <span class="ty">: UStaticMeshComponent*</span></li>
+      <li><span class="v pub">+</span> PickupCollision <span class="ty">: USphereComponent*</span></li>
+      <li><span class="v pub">+</span> ItemType <span class="ty">: EItemType</span></li>
+      <li><span class="v pub">+</span> DespawnTime <span class="ty">: float</span></li>
+      <li><span class="v pub">+</span> RotationSpeed <span class="ty">: float</span></li>
+      <li><span class="v pub">+</span> PickupRadius <span class="ty">: float</span></li>
+      <li><span class="v pub">+</span> FallSpeed <span class="ty">: float</span></li>
+      <li><span class="v pub">+</span> bIsGrounded <span class="ty">: bool</span></li>
+      <li><span class="v priv">−</span> CurrentLifetime <span class="ty">: float</span></li>
+    </ul></div>
+    <div class="cmp"><div class="cmp-t">Operacije</div><ul>
+      <li><span class="v pub">+</span> <span class="virt">Tick(float)</span> <span class="ty">: void</span></li>
+      <li><span class="v pub">+</span> InitializeFromRegistry(EItemType) <span class="ty">: void</span></li>
+      <li><span class="v pub">+</span> <span class="stat">SpawnItemDrop(UObject*, EItemType, FVector)</span> <span class="ty">: AItemDrop*</span></li>
+      <li><span class="v prot">#</span> <span class="virt">BeginPlay()</span> <span class="ty">: void</span></li>
+      <li><span class="v prot">#</span> OnOverlapBegin(UPrimitiveComponent*, AActor*, …) <span class="ty">: void</span></li>
+    </ul></div>
+  </div>
+
+  <div class="cls cat-struct" data-name="FBlockInstanceSet ISM instance">
+    <div class="cls-hd">
+      <span class="stereo">«USTRUCT»</span>
+      <h3>FBlockInstanceSet</h3>
+      <div class="file">Voxel/VoxelWorld.h</div>
+    </div>
+    <div class="cls-note">ISM komponenta jednog tipa bloka + dvosmjerno mapiranje grid ↔ indeks instance (RemoveAtSwap mijenja indekse).</div>
+    <div class="cmp"><div class="cmp-t">Atributi</div><ul>
+      <li><span class="v pub">+</span> Component <span class="ty">: UInstancedStaticMeshComponent*</span></li>
+      <li><span class="v pub">+</span> GridToInstance <span class="ty">: TMap&lt;FIntVector, int32&gt;</span></li>
+      <li><span class="v pub">+</span> InstanceToGrid <span class="ty">: TArray&lt;FIntVector&gt;</span></li>
+    </ul></div>
+  </div>
+
+  <div class="cls cat-struct" data-name="FTreeGenerator stablo tree oak birch">
+    <div class="cls-hd">
+      <span class="stereo">«static utility»</span>
+      <h3>FTreeGenerator</h3>
+      <div class="file">Voxel/TreeGenerator.h</div>
+    </div>
+    <div class="cls-note">Proceduralna generacija hrasta i breze. Nema stanja — sve metode su statičke.</div>
+    <div class="cmp"><div class="cmp-t">Operacije</div><ul>
+      <li><span class="v pub">+</span> <span class="stat">GenerateTree(AVoxelWorld*, FIntVector, ETreeType)</span> <span class="ty">: void</span></li>
+      <li><span class="v pub">+</span> <span class="stat">GenerateRandomTrees(AVoxelWorld*, int32, int32, int32, int32)</span> <span class="ty">: void</span></li>
+      <li><span class="v priv">−</span> <span class="stat">GenerateOakTree(AVoxelWorld*, FIntVector)</span> <span class="ty">: void</span></li>
+      <li><span class="v priv">−</span> <span class="stat">GenerateBirchTree(AVoxelWorld*, FIntVector)</span> <span class="ty">: void</span></li>
+      <li><span class="v priv">−</span> <span class="stat">GenerateCanopy(AVoxelWorld*, FIntVector, EBlockType, int32)</span> <span class="ty">: void</span></li>
+      <li><span class="v priv">−</span> <span class="stat">CanPlaceTreeAt(AVoxelWorld*, FIntVector, int32)</span> <span class="ty">: bool</span></li>
+    </ul></div>
+  </div>
+
+  <div class="cls cat-actor" data-name="ADayNightCycle dan noc sunce mjesec">
+    <div class="cls-hd">
+      <span class="stereo">«AActor»</span>
+      <h3>ADayNightCycle</h3>
+      <div class="file">Voxel/DayNightCycle.h</div>
+    </div>
+    <div class="cls-note">Rotira sunce i mjesec te interpolira intenzitete svjetla kroz četiri faze dana.</div>
+    <div class="cmp"><div class="cmp-t">Atributi</div><ul>
+      <li><span class="v pub">+</span> DawnDuration / DayDuration / DuskDuration / NightDuration <span class="ty">: float</span></li>
+      <li><span class="v pub">+</span> TimeScale <span class="ty">: float</span></li>
+      <li><span class="v pub">+</span> CurrentTime <span class="ty">: float</span></li>
+      <li><span class="v pub">+</span> SunLight / MoonLight <span class="ty">: ADirectionalLight*</span></li>
+      <li><span class="v pub">+</span> SunIntensity / MoonIntensity <span class="ty">: float</span></li>
+      <li><span class="v pub">+</span> MoonColor <span class="ty">: FLinearColor</span></li>
+      <li><span class="v priv">−</span> DawnEnd / DayEnd / DuskEnd <span class="ty">: float</span></li>
+    </ul></div>
+    <div class="cmp"><div class="cmp-t">Operacije</div><ul>
+      <li><span class="v pub">+</span> <span class="virt">Tick(float)</span> <span class="ty">: void</span></li>
+      <li><span class="v pub">+</span> GetCurrentPhase() <span class="ty">: EDayPhase</span></li>
+      <li><span class="v pub">+</span> GetPhaseProgress() <span class="ty">: float</span></li>
+      <li><span class="v pub">+</span> GetFullCycleDuration() <span class="ty">: float</span></li>
+      <li><span class="v prot">#</span> <span class="virt">BeginPlay()</span> <span class="ty">: void</span></li>
+      <li><span class="v priv">−</span> UpdateSunRotation() / UpdateMoonRotation() <span class="ty">: void</span></li>
+      <li><span class="v priv">−</span> UpdateLightIntensities() <span class="ty">: void</span></li>
+    </ul></div>
+  </div>
+
+</div>
+
+<!-- ============================================================= -->
+<h2><span class="num">4.</span>Registri i podatkovne strukture</h2>
+<p class="lead">Data-driven sloj: definicije blokova i itema žive u <code>UBlockRegistry</code>, recepti u <code>UCraftingRecipeRegistry</code>. Oba su <code>UGameInstanceSubsystem</code> — postoje kroz cijelu sesiju.</p>
+
+<div class="grid">
+
+  <div class="cls cat-sub" data-name="UBlockRegistry registry definicija blok item">
+    <div class="cls-hd">
+      <span class="stereo">«UGameInstanceSubsystem»</span>
+      <h3>UBlockRegistry</h3>
+      <div class="file">Voxel/BlockRegistry.h</div>
+    </div>
+    <div class="cls-note">Centralni registar blokova i itema + cache mapiranja item ↔ blok.</div>
+    <div class="cmp"><div class="cmp-t">Atributi</div><ul>
+      <li><span class="v priv">−</span> BlockDefinitions <span class="ty">: TMap&lt;EBlockType, FBlockDefinition&gt;</span></li>
+      <li><span class="v priv">−</span> ItemDefinitions <span class="ty">: TMap&lt;EItemType, FItemDefinition&gt;</span></li>
+      <li><span class="v priv">−</span> ItemToBlockMap <span class="ty">: TMap&lt;EItemType, EBlockType&gt;</span></li>
+      <li><span class="v priv">−</span> BlockToItemMap <span class="ty">: TMap&lt;EBlockType, EItemType&gt;</span></li>
+    </ul></div>
+    <div class="cmp"><div class="cmp-t">Operacije</div><ul>
+      <li><span class="v pub">+</span> <span class="virt">Initialize(FSubsystemCollectionBase&amp;)</span> <span class="ty">: void</span></li>
+      <li><span class="v pub">+</span> GetBlockDefinition(EBlockType) <span class="ty">: const FBlockDefinition*</span></li>
+      <li><span class="v pub">+</span> GetBlockDefinitionCopy(EBlockType) <span class="ty">: FBlockDefinition</span></li>
+      <li><span class="v pub">+</span> GetBlockForItem(EItemType) <span class="ty">: const FBlockDefinition*</span></li>
+      <li><span class="v pub">+</span> GetBlockTypeForItem(EItemType) <span class="ty">: EBlockType</span></li>
+      <li><span class="v pub">+</span> GetAllBlockDefinitions() <span class="ty">: TArray&lt;FBlockDefinition&gt;</span></li>
+      <li><span class="v pub">+</span> GetItemDefinition(EItemType) <span class="ty">: const FItemDefinition*</span></li>
+      <li><span class="v pub">+</span> GetItemDefinitionCopy(EItemType) <span class="ty">: FItemDefinition</span></li>
+      <li><span class="v pub">+</span> GetItemTypeForBlock(EBlockType) <span class="ty">: EItemType</span></li>
+      <li><span class="v pub">+</span> CanItemBePlaced(EItemType) <span class="ty">: bool</span></li>
+      <li><span class="v pub">+</span> GetAllItemDefinitions() <span class="ty">: TArray&lt;FItemDefinition&gt;</span></li>
+      <li><span class="v pub">+</span> <span class="stat">Get(const UObject*)</span> <span class="ty">: UBlockRegistry*</span></li>
+      <li><span class="v prot">#</span> RegisterBlock(FBlockDefinition&amp;) <span class="ty">: void</span></li>
+      <li><span class="v prot">#</span> RegisterItem(FItemDefinition&amp;) <span class="ty">: void</span></li>
+      <li><span class="v prot">#</span> RegisterAllBlocks() / RegisterAllItems() <span class="ty">: void</span></li>
+    </ul></div>
+  </div>
+
+  <div class="cls cat-sub" data-name="UCraftingRecipeRegistry crafting recept json">
+    <div class="cls-hd">
+      <span class="stereo">«UGameInstanceSubsystem»</span>
+      <h3>UCraftingRecipeRegistry</h3>
+      <div class="file">Voxel/CraftingRecipeRegistry.h</div>
+    </div>
+    <div class="cls-note">Učitava recepte iz JSON-a i matcha ih na crafting grid (shaped i shapeless).</div>
+    <div class="cmp"><div class="cmp-t">Atributi</div><ul>
+      <li><span class="v priv">−</span> Recipes <span class="ty">: TArray&lt;FCraftingRecipe&gt;</span></li>
+    </ul></div>
+    <div class="cmp"><div class="cmp-t">Operacije</div><ul>
+      <li><span class="v pub">+</span> <span class="virt">Initialize(FSubsystemCollectionBase&amp;)</span> <span class="ty">: void</span></li>
+      <li><span class="v pub">+</span> FindMatchingRecipe(TArray&lt;EItemType&gt;&amp;, int32) <span class="ty">: const FCraftingRecipe*</span></li>
+      <li><span class="v pub">+</span> GetAllRecipes() <span class="ty">: TArray&lt;FCraftingRecipe&gt;&amp;</span></li>
+      <li><span class="v pub">+</span> GetRecipeCount() <span class="ty">: int32</span></li>
+      <li><span class="v pub">+</span> <span class="stat">Get(const UObject*)</span> <span class="ty">: UCraftingRecipeRegistry*</span></li>
+      <li><span class="v prot">#</span> LoadAllRecipes() <span class="ty">: void</span></li>
+      <li><span class="v prot">#</span> ParseRecipeFromJson(FString&amp;, FCraftingRecipe&amp;) <span class="ty">: bool</span></li>
+      <li><span class="v prot">#</span> MatchesShapelessRecipe(…) <span class="ty">: bool</span></li>
+      <li><span class="v prot">#</span> MatchesShapedRecipe(…) <span class="ty">: bool</span></li>
+      <li><span class="v prot">#</span> TryMatchPatternAtOffset(…) <span class="ty">: bool</span></li>
+      <li><span class="v prot">#</span> StringToItemType(FString&amp;) <span class="ty">: EItemType</span></li>
+    </ul></div>
+  </div>
+
+  <div class="cls cat-struct" data-name="FBlockDefinition definicija bloka">
+    <div class="cls-hd"><span class="stereo">«USTRUCT»</span><h3>FBlockDefinition</h3><div class="file">Voxel/BlockDefinition.h</div></div>
+    <div class="cmp"><div class="cmp-t">Atributi</div><ul>
+      <li><span class="v pub">+</span> BlockType <span class="ty">: EBlockType</span></li>
+      <li><span class="v pub">+</span> DropItemType <span class="ty">: EItemType</span></li>
+      <li><span class="v pub">+</span> PlaceableFromItem <span class="ty">: EItemType</span></li>
+      <li><span class="v pub">+</span> DropChance <span class="ty">: float = 1.0</span></li>
+      <li><span class="v pub">+</span> TimeToDestroy <span class="ty">: float = 1.5</span></li>
+      <li><span class="v pub">+</span> DisplayName <span class="ty">: FText</span></li>
+      <li><span class="v pub">+</span> Mesh / Material / HighlightMaterial <span class="ty">: FSoftObjectPath</span></li>
+    </ul></div>
+    <div class="cmp"><div class="cmp-t">Operacije</div><ul>
+      <li><span class="v pub">+</span> IsValid() <span class="ty">: bool</span></li>
+    </ul></div>
+  </div>
+
+  <div class="cls cat-struct" data-name="FBlockAssets cache mesh material">
+    <div class="cls-hd"><span class="stereo">«USTRUCT»</span><h3>FBlockAssets</h3><div class="file">Voxel/BlockDefinition.h</div></div>
+    <div class="cls-note">Razriješeni pointeri — cache da se izbjegne <code>TryLoad</code> po svakom bloku.</div>
+    <div class="cmp"><div class="cmp-t">Atributi</div><ul>
+      <li><span class="v pub">+</span> Mesh <span class="ty">: UStaticMesh*</span></li>
+      <li><span class="v pub">+</span> Material <span class="ty">: UMaterialInterface*</span></li>
+      <li><span class="v pub">+</span> HighlightMaterial <span class="ty">: UMaterialInterface*</span></li>
+    </ul></div>
+  </div>
+
+  <div class="cls cat-struct" data-name="FItemDefinition definicija itema">
+    <div class="cls-hd"><span class="stereo">«USTRUCT»</span><h3>FItemDefinition</h3><div class="file">Voxel/BlockDefinition.h</div></div>
+    <div class="cmp"><div class="cmp-t">Atributi</div><ul>
+      <li><span class="v pub">+</span> ItemType <span class="ty">: EItemType</span></li>
+      <li><span class="v pub">+</span> DisplayName <span class="ty">: FText</span></li>
+      <li><span class="v pub">+</span> Mesh / Material <span class="ty">: FSoftObjectPath</span></li>
+      <li><span class="v pub">+</span> Icon <span class="ty">: TSoftObjectPtr&lt;UTexture2D&gt;</span></li>
+      <li><span class="v pub">+</span> MaxStackSize <span class="ty">: int32 = 64</span></li>
+    </ul></div>
+    <div class="cmp"><div class="cmp-t">Operacije</div><ul>
+      <li><span class="v pub">+</span> IsValid() <span class="ty">: bool</span></li>
+    </ul></div>
+  </div>
+
+  <div class="cls cat-struct" data-name="FItemData data table row">
+    <div class="cls-hd"><span class="stereo">«USTRUCT : FTableRowBase»</span><h3>FItemData</h3><div class="file">Voxel/ItemData.h</div></div>
+    <div class="cls-note">Redak Data Tablea za UI (ikona, naziv, stack).</div>
+    <div class="cmp"><div class="cmp-t">Atributi</div><ul>
+      <li><span class="v pub">+</span> ItemType <span class="ty">: EItemType</span></li>
+      <li><span class="v pub">+</span> DisplayName <span class="ty">: FText</span></li>
+      <li><span class="v pub">+</span> Icon <span class="ty">: TSoftObjectPtr&lt;UTexture2D&gt;</span></li>
+      <li><span class="v pub">+</span> MaxStackSize <span class="ty">: int32 = 64</span></li>
+    </ul></div>
+  </div>
+
+  <div class="cls cat-struct" data-name="FCraftingRecipe recept pattern">
+    <div class="cls-hd"><span class="stereo">«USTRUCT»</span><h3>FCraftingRecipe</h3><div class="file">Voxel/CraftingRecipe.h</div></div>
+    <div class="cmp"><div class="cmp-t">Atributi</div><ul>
+      <li><span class="v pub">+</span> RecipeId <span class="ty">: FString</span></li>
+      <li><span class="v pub">+</span> Type <span class="ty">: ECraftingRecipeType</span></li>
+      <li><span class="v pub">+</span> GridSize <span class="ty">: int32 = 2</span></li>
+      <li><span class="v pub">+</span> Result <span class="ty">: FCraftingResult</span></li>
+      <li><span class="v pub">+</span> Ingredients <span class="ty">: TArray&lt;FCraftingIngredient&gt;</span></li>
+      <li><span class="v pub">+</span> Pattern <span class="ty">: TArray&lt;FString&gt;</span></li>
+      <li><span class="v pub">+</span> Key <span class="ty">: TMap&lt;FString, EItemType&gt;</span></li>
+    </ul></div>
+    <div class="cmp"><div class="cmp-t">Operacije</div><ul>
+      <li><span class="v pub">+</span> IsValid() <span class="ty">: bool</span></li>
+      <li><span class="v pub">+</span> GetPatternDimensions() <span class="ty">: FIntPoint</span></li>
+      <li><span class="v pub">+</span> GetNormalizedPattern() <span class="ty">: TArray&lt;TArray&lt;EItemType&gt;&gt;</span></li>
+    </ul></div>
+  </div>
+
+  <div class="cls cat-struct" data-name="FCraftingIngredient FCraftingResult">
+    <div class="cls-hd"><span class="stereo">«USTRUCT»</span><h3>FCraftingIngredient / FCraftingResult</h3><div class="file">Voxel/CraftingRecipe.h</div></div>
+    <div class="cls-note">Identična struktura; prva opisuje ulaz recepta, druga izlaz.</div>
+    <div class="cmp"><div class="cmp-t">Atributi</div><ul>
+      <li><span class="v pub">+</span> ItemType <span class="ty">: EItemType</span></li>
+      <li><span class="v pub">+</span> Count <span class="ty">: int32 = 1</span></li>
+    </ul></div>
+    <div class="cmp"><div class="cmp-t">Operacije</div><ul>
+      <li><span class="v pub">+</span> IsValid() <span class="ty">: bool</span></li>
+    </ul></div>
+  </div>
+
+  <div class="cls cat-struct" data-name="FWeaponData oruzje damage">
+    <div class="cls-hd"><span class="stereo">«USTRUCT»</span><h3>FWeaponData</h3><div class="file">Voxel/WeaponData.h</div></div>
+    <div class="cls-note">Borbene statistike oružja po Minecraft mehanici.</div>
+    <div class="cmp"><div class="cmp-t">Atributi</div><ul>
+      <li><span class="v pub">+</span> Damage <span class="ty">: float = 1.0</span></li>
+      <li><span class="v pub">+</span> AttackSpeed <span class="ty">: float = 4.0</span></li>
+      <li><span class="v pub">+</span> KnockbackMultiplier <span class="ty">: float = 1.0</span></li>
+      <li><span class="v pub">+</span> bIsWeapon <span class="ty">: bool = false</span></li>
+    </ul></div>
+    <div class="cmp"><div class="cmp-t">Operacije</div><ul>
+      <li><span class="v pub">+</span> FWeaponData()</li>
+      <li><span class="v pub">+</span> FWeaponData(float, float, float, bool)</li>
+      <li><span class="v pub">+</span> GetCooldown() <span class="ty">: float</span></li>
+    </ul></div>
+  </div>
+
+  <div class="cls cat-sub" data-name="UWeaponDataLibrary oruzje library">
+    <div class="cls-hd"><span class="stereo">«UBlueprintFunctionLibrary»</span><h3>UWeaponDataLibrary</h3><div class="file">Voxel/WeaponData.h</div></div>
+    <div class="cmp"><div class="cmp-t">Operacije</div><ul>
+      <li><span class="v pub">+</span> <span class="stat">GetWeaponData(EItemType)</span> <span class="ty">: FWeaponData</span></li>
+      <li><span class="v pub">+</span> <span class="stat">IsWeapon(EItemType)</span> <span class="ty">: bool</span></li>
+      <li><span class="v priv">−</span> <span class="stat">GetWeaponRegistry()</span> <span class="ty">: const TMap&lt;EItemType, FWeaponData&gt;&amp;</span></li>
+    </ul></div>
+  </div>
+
+</div>
+
+<!-- ============================================================= -->
+<h2><span class="num">5.</span>Igrač i komponente</h2>
+<p class="lead">Igrač je kompozicija kamere, inventara i first-person ruke. Raycast iz kamere rješava interakciju s blokovima, a zaseban melee trace borbu s bićima.</p>
+
+<div class="grid">
+
+  <div class="cls cat-actor" data-name="AFirstPersonCharacter igrac player kamera input melee">
+    <div class="cls-hd">
+      <span class="stereo">«ACharacter, abstract»</span>
+      <h3 class="abs">AFirstPersonCharacter</h3>
+      <div class="file">Voxel/FirstPersonCharacter.h</div>
+    </div>
+    <div class="cls-note">Igrač: kretanje, Enhanced Input, kopanje/postavljanje blokova, melee napad, toggle inventara.</div>
+    <div class="cmp"><div class="cmp-t">Atributi</div><ul>
+      <li><span class="v priv">−</span> FirstPersonCameraComponent <span class="ty">: UCameraComponent*</span></li>
+      <li><span class="v priv">−</span> InventoryComponent <span class="ty">: UInventoryComponent*</span></li>
+      <li><span class="v priv">−</span> FirstPersonArmComponent <span class="ty">: UFirstPersonArmComponent*</span></li>
+      <li><span class="v prot">#</span> JumpAction / MoveAction / LookAction / MouseLookAction <span class="ty">: UInputAction*</span></li>
+      <li><span class="v prot">#</span> AttackAction / InteractAction <span class="ty">: UInputAction*</span></li>
+      <li><span class="v prot">#</span> ScrollAction / ToggleInventoryAction <span class="ty">: UInputAction*</span></li>
+      <li><span class="v pub">+</span> BlockInteractionRange <span class="ty">: float</span></li>
+      <li><span class="v pub">+</span> SelectedItemIndex <span class="ty">: int32</span></li>
+      <li><span class="v pub">+</span> OnSelectedItemChanged <span class="ty">: FOnSelectedItemChanged</span></li>
+      <li><span class="v pub">+</span> OnInventoryToggled <span class="ty">: FOnInventoryToggled</span></li>
+      <li><span class="v pub">+</span> bIsInventoryOpen <span class="ty">: bool</span></li>
+      <li><span class="v prot">#</span> CurrentlyLookedAtBlock <span class="ty">: ABlock*</span></li>
+      <li><span class="v prot">#</span> CurrentHitNormal <span class="ty">: FVector</span></li>
+      <li><span class="v prot">#</span> VoxelWorld <span class="ty">: AVoxelWorld*</span></li>
+      <li><span class="v prot">#</span> bIsAttacking <span class="ty">: bool</span></li>
+      <li><span class="v prot">#</span> MeleeRange <span class="ty">: float = 300.0</span></li>
+      <li><span class="v prot">#</span> AttackKnockback <span class="ty">: float = 400.0</span></li>
+      <li><span class="v prot">#</span> KnockbackVertical <span class="ty">: float = 150.0</span></li>
+      <li><span class="v prot">#</span> LastAttackTime <span class="ty">: float</span></li>
+    </ul></div>
+    <div class="cmp"><div class="cmp-t">Operacije</div><ul>
+      <li><span class="v pub">+</span> <span class="virt">Tick(float)</span> <span class="ty">: void</span></li>
+      <li><span class="v pub">+</span> GetSelectedItemType() <span class="ty">: EItemType</span></li>
+      <li><span class="v pub">+</span> GetSelectedBlockType() <span class="ty">: EBlockType</span></li>
+      <li><span class="v pub">+</span> ToggleInventory() <span class="ty">: void</span></li>
+      <li><span class="v pub">+</span> GetInventoryComponent() <span class="ty">: UInventoryComponent*</span></li>
+      <li><span class="v pub">+</span> GetFirstPersonCameraComponent() <span class="ty">: UCameraComponent*</span></li>
+      <li><span class="v prot">#</span> <span class="virt">BeginPlay()</span> / <span class="virt">SetupPlayerInputComponent(UInputComponent*)</span> <span class="ty">: void</span></li>
+      <li><span class="v prot">#</span> MeleeTrace() <span class="ty">: ACreatureBase*</span></li>
+      <li><span class="v prot">#</span> PerformMeleeAttack() <span class="ty">: void</span></li>
+      <li><span class="v prot">#</span> GetEquippedWeaponData() <span class="ty">: FWeaponData</span></li>
+      <li><span class="v prot">#</span> CalculateDamageMultiplier(float) <span class="ty">: float</span></li>
+      <li><span class="v prot">#</span> UpdateBlockLookAt() <span class="ty">: void</span></li>
+      <li><span class="v prot">#</span> StartAttack() / StopAttack() / PlaceBlock() <span class="ty">: void</span></li>
+      <li><span class="v prot">#</span> ScrollInventory(FInputActionValue&amp;) <span class="ty">: void</span></li>
+      <li><span class="v prot">#</span> MoveInput / LookInput (FInputActionValue&amp;) <span class="ty">: void</span></li>
+      <li><span class="v prot">#</span> <span class="virt">DoAim(float, float)</span> / <span class="virt">DoMove(float, float)</span> <span class="ty">: void</span></li>
+      <li><span class="v prot">#</span> <span class="virt">DoJumpStart()</span> / <span class="virt">DoJumpEnd()</span> <span class="ty">: void</span></li>
+    </ul></div>
+  </div>
+
+  <div class="cls cat-comp" data-name="UInventoryComponent inventar slot crafting">
+    <div class="cls-hd">
+      <span class="stereo">«UActorComponent»</span>
+      <h3>UInventoryComponent</h3>
+      <div class="file">Voxel/InventoryComponent.h</div>
+    </div>
+    <div class="cls-note">36 slotova (27 main + 9 hotbar) + 5 crafting slotova (4 input, 1 output) + held item za drag&amp;drop.</div>
+    <div class="cmp"><div class="cmp-t">Konstante</div><ul>
+      <li><span class="v pub">+</span> <span class="stat">MainInventorySize</span> <span class="ty">= 27</span>, <span class="stat">HotbarSize</span> <span class="ty">= 9</span></li>
+      <li><span class="v pub">+</span> <span class="stat">TotalSlots</span> <span class="ty">= 36</span>, <span class="stat">HotbarStartIndex</span> <span class="ty">= 27</span></li>
+      <li><span class="v pub">+</span> <span class="stat">CraftingInputSize</span> <span class="ty">= 4</span>, <span class="stat">CraftingInputStartIndex</span> <span class="ty">= 36</span></li>
+      <li><span class="v pub">+</span> <span class="stat">CraftingOutputIndex</span> <span class="ty">= 40</span>, <span class="stat">TotalCraftingSlots</span> <span class="ty">= 5</span></li>
+    </ul></div>
+    <div class="cmp"><div class="cmp-t">Atributi</div><ul>
+      <li><span class="v pub">+</span> OnSlotChanged <span class="ty">: FOnSlotChanged</span></li>
+      <li><span class="v priv">−</span> Slots <span class="ty">: TArray&lt;FInventorySlot&gt;</span></li>
+      <li><span class="v priv">−</span> CraftingSlots <span class="ty">: TArray&lt;FInventorySlot&gt;</span></li>
+      <li><span class="v priv">−</span> HeldItem <span class="ty">: FInventorySlot</span></li>
+      <li><span class="v priv">−</span> HeldItemSlotIndex <span class="ty">: int32 = -1</span></li>
+      <li><span class="v priv">−</span> CurrentRecipe <span class="ty">: const FCraftingRecipe*</span></li>
+    </ul></div>
+    <div class="cmp"><div class="cmp-t">Operacije</div><ul>
+      <li><span class="v pub">+</span> GetSlot(int32) <span class="ty">: FInventorySlot</span></li>
+      <li><span class="v pub">+</span> SetSlot(int32, EItemType, int32) <span class="ty">: void</span></li>
+      <li><span class="v pub">+</span> MoveItem(int32, int32) / SwapSlots(int32, int32) <span class="ty">: bool</span></li>
+      <li><span class="v pub">+</span> GetAllSlots() <span class="ty">: const TArray&lt;FInventorySlot&gt;&amp;</span></li>
+      <li><span class="v pub">+</span> IsValidSlotIndex / IsCraftingSlotIndex(int32) <span class="ty">: bool</span></li>
+      <li><span class="v pub">+</span> IsCraftingInputSlot / IsCraftingOutputSlot(int32) <span class="ty">: bool</span></li>
+      <li><span class="v pub">+</span> UpdateCraftingOutput() <span class="ty">: void</span></li>
+      <li><span class="v pub">+</span> FindFirstEmptySlot() / FindSlotWithItem(EItemType) <span class="ty">: int32</span></li>
+      <li><span class="v pub">+</span> AddItem(EItemType, int32) <span class="ty">: void</span></li>
+      <li><span class="v pub">+</span> RemoveItem(EItemType, int32) <span class="ty">: int32</span></li>
+      <li><span class="v pub">+</span> GetItemCount(EItemType) <span class="ty">: int32</span></li>
+      <li><span class="v pub">+</span> HasItem(EItemType, int32) <span class="ty">: bool</span></li>
+      <li><span class="v pub">+</span> <span class="stat">ItemTypeToBlockType(EItemType)</span> <span class="ty">: EBlockType</span></li>
+      <li><span class="v pub">+</span> <span class="stat">BlockTypeToItemType(EBlockType)</span> <span class="ty">: EItemType</span></li>
+      <li><span class="v pub">+</span> <span class="stat">CanItemBePlaced(EItemType)</span> <span class="ty">: bool</span></li>
+      <li><span class="v pub">+</span> <span class="stat">GetItemData(EItemType, UDataTable*)</span> <span class="ty">: FItemData</span></li>
+      <li><span class="v pub">+</span> PickUpItem(int32) / PlaceItem(int32) <span class="ty">: bool</span></li>
+      <li><span class="v pub">+</span> GetHeldItem() <span class="ty">: FInventorySlot</span></li>
+      <li><span class="v pub">+</span> IsHoldingItem() <span class="ty">: bool</span></li>
+      <li><span class="v pub">+</span> GetHeldItemSlotIndex() <span class="ty">: int32</span></li>
+      <li><span class="v pub">+</span> ReturnHeldItem() <span class="ty">: void</span></li>
+      <li><span class="v priv">−</span> CraftingSlotToArrayIndex(int32) <span class="ty">: int32</span></li>
+      <li><span class="v priv">−</span> BroadcastSlotChanged(int32) <span class="ty">: void</span></li>
+      <li><span class="v priv">−</span> GetCraftingGridAsArray() <span class="ty">: TArray&lt;EItemType&gt;</span></li>
+      <li><span class="v priv">−</span> ConsumeRecipeIngredients() <span class="ty">: void</span></li>
+    </ul></div>
+  </div>
+
+  <div class="cls cat-struct" data-name="FInventorySlot slot">
+    <div class="cls-hd"><span class="stereo">«USTRUCT»</span><h3>FInventorySlot</h3><div class="file">Voxel/InventoryComponent.h</div></div>
+    <div class="cmp"><div class="cmp-t">Atributi</div><ul>
+      <li><span class="v pub">+</span> ItemType <span class="ty">: EItemType = None</span></li>
+      <li><span class="v pub">+</span> Quantity <span class="ty">: int32 = 0</span></li>
+    </ul></div>
+    <div class="cmp"><div class="cmp-t">Operacije</div><ul>
+      <li><span class="v pub">+</span> IsEmpty() <span class="ty">: bool</span></li>
+      <li><span class="v pub">+</span> Clear() <span class="ty">: void</span></li>
+    </ul></div>
+  </div>
+
+  <div class="cls cat-comp" data-name="UFirstPersonArmComponent ruka viewmodel swing bobbing">
+    <div class="cls-hd">
+      <span class="stereo">«UActorComponent»</span>
+      <h3>UFirstPersonArmComponent</h3>
+      <div class="file">Voxel/FirstPersonArmComponent.h</div>
+    </div>
+    <div class="cls-note">First-person ruka: swing animacija, bobbing pri kretanju, prikaz oružja u ruci, zvukovi.</div>
+    <div class="cmp"><div class="cmp-t">Atributi</div><ul>
+      <li><span class="v pub">+</span> ArmMesh / HeldItemMesh <span class="ty">: UStaticMeshComponent*</span></li>
+      <li><span class="v pub">+</span> ArmBaseOffset <span class="ty">: FVector = (40, 20, −25)</span></li>
+      <li><span class="v pub">+</span> ArmBaseRotation <span class="ty">: FRotator = (0, −10, 0)</span></li>
+      <li><span class="v pub">+</span> ArmScale <span class="ty">: FVector = (0.08, 0.25, 0.08)</span></li>
+      <li><span class="v pub">+</span> SwingArcAngle <span class="ty">: float = 70.0</span></li>
+      <li><span class="v pub">+</span> SwingForwardDistance <span class="ty">: float = 15.0</span></li>
+      <li><span class="v pub">+</span> bEnableBobbing <span class="ty">: bool = true</span></li>
+      <li><span class="v pub">+</span> BobAmplitude <span class="ty">: float = 1.5</span></li>
+      <li><span class="v pub">+</span> BobSpeed <span class="ty">: float = 12.0</span></li>
+      <li><span class="v pub">+</span> SwingSound / HitSound <span class="ty">: USoundBase*</span></li>
+      <li><span class="v pub">+</span> ArmMaterial, Wooden/Stone/Iron/DiamondSwordMaterial <span class="ty">: UMaterialInterface*</span></li>
+      <li><span class="v priv">−</span> bIsSwinging <span class="ty">: bool</span>, SwingProgress / SwingDuration <span class="ty">: float</span></li>
+      <li><span class="v priv">−</span> BobTime <span class="ty">: float</span></li>
+      <li><span class="v priv">−</span> OwnerCharacter <span class="ty">: AFirstPersonCharacter*</span></li>
+      <li><span class="v priv">−</span> OwnerCamera <span class="ty">: UCameraComponent*</span></li>
+      <li><span class="v priv">−</span> CurrentHeldItem <span class="ty">: EItemType</span></li>
+    </ul></div>
+    <div class="cmp"><div class="cmp-t">Operacije</div><ul>
+      <li><span class="v pub">+</span> <span class="virt">TickComponent(float, ELevelTick, …)</span> <span class="ty">: void</span></li>
+      <li><span class="v pub">+</span> PlaySwingAnimation(float) <span class="ty">: void</span></li>
+      <li><span class="v pub">+</span> IsSwinging() <span class="ty">: bool</span></li>
+      <li><span class="v pub">+</span> PlaySwingSound() / PlayHitSound() <span class="ty">: void</span></li>
+      <li><span class="v pub">+</span> SetHeldItem(EItemType) / ClearHeldItem() <span class="ty">: void</span></li>
+      <li><span class="v prot">#</span> <span class="virt">BeginPlay()</span> <span class="ty">: void</span></li>
+      <li><span class="v priv">−</span> UpdateSwing(float) / UpdateBobbing(float) <span class="ty">: void</span></li>
+      <li><span class="v priv">−</span> CalculateBobOffset() <span class="ty">: FVector</span></li>
+      <li><span class="v priv">−</span> CreateArmMesh() / CreateHeldItemMesh() <span class="ty">: void</span></li>
+      <li><span class="v priv">−</span> UpdateSwordAppearance(EItemType) <span class="ty">: void</span></li>
+    </ul></div>
+  </div>
+
+  <div class="cls cat-actor" data-name="AMinecraftCloneCharacter third person predlozak">
+    <div class="cls-hd">
+      <span class="stereo">«ACharacter, abstract»</span>
+      <h3 class="abs">AMinecraftCloneCharacter</h3>
+      <div class="file">MinecraftCloneCharacter.h</div>
+    </div>
+    <div class="cls-note">Third-person predložak iz Epicovog templatea — nije dio voxel gameplaya.</div>
+    <div class="cmp"><div class="cmp-t">Atributi</div><ul>
+      <li><span class="v priv">−</span> CameraBoom <span class="ty">: USpringArmComponent*</span></li>
+      <li><span class="v priv">−</span> FollowCamera <span class="ty">: UCameraComponent*</span></li>
+      <li><span class="v prot">#</span> JumpAction / MoveAction / LookAction / MouseLookAction <span class="ty">: UInputAction*</span></li>
+    </ul></div>
+    <div class="cmp"><div class="cmp-t">Operacije</div><ul>
+      <li><span class="v prot">#</span> <span class="virt">SetupPlayerInputComponent(UInputComponent*)</span> <span class="ty">: void</span></li>
+      <li><span class="v prot">#</span> Move / Look (FInputActionValue&amp;) <span class="ty">: void</span></li>
+      <li><span class="v pub">+</span> <span class="virt">DoMove(float, float)</span> / <span class="virt">DoLook(float, float)</span> <span class="ty">: void</span></li>
+      <li><span class="v pub">+</span> <span class="virt">DoJumpStart()</span> / <span class="virt">DoJumpEnd()</span> <span class="ty">: void</span></li>
+      <li><span class="v pub">+</span> GetCameraBoom() / GetFollowCamera()</li>
+    </ul></div>
+  </div>
+
+</div>
+
+<!-- ============================================================= -->
+<h2><span class="num">6.</span>Bića: neprijatelji i pasivni mobovi</h2>
+<p class="lead">Zajednička baza <code>ACreatureBase</code> nosi zdravlje, brzinu, wander radius i Behavior Tree. Grana <code>AEnemyBase</code> dodaje borbu i detekciju, grana <code>AMobBase</code> bijeg od prijetnje.</p>
+
+<div class="grid">
+
+  <div class="cls cat-actor" data-name="ACreatureBase bice health ai navmesh">
+    <div class="cls-hd">
+      <span class="stereo">«ACharacter, abstract»</span>
+      <h3 class="abs">ACreatureBase</h3>
+      <div class="file">Voxel/CreatureBase.h</div>
+    </div>
+    <div class="cls-note">Apstraktna baza svih bića. <code>NavInvoker</code> nosi lokalni „balon" navmesha oko svakog moba.</div>
+    <div class="cmp"><div class="cmp-t">Atributi</div><ul>
+      <li><span class="v pub">+</span> MaxHealth <span class="ty">: float = 20.0</span></li>
+      <li><span class="v pub">+</span> CurrentHealth <span class="ty">: float = 20.0</span></li>
+      <li><span class="v pub">+</span> WalkSpeed <span class="ty">: float = 200.0</span></li>
+      <li><span class="v pub">+</span> WanderRadius <span class="ty">: float = 500.0</span></li>
+      <li><span class="v pub">+</span> BehaviorTree <span class="ty">: UBehaviorTree*</span></li>
+      <li><span class="v pub">+</span> NavInvoker <span class="ty">: UNavigationInvokerComponent*</span></li>
+    </ul></div>
+    <div class="cmp"><div class="cmp-t">Operacije</div><ul>
+      <li><span class="v pub">+</span> GetBehaviorTree() <span class="ty">: UBehaviorTree*</span></li>
+      <li><span class="v pub">+</span> GetWanderRadius() <span class="ty">: float</span></li>
+      <li><span class="v pub">+</span> <span class="virt">OnDeath()</span> <span class="ty">: void</span></li>
+      <li><span class="v pub">+</span> <span class="virt">TakeDamage(float)</span> <span class="ty">: bool</span></li>
+      <li><span class="v prot">#</span> <span class="virt">BeginPlay()</span> <span class="ty">: void</span></li>
+    </ul></div>
+  </div>
+
+  <div class="cls cat-actor" data-name="AEnemyBase neprijatelj napad detekcija">
+    <div class="cls-hd">
+      <span class="stereo">«ACreatureBase, abstract»</span>
+      <h3 class="abs">AEnemyBase</h3>
+      <div class="file">Voxel/EnemyBase.h</div>
+    </div>
+    <div class="cmp"><div class="cmp-t">Atributi</div><ul>
+      <li><span class="v pub">+</span> AttackDamage <span class="ty">: float = 3.0</span></li>
+      <li><span class="v pub">+</span> AttackRange <span class="ty">: float = 150.0</span></li>
+      <li><span class="v pub">+</span> AttackCooldown <span class="ty">: float = 2.0</span></li>
+      <li><span class="v pub">+</span> DetectionRange <span class="ty">: float = 3500.0</span></li>
+      <li><span class="v pub">+</span> LoseTargetRange <span class="ty">: float = 4000.0</span></li>
+      <li><span class="v prot">#</span> LastAttackTime <span class="ty">: float</span></li>
+    </ul></div>
+    <div class="cmp"><div class="cmp-t">Operacije</div><ul>
+      <li><span class="v pub">+</span> CanAttack() <span class="ty">: bool</span></li>
+      <li><span class="v pub">+</span> <span class="virt">PerformAttack()</span> <span class="ty">: void</span></li>
+    </ul></div>
+  </div>
+
+  <div class="cls cat-actor" data-name="AZombie zombi">
+    <div class="cls-hd">
+      <span class="stereo">«AEnemyBase»</span>
+      <h3>AZombie</h3>
+      <div class="file">Voxel/Zombie.h</div>
+    </div>
+    <div class="cls-note">Melee napadač; detekcija 35 blokova, cooldown 2 s, nasumično lutanje u mirovanju.</div>
+    <div class="cmp"><div class="cmp-t">Atributi</div><ul>
+      <li><span class="v pub">+</span> bIsAttacking <span class="ty">: bool</span></li>
+    </ul></div>
+    <div class="cmp"><div class="cmp-t">Operacije</div><ul>
+      <li><span class="v pub">+</span> <span class="virt">PerformAttack()</span> <span class="ty">: void &nbsp;«override»</span></li>
+      <li><span class="v pub">+</span> OnAttackAnimationEnd() <span class="ty">: void</span></li>
+      <li><span class="v prot">#</span> <span class="virt">BeginPlay()</span> <span class="ty">: void</span></li>
+    </ul></div>
+  </div>
+
+  <div class="cls cat-actor" data-name="AMobBase pasivni mob bijeg flee">
+    <div class="cls-hd">
+      <span class="stereo">«ACreatureBase, abstract»</span>
+      <h3 class="abs">AMobBase</h3>
+      <div class="file">Voxel/MobBase.h</div>
+    </div>
+    <div class="cmp"><div class="cmp-t">Atributi</div><ul>
+      <li><span class="v pub">+</span> FleeDistance <span class="ty">: float = 800.0</span></li>
+      <li><span class="v pub">+</span> ThreatDetectionRange <span class="ty">: float = 300.0</span></li>
+      <li><span class="v prot">#</span> CurrentThreatActor <span class="ty">: AActor*</span></li>
+    </ul></div>
+    <div class="cmp"><div class="cmp-t">Operacije</div><ul>
+      <li><span class="v pub">+</span> GetFleeDistance() / GetThreatDetectionRange() <span class="ty">: float</span></li>
+      <li><span class="v pub">+</span> OnDamageTaken(AActor*) <span class="ty">: void</span></li>
+      <li><span class="v pub">+</span> GetCurrentThreat() <span class="ty">: AActor*</span></li>
+      <li><span class="v pub">+</span> SetCurrentThreat(AActor*) / ClearCurrentThreat() <span class="ty">: void</span></li>
+    </ul></div>
+  </div>
+
+  <div class="cls cat-actor" data-name="ASheep ovca vuna wool">
+    <div class="cls-hd">
+      <span class="stereo">«AMobBase»</span>
+      <h3>ASheep</h3>
+      <div class="file">Voxel/Sheep.h</div>
+    </div>
+    <div class="cls-note">Pasivni mob: luta, bježi kad je napadnuta, na smrti baca vunu.</div>
+    <div class="cmp"><div class="cmp-t">Atributi</div><ul>
+      <li><span class="v pub">+</span> WoolDropMin <span class="ty">: int32 = 1</span></li>
+      <li><span class="v pub">+</span> WoolDropMax <span class="ty">: int32 = 3</span></li>
+    </ul></div>
+    <div class="cmp"><div class="cmp-t">Operacije</div><ul>
+      <li><span class="v pub">+</span> <span class="virt">OnDeath()</span> <span class="ty">: void &nbsp;«override»</span></li>
+      <li><span class="v prot">#</span> DropWool() <span class="ty">: void</span></li>
+    </ul></div>
+  </div>
+
+  <div class="cls cat-actor" data-name="AEnemySpawnPoint spawn tocka">
+    <div class="cls-hd">
+      <span class="stereo">«AActor»</span>
+      <h3>AEnemySpawnPoint</h3>
+      <div class="file">Voxel/EnemySpawnPoint.h</div>
+    </div>
+    <div class="cls-note">Vidljiva samo u editoru; spawna neprijatelja na početku igre.</div>
+    <div class="cmp"><div class="cmp-t">Atributi</div><ul>
+      <li><span class="v pub">+</span> EnemyClass <span class="ty">: TSubclassOf&lt;AEnemyBase&gt;</span></li>
+      <li><span class="v pub">+</span> bSpawnOnBeginPlay <span class="ty">: bool = true</span></li>
+      <li><span class="v pub">+</span> BillboardSprite <span class="ty">: UBillboardComponent*</span></li>
+    </ul></div>
+    <div class="cmp"><div class="cmp-t">Operacije</div><ul>
+      <li><span class="v pub">+</span> SpawnEnemy() <span class="ty">: AEnemyBase*</span></li>
+      <li><span class="v prot">#</span> <span class="virt">BeginPlay()</span> <span class="ty">: void</span></li>
+    </ul></div>
+  </div>
+
+</div>
+
+<!-- ============================================================= -->
+<h2><span class="num">7.</span>AI: kontroleri i Behavior Tree čvorovi</h2>
+<p class="lead">Svaki tip bića ima svoj AI kontroler koji pokreće Behavior Tree definiran na pawnu. Servisi pune blackboard, taskovi izvode akcije.</p>
+
+<div class="grid">
+
+  <div class="cls cat-ai" data-name="AEnemyAIController ai kontroler neprijatelj">
+    <div class="cls-hd"><span class="stereo">«AAIController»</span><h3>AEnemyAIController</h3><div class="file">Voxel/EnemyAIController.h</div></div>
+    <div class="cls-note">Zajednički kontroler svih neprijatelja.</div>
+    <div class="cmp"><div class="cmp-t">Atributi</div><ul>
+      <li><span class="v priv">−</span> BehaviorTreeComponent <span class="ty">: UBehaviorTreeComponent*</span></li>
+      <li><span class="v priv">−</span> BlackboardComponent <span class="ty">: UBlackboardComponent*</span></li>
+    </ul></div>
+    <div class="cmp"><div class="cmp-t">Operacije</div><ul>
+      <li><span class="v pub">+</span> GetControlledEnemy() <span class="ty">: AEnemyBase*</span></li>
+      <li><span class="v prot">#</span> <span class="virt">OnPossess(APawn*)</span> / <span class="virt">OnUnPossess()</span> <span class="ty">: void</span></li>
+    </ul></div>
+  </div>
+
+  <div class="cls cat-ai" data-name="AMobAIController ai kontroler mob threat">
+    <div class="cls-hd"><span class="stereo">«AAIController»</span><h3>AMobAIController</h3><div class="file">Voxel/MobAIController.h</div></div>
+    <div class="cls-note">Kontroler pasivnih mobova; drži imena blackboard ključeva.</div>
+    <div class="cmp"><div class="cmp-t">Atributi</div><ul>
+      <li><span class="v pub">+</span> <span class="stat">ThreatActorKey</span> <span class="ty">: const FName</span></li>
+      <li><span class="v pub">+</span> <span class="stat">FleeLocationKey</span> <span class="ty">: const FName</span></li>
+      <li><span class="v pub">+</span> <span class="stat">WanderLocationKey</span> <span class="ty">: const FName</span></li>
+      <li><span class="v priv">−</span> BehaviorTreeComponent <span class="ty">: UBehaviorTreeComponent*</span></li>
+      <li><span class="v priv">−</span> BlackboardComponent <span class="ty">: UBlackboardComponent*</span></li>
+    </ul></div>
+    <div class="cmp"><div class="cmp-t">Operacije</div><ul>
+      <li><span class="v pub">+</span> GetControlledMob() <span class="ty">: AMobBase*</span></li>
+      <li><span class="v pub">+</span> SetThreatActor(AActor*) / ClearThreatActor() <span class="ty">: void</span></li>
+      <li><span class="v prot">#</span> <span class="virt">OnPossess(APawn*)</span> / <span class="virt">OnUnPossess()</span> <span class="ty">: void</span></li>
+    </ul></div>
+  </div>
+
+  <div class="cls cat-ai" data-name="UBTService_FindPlayer bt servis igrac">
+    <div class="cls-hd"><span class="stereo">«UBTService»</span><h3>UBTService_FindPlayer</h3><div class="file">Voxel/AI/BTService_FindPlayer.h</div></div>
+    <div class="cls-note">Postavlja igrača kao ciljni aktor u blackboardu.</div>
+    <div class="cmp"><div class="cmp-t">Atributi</div><ul>
+      <li><span class="v pub">+</span> TargetActorKey <span class="ty">: FBlackboardKeySelector</span></li>
+    </ul></div>
+    <div class="cmp"><div class="cmp-t">Operacije</div><ul>
+      <li><span class="v prot">#</span> <span class="virt">TickNode(UBehaviorTreeComponent&amp;, uint8*, float)</span> <span class="ty">: void</span></li>
+    </ul></div>
+  </div>
+
+  <div class="cls cat-ai" data-name="UBTService_DetectThreat bt servis prijetnja">
+    <div class="cls-hd"><span class="stereo">«UBTService»</span><h3>UBTService_DetectThreat</h3><div class="file">Voxel/AI/BTService_DetectThreat.h</div></div>
+    <div class="cls-note">Postavlja prijetnju kad je igrač bliže od <code>ThreatDetectionRange</code>, briše je izvan <code>FleeDistance</code>.</div>
+    <div class="cmp"><div class="cmp-t">Atributi</div><ul>
+      <li><span class="v pub">+</span> ThreatActorKey <span class="ty">: FBlackboardKeySelector</span></li>
+    </ul></div>
+    <div class="cmp"><div class="cmp-t">Operacije</div><ul>
+      <li><span class="v prot">#</span> <span class="virt">TickNode(UBehaviorTreeComponent&amp;, uint8*, float)</span> <span class="ty">: void</span></li>
+    </ul></div>
+  </div>
+
+  <div class="cls cat-ai" data-name="UBTTask_EnemyAttack bt task napad">
+    <div class="cls-hd"><span class="stereo">«UBTTaskNode»</span><h3>UBTTask_EnemyAttack</h3><div class="file">Voxel/AI/BTTask_EnemyAttack.h</div></div>
+    <div class="cls-note">Provjerava udaljenost i cooldown, zatim izvodi napad.</div>
+    <div class="cmp"><div class="cmp-t">Atributi</div><ul>
+      <li><span class="v prot">#</span> TargetActorKey <span class="ty">: FBlackboardKeySelector</span></li>
+    </ul></div>
+    <div class="cmp"><div class="cmp-t">Operacije</div><ul>
+      <li><span class="v pub">+</span> <span class="virt">ExecuteTask(UBehaviorTreeComponent&amp;, uint8*)</span> <span class="ty">: EBTNodeResult::Type</span></li>
+    </ul></div>
+  </div>
+
+  <div class="cls cat-ai" data-name="UBTTask_RotateToTarget bt task rotacija">
+    <div class="cls-hd"><span class="stereo">«UBTTaskNode»</span><h3>UBTTask_RotateToTarget</h3><div class="file">Voxel/AI/BTTask_RotateToTarget.h</div></div>
+    <div class="cmp"><div class="cmp-t">Atributi</div><ul>
+      <li><span class="v prot">#</span> TargetActorKey <span class="ty">: FBlackboardKeySelector</span></li>
+      <li><span class="v prot">#</span> RotationSpeed <span class="ty">: float = 360.0</span></li>
+      <li><span class="v prot">#</span> AcceptableAngle <span class="ty">: float = 5.0</span></li>
+    </ul></div>
+    <div class="cmp"><div class="cmp-t">Operacije</div><ul>
+      <li><span class="v pub">+</span> <span class="virt">ExecuteTask(…)</span> <span class="ty">: EBTNodeResult::Type</span></li>
+      <li><span class="v pub">+</span> <span class="virt">TickTask(UBehaviorTreeComponent&amp;, uint8*, float)</span> <span class="ty">: void</span></li>
+    </ul></div>
+  </div>
+
+  <div class="cls cat-ai" data-name="UBTTask_FindWanderLocation bt task lutanje">
+    <div class="cls-hd"><span class="stereo">«UBTTaskNode»</span><h3>UBTTask_FindWanderLocation</h3><div class="file">Voxel/AI/BTTask_FindWanderLocation.h</div></div>
+    <div class="cls-note">Nasumična točka unutar <code>WanderRadius</code>, validirana na navmeshu.</div>
+    <div class="cmp"><div class="cmp-t">Atributi</div><ul>
+      <li><span class="v prot">#</span> WanderLocationKey <span class="ty">: FBlackboardKeySelector</span></li>
+    </ul></div>
+    <div class="cmp"><div class="cmp-t">Operacije</div><ul>
+      <li><span class="v pub">+</span> <span class="virt">ExecuteTask(…)</span> <span class="ty">: EBTNodeResult::Type</span></li>
+    </ul></div>
+  </div>
+
+  <div class="cls cat-ai" data-name="UBTTask_FindFleeLocation bt task bijeg">
+    <div class="cls-hd"><span class="stereo">«UBTTaskNode»</span><h3>UBTTask_FindFleeLocation</h3><div class="file">Voxel/AI/BTTask_FindFleeLocation.h</div></div>
+    <div class="cls-note">Točka udaljena od prijetnje za <code>FleeDistance</code>.</div>
+    <div class="cmp"><div class="cmp-t">Atributi</div><ul>
+      <li><span class="v prot">#</span> ThreatActorKey <span class="ty">: FBlackboardKeySelector</span></li>
+      <li><span class="v prot">#</span> FleeLocationKey <span class="ty">: FBlackboardKeySelector</span></li>
+    </ul></div>
+    <div class="cmp"><div class="cmp-t">Operacije</div><ul>
+      <li><span class="v pub">+</span> <span class="virt">ExecuteTask(…)</span> <span class="ty">: EBTNodeResult::Type</span></li>
+    </ul></div>
+  </div>
+
+</div>
+
+<!-- ============================================================= -->
+<h2><span class="num">8.</span>Korisničko sučelje (UMG)</h2>
+<p class="lead">Sve widget klase su C++ baze koje Blueprint widgeti nasljeđuju i dopunjuju layoutom. Vezivanje na UI elemente ide preko <code>meta = (BindWidget)</code>.</p>
+
+<div class="grid">
+
+  <div class="cls cat-ui" data-name="UHotbarWidget hotbar ui">
+    <div class="cls-hd"><span class="stereo">«UUserWidget»</span><h3>UHotbarWidget</h3><div class="file">Voxel/HotbarWidget.h</div></div>
+    <div class="cls-note">9 hotbar slotova; sluša <code>OnSlotChanged</code> i <code>OnSelectedItemChanged</code>.</div>
+    <div class="cmp"><div class="cmp-t">Atributi</div><ul>
+      <li><span class="v pub">+</span> SlotContainer <span class="ty">: UHorizontalBox* «BindWidget»</span></li>
+      <li><span class="v pub">+</span> InventorySlotWidgetClass <span class="ty">: TSubclassOf&lt;UInventorySlotWidget&gt;</span></li>
+      <li><span class="v pub">+</span> ItemDataTable <span class="ty">: UDataTable*</span></li>
+      <li><span class="v prot">#</span> SlotWidgets <span class="ty">: TArray&lt;UInventorySlotWidget*&gt;</span></li>
+      <li><span class="v prot">#</span> CurrentSelectedIndex <span class="ty">: int32 = 0</span></li>
+      <li><span class="v prot">#</span> PlayerCharacter <span class="ty">: AFirstPersonCharacter*</span></li>
+      <li><span class="v priv">−</span> <span class="stat">HotbarSlotCount</span> <span class="ty">= 9</span>, <span class="stat">HotbarStartIndex</span> <span class="ty">= 27</span></li>
+    </ul></div>
+    <div class="cmp"><div class="cmp-t">Operacije</div><ul>
+      <li><span class="v pub">+</span> CreateHotbarSlots() <span class="ty">: void</span></li>
+      <li><span class="v pub">+</span> HandleSlotChanged(int32, FInventorySlot) <span class="ty">: void</span></li>
+      <li><span class="v pub">+</span> SelectedItemChanged(int32, EItemType) <span class="ty">: void</span></li>
+      <li><span class="v pub">+</span> RefreshAllSlots() <span class="ty">: void</span></li>
+      <li><span class="v pub">+</span> GetCurrentSelectedIndex() / GetSlotCount() <span class="ty">: int32</span></li>
+      <li><span class="v pub">+</span> GetSlotWidget(int32) <span class="ty">: UInventorySlotWidget*</span></li>
+      <li><span class="v pub">+</span> SetPlayerCharacter(AFirstPersonCharacter*) <span class="ty">: void</span></li>
+      <li><span class="v pub">+</span> GetPlayerCharacter() / GetInventoryComponent()</li>
+      <li><span class="v prot">#</span> <span class="virt">NativeConstruct()</span> / <span class="virt">NativeDestruct()</span> <span class="ty">: void</span></li>
+      <li><span class="v priv">−</span> IsValidHotbarIndex(int32) <span class="ty">: bool</span></li>
+      <li><span class="v priv">−</span> InventoryToHotbarIndex(int32) <span class="ty">: int32</span></li>
+      <li><span class="v priv">−</span> OnSlotChangedHandler / OnSelectedItemChangedHandler <span class="ty">: void</span></li>
+    </ul></div>
+  </div>
+
+  <div class="cls cat-ui" data-name="UFullInventoryWidget inventar crafting ui">
+    <div class="cls-hd"><span class="stereo">«UUserWidget»</span><h3>UFullInventoryWidget</h3><div class="file">Voxel/FullInventoryWidget.h</div></div>
+    <div class="cls-note">Puni inventar: 27 main + 9 hotbar + 2×2 crafting + output + cursor slot za drag&amp;drop.</div>
+    <div class="cmp"><div class="cmp-t">Atributi</div><ul>
+      <li><span class="v pub">+</span> MainInventoryGrid / CraftingGrid <span class="ty">: UUniformGridPanel* «BindWidget»</span></li>
+      <li><span class="v pub">+</span> HotbarRow / HorizontalBox_CraftingOutput <span class="ty">: UHorizontalBox* «BindWidget»</span></li>
+      <li><span class="v pub">+</span> CanvasPanel <span class="ty">: UCanvasPanel* «BindWidget»</span></li>
+      <li><span class="v pub">+</span> InventorySlotWidgetClass <span class="ty">: TSubclassOf&lt;UInventorySlotWidget&gt;</span></li>
+      <li><span class="v pub">+</span> ItemDataTable <span class="ty">: UDataTable*</span></li>
+      <li><span class="v pub">+</span> CursorSlotSize / CursorOffset <span class="ty">: FVector2D</span></li>
+      <li><span class="v prot">#</span> MainSlotWidgets / HotbarSlotWidgets / CraftingSlotWidgets <span class="ty">: TArray&lt;…&gt;</span></li>
+      <li><span class="v prot">#</span> OutputSlotWidget / CursorSlot <span class="ty">: UInventorySlotWidget*</span></li>
+      <li><span class="v prot">#</span> PlayerCharacter <span class="ty">: AFirstPersonCharacter*</span></li>
+      <li><span class="v prot">#</span> InventoryComp <span class="ty">: UInventoryComponent*</span></li>
+    </ul></div>
+    <div class="cmp"><div class="cmp-t">Operacije</div><ul>
+      <li><span class="v pub">+</span> CreateMainSlots() / CreateHotbarSlots() <span class="ty">: void</span></li>
+      <li><span class="v pub">+</span> CreateCraftingSlots() / CreateCursorSlot() <span class="ty">: void</span></li>
+      <li><span class="v pub">+</span> RefreshAllSlots() / InitializeInventory() <span class="ty">: void</span></li>
+      <li><span class="v pub">+</span> HandleSlotClicked(int32) <span class="ty">: void</span></li>
+      <li><span class="v pub">+</span> UpdateCursorSlot() <span class="ty">: void</span></li>
+      <li><span class="v pub">+</span> SetPlayerCharacter(AFirstPersonCharacter*) <span class="ty">: void</span></li>
+      <li><span class="v pub">+</span> GetInventoryComponent() <span class="ty">: UInventoryComponent*</span></li>
+      <li><span class="v prot">#</span> <span class="virt">NativeConstruct()</span> / <span class="virt">NativeDestruct()</span> / <span class="virt">NativeTick(…)</span> <span class="ty">: void</span></li>
+      <li><span class="v priv">−</span> CreateSlotWidget(int32) <span class="ty">: UInventorySlotWidget*</span></li>
+      <li><span class="v priv">−</span> OnSlotClickedHandler(int32) <span class="ty">: void</span></li>
+    </ul></div>
+  </div>
+
+  <div class="cls cat-ui" data-name="UInventorySlotWidget slot ui ikona">
+    <div class="cls-hd"><span class="stereo">«UUserWidget»</span><h3>UInventorySlotWidget</h3><div class="file">Voxel/InventorySlotWidget.h</div></div>
+    <div class="cls-note">Jedan slot: ikona, količina, obrub selekcije, klik event.</div>
+    <div class="cmp"><div class="cmp-t">Atributi</div><ul>
+      <li><span class="v pub">+</span> ItemIcon <span class="ty">: UImage* «BindWidget»</span></li>
+      <li><span class="v pub">+</span> QuantityText <span class="ty">: UTextBlock* «BindWidget»</span></li>
+      <li><span class="v pub">+</span> SlotBorder <span class="ty">: UBorder* «BindWidget»</span></li>
+      <li><span class="v pub">+</span> ClickButton <span class="ty">: UButton* «BindWidgetOptional»</span></li>
+      <li><span class="v pub">+</span> SelectedBorderColor / DefaultBorderColor / EmptySlotColor <span class="ty">: FLinearColor</span></li>
+      <li><span class="v pub">+</span> ItemDataTable <span class="ty">: UDataTable*</span></li>
+      <li><span class="v pub">+</span> SlotIndex <span class="ty">: int32 = -1</span></li>
+      <li><span class="v pub">+</span> OnSlotClicked <span class="ty">: FOnSlotClicked</span></li>
+      <li><span class="v prot">#</span> bIsEmpty / bIsSelected <span class="ty">: bool</span></li>
+      <li><span class="v prot">#</span> CurrentItemType <span class="ty">: EItemType</span>, CurrentQuantity <span class="ty">: int32</span></li>
+    </ul></div>
+    <div class="cmp"><div class="cmp-t">Operacije</div><ul>
+      <li><span class="v pub">+</span> SetSelected(bool) <span class="ty">: void</span></li>
+      <li><span class="v pub">+</span> SetSlotData(EItemType, int32) <span class="ty">: void</span></li>
+      <li><span class="v pub">+</span> GetItemIcon(EItemType) <span class="ty">: UTexture2D*</span></li>
+      <li><span class="v pub">+</span> GetItemData(EItemType) <span class="ty">: FItemData</span></li>
+      <li><span class="v pub">+</span> IsSlotEmpty() / IsSlotSelected() <span class="ty">: bool</span></li>
+      <li><span class="v pub">+</span> GetCurrentItemType() / GetCurrentQuantity()</li>
+      <li><span class="v prot">#</span> <span class="virt">NativeConstruct()</span> <span class="ty">: void</span></li>
+      <li><span class="v prot">#</span> <span class="virt">NativeOnMouseButtonDown(FGeometry&amp;, FPointerEvent&amp;)</span> <span class="ty">: FReply</span></li>
+      <li><span class="v priv">−</span> UpdateIconVisual / UpdateQuantityVisual / UpdateTooltip <span class="ty">: void</span></li>
+      <li><span class="v priv">−</span> ClearSlotVisual() / OnClickButtonClicked() <span class="ty">: void</span></li>
+    </ul></div>
+  </div>
+
+  <div class="cls cat-ui" data-name="UBlockInventoryWidget block inventory tekst">
+    <div class="cls-hd"><span class="stereo">«UUserWidget»</span><h3>UBlockInventoryWidget</h3><div class="file">Voxel/BlockInventoryWidget.h</div></div>
+    <div class="cls-note">Tekstualni popis blok itema s highlightom trenutne selekcije.</div>
+    <div class="cmp"><div class="cmp-t">Atributi</div><ul>
+      <li><span class="v prot">#</span> BlockTextWidgets <span class="ty">: TArray&lt;UBlockInventoryItemWidget*&gt;</span></li>
+      <li><span class="v prot">#</span> PlayerCharacter <span class="ty">: AFirstPersonCharacter*</span></li>
+      <li><span class="v prot">#</span> CurrentSelectedIndex <span class="ty">: int32 = 0</span></li>
+    </ul></div>
+    <div class="cmp"><div class="cmp-t">Operacije</div><ul>
+      <li><span class="v pub">+</span> UpdateBlockHighlight(int32) <span class="ty">: void</span></li>
+      <li><span class="v pub">+</span> HandleInventoryChanged(EItemType, int32, int32) <span class="ty">: void</span></li>
+      <li><span class="v pub">+</span> HandleSelectedItemChanged(int32, EItemType) <span class="ty">: void</span></li>
+      <li><span class="v pub">+</span> RefreshUI() / InitializeBlockInventory() <span class="ty">: void</span></li>
+      <li><span class="v pub">+</span> GetPlayerCharacter() <span class="ty">: AFirstPersonCharacter*</span></li>
+      <li><span class="v prot">#</span> <span class="virt">NativeConstruct()</span> / <span class="virt">NativeDestruct()</span> <span class="ty">: void</span></li>
+      <li><span class="v priv">−</span> BindDelegates() / UnbindDelegates() <span class="ty">: void</span></li>
+      <li><span class="v priv">−</span> OnSelectedItemChangedHandler(int32, EItemType) <span class="ty">: void</span></li>
+    </ul></div>
+  </div>
+
+  <div class="cls cat-ui" data-name="UBlockInventoryItemWidget stavka teksta">
+    <div class="cls-hd"><span class="stereo">«UUserWidget»</span><h3>UBlockInventoryItemWidget</h3><div class="file">Voxel/BlockInventoryItemWidget.h</div></div>
+    <div class="cmp"><div class="cmp-t">Atributi</div><ul>
+      <li><span class="v pub">+</span> TextItemName / TextItemCount <span class="ty">: UTextBlock* «BindWidget»</span></li>
+      <li><span class="v pub">+</span> SelectedColor / DefaultColor <span class="ty">: FLinearColor</span></li>
+      <li><span class="v prot">#</span> ItemType <span class="ty">: EItemType</span>, ItemCount <span class="ty">: int32</span>, bIsSelected <span class="ty">: bool</span></li>
+    </ul></div>
+    <div class="cmp"><div class="cmp-t">Operacije</div><ul>
+      <li><span class="v pub">+</span> SetItemType(EItemType) / SetItemCount(int32) <span class="ty">: void</span></li>
+      <li><span class="v pub">+</span> SetSelected(bool) <span class="ty">: void</span></li>
+      <li><span class="v pub">+</span> GetItemType() / GetItemCount() / IsSelected()</li>
+    </ul></div>
+  </div>
+
+</div>
+
+<!-- ============================================================= -->
+<h2><span class="num">9.</span>Framework: GameMode, kontroleri, kamera</h2>
+
+<div class="grid">
+
+  <div class="cls cat-ai" data-name="AFirstPersonGameMode gamemode">
+    <div class="cls-hd"><span class="stereo">«AGameModeBase, abstract»</span><h3 class="abs">AFirstPersonGameMode</h3><div class="file">Voxel/FirstPersonGameMode.h</div></div>
+    <div class="cls-note">GameMode voxel igre. U World Settings postavlja se <code>BP_FirstPersonGameMode</code>.</div>
+    <div class="cmp"><div class="cmp-t">Operacije</div><ul>
+      <li><span class="v pub">+</span> AFirstPersonGameMode()</li>
+    </ul></div>
+  </div>
+
+  <div class="cls cat-ai" data-name="AFirstPersonPlayerController kontroler input mapping">
+    <div class="cls-hd"><span class="stereo">«APlayerController, abstract»</span><h3 class="abs">AFirstPersonPlayerController</h3><div class="file">Voxel/FirstPersonPlayerController.h</div></div>
+    <div class="cls-note">Prebacuje input mapping kontekst između gameplaya i otvorenog inventara.</div>
+    <div class="cmp"><div class="cmp-t">Atributi</div><ul>
+      <li><span class="v prot">#</span> DefaultMappingContexts <span class="ty">: TArray&lt;UInputMappingContext*&gt;</span></li>
+      <li><span class="v prot">#</span> InventoryMappingContexts <span class="ty">: TArray&lt;UInputMappingContext*&gt;</span></li>
+    </ul></div>
+    <div class="cmp"><div class="cmp-t">Operacije</div><ul>
+      <li><span class="v pub">+</span> SetInventoryInputMode(bool) <span class="ty">: void</span></li>
+      <li><span class="v prot">#</span> <span class="virt">BeginPlay()</span> / <span class="virt">SetupInputComponent()</span> <span class="ty">: void</span></li>
+    </ul></div>
+  </div>
+
+  <div class="cls cat-ai" data-name="AFirstPersonCameraManager kamera pitch">
+    <div class="cls-hd"><span class="stereo">«APlayerCameraManager»</span><h3>AFirstPersonCameraManager</h3><div class="file">Voxel/FirstPersonCameraManager.h</div></div>
+    <div class="cls-note">Ograničava min/max pitch pogleda.</div>
+    <div class="cmp"><div class="cmp-t">Operacije</div><ul>
+      <li><span class="v pub">+</span> AFirstPersonCameraManager()</li>
+    </ul></div>
+  </div>
+
+  <div class="cls cat-ai" data-name="AMinecraftCloneGameMode AMinecraftClonePlayerController template">
+    <div class="cls-hd"><span class="stereo">«AGameModeBase / APlayerController, abstract»</span><h3 class="abs">AMinecraftCloneGameMode &nbsp;·&nbsp; AMinecraftClonePlayerController</h3><div class="file">MinecraftCloneGameMode.h · MinecraftClonePlayerController.h</div></div>
+    <div class="cls-note">Preostali third-person predložak. Kontroler drži i mobilne kontrole (widget + isključeni mapping konteksti).</div>
+    <div class="cmp"><div class="cmp-t">Atributi (kontroler)</div><ul>
+      <li><span class="v prot">#</span> DefaultMappingContexts <span class="ty">: TArray&lt;UInputMappingContext*&gt;</span></li>
+      <li><span class="v prot">#</span> MobileExcludedMappingContexts <span class="ty">: TArray&lt;UInputMappingContext*&gt;</span></li>
+      <li><span class="v prot">#</span> MobileControlsWidgetClass <span class="ty">: TSubclassOf&lt;UUserWidget&gt;</span></li>
+      <li><span class="v prot">#</span> MobileControlsWidget <span class="ty">: UUserWidget*</span></li>
+    </ul></div>
+    <div class="cmp"><div class="cmp-t">Operacije</div><ul>
+      <li><span class="v prot">#</span> <span class="virt">BeginPlay()</span> / <span class="virt">SetupInputComponent()</span> <span class="ty">: void</span></li>
+    </ul></div>
+  </div>
+
+</div>
+
+<!-- ============================================================= -->
+<h2><span class="num">10.</span>Enumeracije</h2>
+<div class="grid">
+
+  <div class="enum">
+    <span class="stereo">«UENUM : uint8»</span>
+    <h4>EBlockType</h4>
+    <ol start="0">
+      <li>Air <span>— prazan prostor, ne renderira se</span></li>
+      <li>Dirt</li><li>Stone</li><li>Grass</li>
+      <li>OakLog</li><li>BirchLog</li>
+      <li>OakLeaves</li><li>BirchLeaves</li>
+      <li>OakPlanks</li><li>BirchPlanks</li>
+      <li>CraftingTable</li>
+    </ol>
+  </div>
+
+  <div class="enum">
+    <span class="stereo">«UENUM : uint8»</span>
+    <h4>EItemType</h4>
+    <ol start="0">
+      <li>None</li>
+      <li>Dirt</li><li>Stone</li><li>Grass</li>
+      <li>OakLog</li><li>BirchLog</li>
+      <li>OakSapling</li><li>BirchSapling</li>
+      <li>OakPlanks</li><li>BirchPlanks</li>
+      <li>Stick</li><li>CraftingTable</li>
+      <li>Wool <span>— drop ovce</span></li>
+      <li>WoodenSword</li><li>StoneSword</li>
+      <li>IronSword</li><li>DiamondSword</li>
+    </ol>
+  </div>
+
+  <div class="enum">
+    <span class="stereo">«UENUM : uint8»</span>
+    <h4>ETreeType</h4>
+    <ol start="0"><li>Oak <span>— deblo 4–6 blokova</span></li><li>Birch <span>— deblo 5–7 blokova</span></li></ol>
+  </div>
+
+  <div class="enum">
+    <span class="stereo">«UENUM : uint8»</span>
+    <h4>EDayPhase</h4>
+    <ol start="0"><li>Dawn</li><li>Day</li><li>Dusk</li><li>Night</li></ol>
+  </div>
+
+  <div class="enum">
+    <span class="stereo">«UENUM : uint8»</span>
+    <h4>ECraftingRecipeType</h4>
+    <ol start="0">
+      <li>Shapeless <span>— pozicija nije bitna</span></li>
+      <li>Shaped <span>— oblik patterna je bitan</span></li>
+    </ol>
+  </div>
+
+</div>
+
+<!-- ============================================================= -->
+<h2><span class="num">11.</span>Delegati (eventi)</h2>
+<div class="rel-wrap">
+<table>
+  <thead><tr><th class="mono">Delegat</th><th class="mono">Potpis</th><th>Vlasnik</th><th>Pretplatnici</th></tr></thead>
+  <tbody>
+    <tr>
+      <td class="mono">FOnSlotChanged</td>
+      <td class="mono">(int32 SlotIndex, FInventorySlot NewSlot)</td>
+      <td class="mono">UInventoryComponent</td>
+      <td class="mono">UHotbarWidget, UFullInventoryWidget</td>
+    </tr>
+    <tr>
+      <td class="mono">FOnSelectedItemChanged</td>
+      <td class="mono">(int32 NewIndex, EItemType NewItemType)</td>
+      <td class="mono">AFirstPersonCharacter</td>
+      <td class="mono">UHotbarWidget, UBlockInventoryWidget</td>
+    </tr>
+    <tr>
+      <td class="mono">FOnInventoryToggled</td>
+      <td class="mono">(bool bIsOpen)</td>
+      <td class="mono">AFirstPersonCharacter</td>
+      <td class="mono">UI (Blueprint), AFirstPersonPlayerController</td>
+    </tr>
+    <tr>
+      <td class="mono">FOnSlotClicked</td>
+      <td class="mono">(int32 SlotIndex)</td>
+      <td class="mono">UInventorySlotWidget</td>
+      <td class="mono">UFullInventoryWidget</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+
+<!-- ============================================================= -->
+<h2><span class="num">12.</span>Odnosi među klasama</h2>
+<p class="lead">Asocijacije, kompozicije i ovisnosti izvan nasljeđivanja iz odjeljka 2.</p>
+
+<h3 class="secsub">Svijet i blokovi</h3>
+<div class="rel-wrap">
+<table>
+  <thead><tr><th class="mono">Izvor</th><th>Odnos</th><th class="mono">Cilj</th><th>Opis</th></tr></thead>
+  <tbody>
+    <tr><td class="mono">AVoxelWorld</td><td class="arrow">◇— 0..1</td><td class="mono">ABlock</td><td><code>Blocks</code> — u praksi najviše jedan promovirani (fokusirani) blok</td></tr>
+    <tr><td class="mono">AVoxelWorld</td><td class="arrow">◆— *</td><td class="mono">FBlockInstanceSet</td><td><code>InstanceSets</code> — jedna ISM komponenta po tipu bloka</td></tr>
+    <tr><td class="mono">AVoxelWorld</td><td class="arrow">◆— *</td><td class="mono">FBlockAssets</td><td><code>BlockAssetCache</code> — razriješeni mesh/materijali</td></tr>
+    <tr><td class="mono">AVoxelWorld</td><td class="arrow">- - ▷</td><td class="mono">UBlockRegistry</td><td>dohvat definicija pri generiranju svijeta</td></tr>
+    <tr><td class="mono">AVoxelWorld</td><td class="arrow">- - ▷</td><td class="mono">FTreeGenerator</td><td><code>GenerateTrees()</code></td></tr>
+    <tr><td class="mono">AVoxelWorld</td><td class="arrow">- - ▷</td><td class="mono">AZombie, ASheep</td><td><code>SpawnEnemies()</code>, <code>SpawnMobs()</code></td></tr>
+    <tr><td class="mono">ABlock</td><td class="arrow">- - ▷</td><td class="mono">AItemDrop</td><td>spawn dropa pri uništenju</td></tr>
+    <tr><td class="mono">ABlock</td><td class="arrow">- - ▷</td><td class="mono">FBlockDefinition, FBlockAssets</td><td><code>InitializeFromRegistry()</code></td></tr>
+    <tr><td class="mono">ABlock</td><td class="arrow">- - ▷</td><td class="mono">AVoxelWorld</td><td><code>NotifyBlockDestroyed()</code> (povratni poziv)</td></tr>
+    <tr><td class="mono">FTreeGenerator</td><td class="arrow">- - ▷</td><td class="mono">AVoxelWorld</td><td>postavlja blokove debla i krošnje</td></tr>
+    <tr><td class="mono">AItemDrop</td><td class="arrow">- - ▷</td><td class="mono">UBlockRegistry</td><td><code>InitializeFromRegistry()</code> — mesh i materijal itema</td></tr>
+    <tr><td class="mono">AItemDrop</td><td class="arrow">- - ▷</td><td class="mono">UInventoryComponent</td><td><code>AddItem()</code> pri automatskom pickupu</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h3 class="secsub">Igrač, inventar, crafting</h3>
+<div class="rel-wrap">
+<table>
+  <thead><tr><th class="mono">Izvor</th><th>Odnos</th><th class="mono">Cilj</th><th>Opis</th></tr></thead>
+  <tbody>
+    <tr><td class="mono">AFirstPersonCharacter</td><td class="arrow">◆— 1</td><td class="mono">UCameraComponent</td><td><code>FirstPersonCameraComponent</code></td></tr>
+    <tr><td class="mono">AFirstPersonCharacter</td><td class="arrow">◆— 1</td><td class="mono">UInventoryComponent</td><td>inventar igrača</td></tr>
+    <tr><td class="mono">AFirstPersonCharacter</td><td class="arrow">◆— 1</td><td class="mono">UFirstPersonArmComponent</td><td>viewmodel ruke</td></tr>
+    <tr><td class="mono">AFirstPersonCharacter</td><td class="arrow">◇— 1</td><td class="mono">AVoxelWorld</td><td>referenca pronađena u <code>BeginPlay</code></td></tr>
+    <tr><td class="mono">AFirstPersonCharacter</td><td class="arrow">◇— 0..1</td><td class="mono">ABlock</td><td><code>CurrentlyLookedAtBlock</code> iz raycasta</td></tr>
+    <tr><td class="mono">AFirstPersonCharacter</td><td class="arrow">- - ▷</td><td class="mono">ACreatureBase</td><td><code>MeleeTrace()</code> → <code>TakeDamage()</code> + knockback</td></tr>
+    <tr><td class="mono">AFirstPersonCharacter</td><td class="arrow">- - ▷</td><td class="mono">UWeaponDataLibrary, FWeaponData</td><td>statistike opremljenog oružja</td></tr>
+    <tr><td class="mono">UInventoryComponent</td><td class="arrow">◆— 41</td><td class="mono">FInventorySlot</td><td>36 inventarnih + 5 crafting slotova + held item</td></tr>
+    <tr><td class="mono">UInventoryComponent</td><td class="arrow">- - ▷</td><td class="mono">UCraftingRecipeRegistry</td><td><code>UpdateCraftingOutput()</code> → <code>FindMatchingRecipe()</code></td></tr>
+    <tr><td class="mono">UInventoryComponent</td><td class="arrow">◇— 0..1</td><td class="mono">FCraftingRecipe</td><td><code>CurrentRecipe</code> — trenutni match</td></tr>
+    <tr><td class="mono">UFirstPersonArmComponent</td><td class="arrow">◇— 1</td><td class="mono">AFirstPersonCharacter</td><td><code>OwnerCharacter</code>, <code>OwnerCamera</code></td></tr>
+  </tbody>
+</table>
+</div>
+
+<h3 class="secsub">Registri</h3>
+<div class="rel-wrap">
+<table>
+  <thead><tr><th class="mono">Izvor</th><th>Odnos</th><th class="mono">Cilj</th><th>Opis</th></tr></thead>
+  <tbody>
+    <tr><td class="mono">UBlockRegistry</td><td class="arrow">◆— *</td><td class="mono">FBlockDefinition</td><td><code>BlockDefinitions</code></td></tr>
+    <tr><td class="mono">UBlockRegistry</td><td class="arrow">◆— *</td><td class="mono">FItemDefinition</td><td><code>ItemDefinitions</code></td></tr>
+    <tr><td class="mono">UCraftingRecipeRegistry</td><td class="arrow">◆— *</td><td class="mono">FCraftingRecipe</td><td><code>Recipes</code>, učitani iz JSON-a</td></tr>
+    <tr><td class="mono">FCraftingRecipe</td><td class="arrow">◆— 1</td><td class="mono">FCraftingResult</td><td><code>Result</code></td></tr>
+    <tr><td class="mono">FCraftingRecipe</td><td class="arrow">◆— *</td><td class="mono">FCraftingIngredient</td><td><code>Ingredients</code> (shapeless)</td></tr>
+    <tr><td class="mono">UWeaponDataLibrary</td><td class="arrow">◆— *</td><td class="mono">FWeaponData</td><td>statički registar oružja</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h3 class="secsub">AI i bića</h3>
+<div class="rel-wrap">
+<table>
+  <thead><tr><th class="mono">Izvor</th><th>Odnos</th><th class="mono">Cilj</th><th>Opis</th></tr></thead>
+  <tbody>
+    <tr><td class="mono">AEnemyAIController</td><td class="arrow">◇— 1</td><td class="mono">AEnemyBase</td><td>possess; pokreće BT s pawna</td></tr>
+    <tr><td class="mono">AMobAIController</td><td class="arrow">◇— 1</td><td class="mono">AMobBase</td><td>possess; upravlja <code>ThreatActor</code> ključem</td></tr>
+    <tr><td class="mono">ACreatureBase</td><td class="arrow">◆— 1</td><td class="mono">UNavigationInvokerComponent</td><td>lokalna navmesh generacija oko moba</td></tr>
+    <tr><td class="mono">ACreatureBase</td><td class="arrow">◇— 1</td><td class="mono">UBehaviorTree</td><td>asset koji kontroler pokreće</td></tr>
+    <tr><td class="mono">UBTService_FindPlayer</td><td class="arrow">- - ▷</td><td class="mono">AEnemyBase</td><td>upisuje igrača u <code>TargetActorKey</code></td></tr>
+    <tr><td class="mono">UBTService_DetectThreat</td><td class="arrow">- - ▷</td><td class="mono">AMobBase</td><td>čita <code>ThreatDetectionRange</code> / <code>FleeDistance</code></td></tr>
+    <tr><td class="mono">UBTTask_EnemyAttack</td><td class="arrow">- - ▷</td><td class="mono">AEnemyBase</td><td><code>CanAttack()</code> → <code>PerformAttack()</code></td></tr>
+    <tr><td class="mono">UBTTask_FindWanderLocation</td><td class="arrow">- - ▷</td><td class="mono">ACreatureBase</td><td>čita <code>GetWanderRadius()</code></td></tr>
+    <tr><td class="mono">UBTTask_FindFleeLocation</td><td class="arrow">- - ▷</td><td class="mono">AMobBase</td><td>čita <code>GetFleeDistance()</code></td></tr>
+    <tr><td class="mono">ASheep</td><td class="arrow">- - ▷</td><td class="mono">AItemDrop</td><td><code>DropWool()</code> na smrti (1–3 vune)</td></tr>
+    <tr><td class="mono">AEnemySpawnPoint</td><td class="arrow">- - ▷</td><td class="mono">AEnemyBase</td><td><code>SpawnEnemy()</code></td></tr>
+  </tbody>
+</table>
+</div>
+
+<h3 class="secsub">Korisničko sučelje</h3>
+<div class="rel-wrap">
+<table>
+  <thead><tr><th class="mono">Izvor</th><th>Odnos</th><th class="mono">Cilj</th><th>Opis</th></tr></thead>
+  <tbody>
+    <tr><td class="mono">UHotbarWidget</td><td class="arrow">◆— 9</td><td class="mono">UInventorySlotWidget</td><td><code>SlotWidgets</code></td></tr>
+    <tr><td class="mono">UFullInventoryWidget</td><td class="arrow">◆— 42</td><td class="mono">UInventorySlotWidget</td><td>27 main + 9 hotbar + 4 crafting + output + cursor</td></tr>
+    <tr><td class="mono">UBlockInventoryWidget</td><td class="arrow">◆— *</td><td class="mono">UBlockInventoryItemWidget</td><td><code>BlockTextWidgets</code></td></tr>
+    <tr><td class="mono">UHotbarWidget, UFullInventoryWidget, UBlockInventoryWidget</td><td class="arrow">◇— 1</td><td class="mono">AFirstPersonCharacter</td><td><code>PlayerCharacter</code> + pretplata na delegate</td></tr>
+    <tr><td class="mono">UInventorySlotWidget, UHotbarWidget, UFullInventoryWidget</td><td class="arrow">◇— 1</td><td class="mono">UDataTable</td><td><code>ItemDataTable</code> → <code>FItemData</code></td></tr>
+  </tbody>
+</table>
+</div>
+
+<!-- ============================================================= -->
+<h2><span class="num">13.</span>Ključni tokovi</h2>
+<div class="rel-wrap">
+<table>
+  <thead><tr><th>Tok</th><th>Slijed</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><b>Generiranje svijeta</b></td>
+      <td class="mono">AVoxelWorld::BeginPlay → BuildBlockAssetCache (UBlockRegistry) → GenerateWorld (batch ISM instance) → GenerateTrees (FTreeGenerator) → SpawnEnemies / SpawnMobs</td>
+    </tr>
+    <tr>
+      <td><b>Fokus na blok</b></td>
+      <td class="mono">AFirstPersonCharacter::UpdateBlockLookAt → AVoxelWorld::ResolveHitToGrid → PromoteToActor → ABlock::SetHighlighted; kad fokus ode → DemoteToInstance</td>
+    </tr>
+    <tr>
+      <td><b>Kopanje bloka (LMB)</b></td>
+      <td class="mono">StartAttack → ABlock::AddDestroyProgress(Δt) → AItemDrop::SpawnItemDrop → AVoxelWorld::NotifyBlockDestroyed → OnLogDestroyed → leaf decay</td>
+    </tr>
+    <tr>
+      <td><b>Pickup itema</b></td>
+      <td class="mono">AItemDrop::OnOverlapBegin → UInventoryComponent::AddItem → OnSlotChanged → UHotbarWidget::HandleSlotChanged</td>
+    </tr>
+    <tr>
+      <td><b>Postavljanje bloka (RMB)</b></td>
+      <td class="mono">PlaceBlock → GetSelectedItemType → UBlockRegistry::GetBlockTypeForItem → AVoxelWorld::PlaceBlockAt → RemoveItem</td>
+    </tr>
+    <tr>
+      <td><b>Crafting</b></td>
+      <td class="mono">SetSlot(36–39) → UpdateCraftingOutput → UCraftingRecipeRegistry::FindMatchingRecipe → slot 40; preuzimanje outputa → ConsumeRecipeIngredients</td>
+    </tr>
+    <tr>
+      <td><b>Melee napad</b></td>
+      <td class="mono">StartAttack → GetEquippedWeaponData (UWeaponDataLibrary) → CalculateDamageMultiplier → MeleeTrace → ACreatureBase::TakeDamage → OnDeath (npr. ASheep::DropWool)</td>
+    </tr>
+    <tr>
+      <td><b>Bijeg ovce</b></td>
+      <td class="mono">AMobBase::OnDamageTaken → AMobAIController::SetThreatActor → UBTService_DetectThreat → UBTTask_FindFleeLocation → MoveTo</td>
+    </tr>
+    <tr>
+      <td><b>Leaf decay</b></td>
+      <td class="mono">OnLogDestroyed → LeavesToCheck → timer → ProcessLeafDecay → HasLogConnection (BFS, Manhattan ≤ 6) → DestroyBlockAt (5 % šansa za sadnicu)</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+
+<footer>
+  Generirano iz <code>Source/MinecraftClone/</code> — 42 headera, modul <code>MINECRAFTCLONE_API</code>, Unreal Engine 5.6.<br>
+  Ovisnosti modula: Core, CoreUObject, Engine, InputCore, EnhancedInput, UMG, Slate.
+</footer>
+
+</div>
+
+<script>
+(function(){
+  var input = document.getElementById('search');
+  var cards = Array.prototype.slice.call(document.querySelectorAll('.cls'));
+  input.addEventListener('input', function(){
+    var q = input.value.trim().toLowerCase();
+    cards.forEach(function(c){
+      if(!q){ c.classList.remove('hidden'); return; }
+      var hay = (c.getAttribute('data-name') || '') + ' ' + c.textContent.toLowerCase();
+      c.classList.toggle('hidden', hay.toLowerCase().indexOf(q) === -1);
+    });
+  });
+})();
+</script>
+</body>
+</html>

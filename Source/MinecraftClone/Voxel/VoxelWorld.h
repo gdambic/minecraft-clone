@@ -9,9 +9,24 @@
 
 class ABlock;
 class AZombie;
-class ASheep;
+class AMobBase;
 class UInstancedStaticMeshComponent;
 struct FHitResult;
+
+/** Jedan unos u spawn listi pasivnih mobova: koja klasa i koliko komada. */
+USTRUCT(BlueprintType)
+struct FMobSpawnEntry
+{
+	GENERATED_BODY()
+
+	/** Blueprint klasa moba (BP_Sheep, BP_Pig...) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Mob")
+	TSubclassOf<AMobBase> MobClass;
+
+	/** Broj primjeraka za spawnati */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Mob")
+	int32 Count = 3;
+};
 
 /**
  * Instance set za jedan tip bloka: ISM komponenta + dvosmjerni bookkeeping
@@ -78,13 +93,9 @@ public:
 
 	// === MOBS (Passive) ===
 
-	/** Blueprint klasa za ovcu - postaviti BP_Sheep */
+	/** Pasivni mobovi koji se spawnaju pri generiranju svijeta */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "World|Mobs")
-	TSubclassOf<ASheep> SheepClass;
-
-	/** Broj ovaca za spawnati */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "World|Mobs")
-	int32 SheepCount = 3;
+	TArray<FMobSpawnEntry> MobSpawns;
 
 	// === LEAF DECAY ===
 

@@ -1,13 +1,13 @@
-#include "Sheep.h"
+#include "Pig.h"
 #include "HeadLookComponent.h"
 #include "ItemDrop.h"
 #include "ItemType.h"
 
-ASheep::ASheep()
+APig::APig()
 {
 	// Minecraft-accurate values
-	MaxHealth = 8.0f;         // 4 hearts
-	WalkSpeed = 140.0f;       // Slower than most mobs
+	MaxHealth = 10.0f;        // 5 hearts
+	WalkSpeed = 150.0f;       // Slightly faster than sheep
 	WanderRadius = 500.0f;
 
 	// Flee behavior
@@ -17,33 +17,33 @@ ASheep::ASheep()
 	HeadLook = CreateDefaultSubobject<UHeadLookComponent>(TEXT("HeadLook"));
 }
 
-void ASheep::Tick(float DeltaTime)
+void APig::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
 
-	// A fleeing sheep has no time for curiosity
+	// A fleeing pig has no time for curiosity
 	HeadLook->SetSuppressed(GetCurrentThreat() != nullptr);
 }
 
-void ASheep::OnDeath()
+void APig::OnDeath()
 {
-	// Drop wool before destroying
-	DropWool();
+	// Drop porkchops before destroying
+	DropPorkchops();
 
 	// Call parent implementation (destroys actor)
 	Super::OnDeath();
 }
 
-void ASheep::DropWool()
+void APig::DropPorkchops()
 {
 	if (!GetWorld()) return;
 
 	// Calculate random drop amount
-	int32 DropCount = FMath::RandRange(WoolDropMin, WoolDropMax);
+	int32 DropCount = FMath::RandRange(PorkchopDropMin, PorkchopDropMax);
 
 	FVector SpawnLocation = GetActorLocation();
 
-	// Spawn wool drops
+	// Spawn porkchop drops
 	for (int32 i = 0; i < DropCount; ++i)
 	{
 		// Add small random offset so items don't stack perfectly
@@ -53,8 +53,8 @@ void ASheep::DropWool()
 			50.0f  // Spawn slightly above ground
 		);
 
-		AItemDrop::SpawnItemDrop(this, EItemType::Wool, SpawnLocation + Offset);
+		AItemDrop::SpawnItemDrop(this, EItemType::Porkchop, SpawnLocation + Offset);
 	}
 
-	UE_LOG(LogTemp, Log, TEXT("Sheep: Dropped %d wool"), DropCount);
+	UE_LOG(LogTemp, Log, TEXT("Pig: Dropped %d porkchops"), DropCount);
 }

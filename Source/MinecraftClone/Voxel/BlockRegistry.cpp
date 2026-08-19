@@ -50,14 +50,20 @@ void UBlockRegistry::RegisterAllBlocks()
 	const FString MeshPath = TEXT("/Engine/BasicShapes/Cube.Cube");
 	const FString HighlightPath = TEXT("/Game/Blueprints/Materials/M_BlockHighlight.M_BlockHighlight");
 
-	// Megascans materijali
-	const FString DirtMaterial = TEXT("/Game/Fab/Megascans/Surfaces/Military_Trenches_Ground_Dirt_Fine_01_yd0kabg/Raw/yd0kabg_tier_0/Materials/MI_yd0kabg.MI_yd0kabg");
-	const FString StoneMaterial = TEXT("/Game/Fab/Megascans/Surfaces/Stone_Gravel_Mix_sexidbcb/Raw/sexidbcb_tier_0/Materials/MI_sexidbcb.MI_sexidbcb");
-	const FString GrassMaterial = TEXT("/Game/Fab/Megascans/Surfaces/Mossy_Grass_vd3mebls/Raw/vd3mebls_tier_0/Materials/MI_vd3mebls.MI_vd3mebls");
-	const FString OakLogMaterial = TEXT("/Game/Fab/Megascans/Surfaces/Tree_Bark_vimmdcofw/Raw/vimmdcofw_tier_0/Materials/MI_vimmdcofw.MI_vimmdcofw");
-	const FString BirchLogMaterial = TEXT("/Game/Fab/Megascans/Surfaces/Pine_Bark_vmbibe2g/Raw/vmbibe2g_tier_0/Materials/MI_vmbibe2g.MI_vmbibe2g");
-	const FString LeavesMaterial = TEXT("/Game/Fab/Megascans/Surfaces/Uncut_Grass_oilpt20/Raw/oilpt20_tier_0/Materials/MI_oilpt20.MI_oilpt20");
-	const FString OakPlankMaterial = TEXT("/Game/Fab/Megascans/Surfaces/Wooden_Planks_vlznbajfw/Raw/vlznbajfw_tier_0/Materials/MI_vlznbajfw.MI_vlznbajfw");
+	// Pixel-art materijali generirani skriptom Scripts/build_block_materials.py
+	// iz tekstura u /Game/Blocks/Textures. Blok cija tekstura jos nije nacrtana
+	// nema MI asset - TryLoad vrati null, blok dobije default sivi materijal i
+	// pojavi se u [PERF] NEUSPJEH liniji. Vidi Docs/TEXTURE_SPEC.md.
+	const FString DirtMaterial = TEXT("/Game/Blocks/Materials/MI_Dirt.MI_Dirt");
+	const FString StoneMaterial = TEXT("/Game/Blocks/Materials/MI_Stone.MI_Stone");
+	const FString GrassMaterial = TEXT("/Game/Blocks/Materials/MI_Grass.MI_Grass");
+	const FString OakLogMaterial = TEXT("/Game/Blocks/Materials/MI_OakLog.MI_OakLog");
+	const FString BirchLogMaterial = TEXT("/Game/Blocks/Materials/MI_BirchLog.MI_BirchLog");
+	const FString OakLeavesMaterial = TEXT("/Game/Blocks/Materials/MI_OakLeaves.MI_OakLeaves");
+	const FString BirchLeavesMaterial = TEXT("/Game/Blocks/Materials/MI_BirchLeaves.MI_BirchLeaves");
+	const FString OakPlankMaterial = TEXT("/Game/Blocks/Materials/MI_OakPlanks.MI_OakPlanks");
+	const FString BirchPlankMaterial = TEXT("/Game/Blocks/Materials/MI_BirchPlanks.MI_BirchPlanks");
+	const FString CraftingTableMaterial = TEXT("/Game/Blocks/Materials/MI_CraftingTable.MI_CraftingTable");
 
 	// === DIRT ===
 	{
@@ -144,7 +150,7 @@ void UBlockRegistry::RegisterAllBlocks()
 		Def.TimeToDestroy = 0.5f;
 		Def.DisplayName = NSLOCTEXT("Blocks", "OakLeaves", "Oak Leaves");
 		Def.Mesh = FSoftObjectPath(MeshPath);
-		Def.Material = FSoftObjectPath(LeavesMaterial);
+		Def.Material = FSoftObjectPath(OakLeavesMaterial);
 		Def.HighlightMaterial = FSoftObjectPath(HighlightPath);
 		RegisterBlock(Def);
 	}
@@ -159,7 +165,7 @@ void UBlockRegistry::RegisterAllBlocks()
 		Def.TimeToDestroy = 0.5f;
 		Def.DisplayName = NSLOCTEXT("Blocks", "BirchLeaves", "Birch Leaves");
 		Def.Mesh = FSoftObjectPath(MeshPath);
-		Def.Material = FSoftObjectPath(LeavesMaterial);
+		Def.Material = FSoftObjectPath(BirchLeavesMaterial);
 		Def.HighlightMaterial = FSoftObjectPath(HighlightPath);
 		RegisterBlock(Def);
 	}
@@ -189,7 +195,7 @@ void UBlockRegistry::RegisterAllBlocks()
 		Def.TimeToDestroy = 2.0f;
 		Def.DisplayName = NSLOCTEXT("Blocks", "BirchPlanks", "Birch Planks");
 		Def.Mesh = FSoftObjectPath(MeshPath);
-		Def.Material = FSoftObjectPath(OakPlankMaterial);  // Koristi isti materijal za sada
+		Def.Material = FSoftObjectPath(BirchPlankMaterial);
 		Def.HighlightMaterial = FSoftObjectPath(HighlightPath);
 		RegisterBlock(Def);
 	}
@@ -204,7 +210,7 @@ void UBlockRegistry::RegisterAllBlocks()
 		Def.TimeToDestroy = 2.5f;
 		Def.DisplayName = NSLOCTEXT("Blocks", "CraftingTable", "Crafting Table");
 		Def.Mesh = FSoftObjectPath(MeshPath);
-		Def.Material = FSoftObjectPath(OakPlankMaterial);  // Koristi isti materijal za sada
+		Def.Material = FSoftObjectPath(CraftingTableMaterial);
 		Def.HighlightMaterial = FSoftObjectPath(HighlightPath);
 		RegisterBlock(Def);
 	}
@@ -215,14 +221,18 @@ void UBlockRegistry::RegisterAllItems()
 {
 	const FString MeshPath = TEXT("/Engine/BasicShapes/Cube.Cube");
 
-	// Megascans materijali (isti kao za blokove)
-	const FString DirtMaterial = TEXT("/Game/Fab/Megascans/Surfaces/Military_Trenches_Ground_Dirt_Fine_01_yd0kabg/Raw/yd0kabg_tier_0/Materials/MI_yd0kabg.MI_yd0kabg");
-	const FString StoneMaterial = TEXT("/Game/Fab/Megascans/Surfaces/Stone_Gravel_Mix_sexidbcb/Raw/sexidbcb_tier_0/Materials/MI_sexidbcb.MI_sexidbcb");
-	const FString GrassMaterial = TEXT("/Game/Fab/Megascans/Surfaces/Mossy_Grass_vd3mebls/Raw/vd3mebls_tier_0/Materials/MI_vd3mebls.MI_vd3mebls");
-	const FString OakLogMaterial = TEXT("/Game/Fab/Megascans/Surfaces/Tree_Bark_vimmdcofw/Raw/vimmdcofw_tier_0/Materials/MI_vimmdcofw.MI_vimmdcofw");
-	const FString BirchLogMaterial = TEXT("/Game/Fab/Megascans/Surfaces/Pine_Bark_vmbibe2g/Raw/vmbibe2g_tier_0/Materials/MI_vmbibe2g.MI_vmbibe2g");
-	const FString LeavesMaterial = TEXT("/Game/Fab/Megascans/Surfaces/Uncut_Grass_oilpt20/Raw/oilpt20_tier_0/Materials/MI_oilpt20.MI_oilpt20");
-	const FString OakPlankMaterial = TEXT("/Game/Fab/Megascans/Surfaces/Wooden_Planks_vlznbajfw/Raw/vlznbajfw_tier_0/Materials/MI_vlznbajfw.MI_vlznbajfw");
+	// Iste MI putanje kao za blokove - item drop mora izgledati kao blok iz kojeg
+	// je pao, pa se dvije liste moraju mijenjati zajedno.
+	const FString DirtMaterial = TEXT("/Game/Blocks/Materials/MI_Dirt.MI_Dirt");
+	const FString StoneMaterial = TEXT("/Game/Blocks/Materials/MI_Stone.MI_Stone");
+	const FString GrassMaterial = TEXT("/Game/Blocks/Materials/MI_Grass.MI_Grass");
+	const FString OakLogMaterial = TEXT("/Game/Blocks/Materials/MI_OakLog.MI_OakLog");
+	const FString BirchLogMaterial = TEXT("/Game/Blocks/Materials/MI_BirchLog.MI_BirchLog");
+	const FString OakLeavesMaterial = TEXT("/Game/Blocks/Materials/MI_OakLeaves.MI_OakLeaves");
+	const FString BirchLeavesMaterial = TEXT("/Game/Blocks/Materials/MI_BirchLeaves.MI_BirchLeaves");
+	const FString OakPlankMaterial = TEXT("/Game/Blocks/Materials/MI_OakPlanks.MI_OakPlanks");
+	const FString BirchPlankMaterial = TEXT("/Game/Blocks/Materials/MI_BirchPlanks.MI_BirchPlanks");
+	const FString CraftingTableMaterial = TEXT("/Game/Blocks/Materials/MI_CraftingTable.MI_CraftingTable");
 
 	// === DIRT ===
 	{
@@ -280,7 +290,7 @@ void UBlockRegistry::RegisterAllItems()
 		Def.ItemType = EItemType::OakSapling;
 		Def.DisplayName = NSLOCTEXT("Items", "OakSapling", "Oak Sapling");
 		Def.Mesh = FSoftObjectPath(MeshPath);
-		Def.Material = FSoftObjectPath(LeavesMaterial);
+		Def.Material = FSoftObjectPath(OakLeavesMaterial);
 		RegisterItem(Def);
 	}
 
@@ -290,7 +300,7 @@ void UBlockRegistry::RegisterAllItems()
 		Def.ItemType = EItemType::BirchSapling;
 		Def.DisplayName = NSLOCTEXT("Items", "BirchSapling", "Birch Sapling");
 		Def.Mesh = FSoftObjectPath(MeshPath);
-		Def.Material = FSoftObjectPath(LeavesMaterial);
+		Def.Material = FSoftObjectPath(BirchLeavesMaterial);
 		RegisterItem(Def);
 	}
 
@@ -310,7 +320,7 @@ void UBlockRegistry::RegisterAllItems()
 		Def.ItemType = EItemType::BirchPlanks;
 		Def.DisplayName = NSLOCTEXT("Items", "BirchPlanks", "Birch Planks");
 		Def.Mesh = FSoftObjectPath(MeshPath);
-		Def.Material = FSoftObjectPath(OakPlankMaterial);  // Koristi isti materijal za sada
+		Def.Material = FSoftObjectPath(BirchPlankMaterial);
 		RegisterItem(Def);
 	}
 
@@ -330,7 +340,7 @@ void UBlockRegistry::RegisterAllItems()
 		Def.ItemType = EItemType::CraftingTable;
 		Def.DisplayName = NSLOCTEXT("Items", "CraftingTable", "Crafting Table");
 		Def.Mesh = FSoftObjectPath(MeshPath);
-		Def.Material = FSoftObjectPath(OakPlankMaterial);  // Koristi planks materijal
+		Def.Material = FSoftObjectPath(CraftingTableMaterial);
 		RegisterItem(Def);
 	}
 
