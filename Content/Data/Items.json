@@ -1,0 +1,96 @@
+[
+  {
+    "itemType": "Dirt",
+    "displayName": "Dirt",
+    "material": "/Game/Blocks/Materials/MI_Dirt.MI_Dirt"
+  },
+  {
+    "itemType": "Stone",
+    "displayName": "Stone",
+    "material": "/Game/Blocks/Materials/MI_Stone.MI_Stone"
+  },
+  {
+    "itemType": "Grass",
+    "displayName": "Grass",
+    "material": "/Game/Blocks/Materials/MI_Grass.MI_Grass"
+  },
+  {
+    "itemType": "OakLog",
+    "displayName": "Oak Log",
+    "material": "/Game/Blocks/Materials/MI_OakLog.MI_OakLog"
+  },
+  {
+    "itemType": "BirchLog",
+    "displayName": "Birch Log",
+    "material": "/Game/Blocks/Materials/MI_BirchLog.MI_BirchLog"
+  },
+  {
+    "itemType": "OakSapling",
+    "displayName": "Oak Sapling",
+    "material": "/Game/Blocks/Materials/MI_OakLeaves.MI_OakLeaves"
+  },
+  {
+    "itemType": "BirchSapling",
+    "displayName": "Birch Sapling",
+    "material": "/Game/Blocks/Materials/MI_BirchLeaves.MI_BirchLeaves"
+  },
+  {
+    "itemType": "OakPlanks",
+    "displayName": "Oak Planks",
+    "material": "/Game/Blocks/Materials/MI_OakPlanks.MI_OakPlanks"
+  },
+  {
+    "itemType": "BirchPlanks",
+    "displayName": "Birch Planks",
+    "material": "/Game/Blocks/Materials/MI_BirchPlanks.MI_BirchPlanks"
+  },
+  {
+    "itemType": "Stick",
+    "displayName": "Stick",
+    "material": "/Game/Blocks/Materials/MI_OakLog.MI_OakLog"
+  },
+  {
+    "itemType": "CraftingTable",
+    "displayName": "Crafting Table",
+    "material": "/Game/Blocks/Materials/MI_CraftingTable.MI_CraftingTable"
+  },
+  {
+    "itemType": "Wool",
+    "displayName": "Wool"
+  },
+  {
+    "itemType": "WoodenSword",
+    "displayName": "Wooden Sword"
+  },
+  {
+    "itemType": "StoneSword",
+    "displayName": "Stone Sword"
+  },
+  {
+    "itemType": "IronSword",
+    "displayName": "Iron Sword"
+  },
+  {
+    "itemType": "DiamondSword",
+    "displayName": "Diamond Sword"
+  },
+  {
+    "itemType": "Porkchop",
+    "displayName": "Porkchop"
+  },
+  {
+    "itemType": "Andesite",
+    "displayName": "Andesite",
+    "material": "/Game/Blocks/Materials/MI_Andesite.MI_Andesite"
+  },
+  {
+    "itemType": "Basalt",
+    "displayName": "Basalt",
+    "material": "/Game/Blocks/Materials/MI_Basalt.MI_Basalt"
+  },
+  {
+    "itemType": "Limestone",
+    "displayName": "Limestone",
+    "material": "/Game/Blocks/Materials/MI_Limestone.MI_Limestone"
+  }
+]

@@ -1,13 +1,51 @@
 #include "BlockRegistry.h"
 #include "Engine/GameInstance.h"
 #include "Kismet/GameplayStatics.h"
+#include "Misc/FileHelper.h"
+#include "Misc/Paths.h"
+#include "JsonObjectConverter.h"
+#include "Serialization/JsonReader.h"
+#include "Serialization/JsonSerializer.h"
+
+namespace
+{
+	// Zajednicki defaulti - JSON ih navodi samo kad odstupa
+	const TCHAR* GDefaultBlockMeshPath = TEXT("/Engine/BasicShapes/Cube.Cube");
+	const TCHAR* GDefaultHighlightPath = TEXT("/Game/Blueprints/Materials/M_BlockHighlight.M_BlockHighlight");
+
+	/** Ucitaj Content/Data/<FileName> i deserijaliziraj kao JSON array. */
+	bool LoadJsonArrayFromContentData(const FString& FileName, TArray<TSharedPtr<FJsonValue>>& OutEntries)
+	{
+		const FString FullPath = FPaths::ProjectContentDir() / TEXT("Data") / FileName;
+
+		FString JsonString;
+		if (!FFileHelper::LoadFileToString(JsonString, *FullPath))
+		{
+			UE_LOG(LogTemp, Error, TEXT("BlockRegistry: ne mogu ucitati %s - svi tipovi ce dobiti fallback definicije"), *FullPath);
+			return false;
+		}
+
+		TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(JsonString);
+		if (!FJsonSerializer::Deserialize(Reader, OutEntries))
+		{
+			UE_LOG(LogTemp, Error, TEXT("BlockRegistry: neispravan JSON u %s - svi tipovi ce dobiti fallback definicije"), *FullPath);
+			return false;
+		}
+
+		return true;
+	}
+}
 
 void UBlockRegistry::Initialize(FSubsystemCollectionBase& Collection)
 {
 	Super::Initialize(Collection);
 
-	RegisterAllBlocks();
-	RegisterAllItems();
+	LoadBlocksFromJson();
+	LoadItemsFromJson();
+
+	// Fallback nakon oba loadera - rupa u JSON-u ne smije znaciti rupu u igri
+	RegisterFallbackBlocks();
+	RegisterFallbackItems();
 
 	UE_LOG(LogTemp, Log, TEXT("BlockRegistry: Initialized with %d blocks and %d items"),
 		BlockDefinitions.Num(), ItemDefinitions.Num());
@@ -44,306 +82,142 @@ void UBlockRegistry::RegisterItem(const FItemDefinition& Definition)
 	ItemDefinitions.Add(Definition.ItemType, Definition);
 }
 
-void UBlockRegistry::RegisterAllBlocks()
+void UBlockRegistry::LoadBlocksFromJson()
 {
-	// Standardne putanje do asseta
-	const FString MeshPath = TEXT("/Engine/BasicShapes/Cube.Cube");
-	const FString HighlightPath = TEXT("/Game/Blueprints/Materials/M_BlockHighlight.M_BlockHighlight");
-
-	// Pixel-art materijali generirani skriptom Scripts/build_block_materials.py
-	// iz tekstura u /Game/Blocks/Textures. Blok cija tekstura jos nije nacrtana
-	// nema MI asset - TryLoad vrati null, blok dobije default sivi materijal i
-	// pojavi se u [PERF] NEUSPJEH liniji. Vidi Docs/TEXTURE_SPEC.md.
-	const FString DirtMaterial = TEXT("/Game/Blocks/Materials/MI_Dirt.MI_Dirt");
-	const FString StoneMaterial = TEXT("/Game/Blocks/Materials/MI_Stone.MI_Stone");
-	const FString GrassMaterial = TEXT("/Game/Blocks/Materials/MI_Grass.MI_Grass");
-	const FString OakLogMaterial = TEXT("/Game/Blocks/Materials/MI_OakLog.MI_OakLog");
-	const FString BirchLogMaterial = TEXT("/Game/Blocks/Materials/MI_BirchLog.MI_BirchLog");
-	const FString OakLeavesMaterial = TEXT("/Game/Blocks/Materials/MI_OakLeaves.MI_OakLeaves");
-	const FString BirchLeavesMaterial = TEXT("/Game/Blocks/Materials/MI_BirchLeaves.MI_BirchLeaves");
-	const FString OakPlankMaterial = TEXT("/Game/Blocks/Materials/MI_OakPlanks.MI_OakPlanks");
-	const FString BirchPlankMaterial = TEXT("/Game/Blocks/Materials/MI_BirchPlanks.MI_BirchPlanks");
-	const FString CraftingTableMaterial = TEXT("/Game/Blocks/Materials/MI_CraftingTable.MI_CraftingTable");
-
-	// === DIRT ===
+	TArray<TSharedPtr<FJsonValue>> Entries;
+	if (!LoadJsonArrayFromContentData(TEXT("Blocks.json"), Entries))
 	{
-		FBlockDefinition Def;
-		Def.BlockType = EBlockType::Dirt;
-		Def.DropItemType = EItemType::Dirt;
-		Def.PlaceableFromItem = EItemType::Dirt;
-		Def.DropChance = 1.0f;
-		Def.TimeToDestroy = 1.5f;
-		Def.DisplayName = NSLOCTEXT("Blocks", "Dirt", "Dirt");
-		Def.Mesh = FSoftObjectPath(MeshPath);
-		Def.Material = FSoftObjectPath(DirtMaterial);
-		Def.HighlightMaterial = FSoftObjectPath(HighlightPath);
-		RegisterBlock(Def);
+		return;
 	}
 
-	// === STONE ===
+	for (int32 Index = 0; Index < Entries.Num(); ++Index)
 	{
+		const TSharedPtr<FJsonObject>* EntryObject = nullptr;
 		FBlockDefinition Def;
-		Def.BlockType = EBlockType::Stone;
-		Def.DropItemType = EItemType::Stone;
-		Def.PlaceableFromItem = EItemType::Stone;
-		Def.DropChance = 1.0f;
-		Def.TimeToDestroy = 3.0f;
-		Def.DisplayName = NSLOCTEXT("Blocks", "Stone", "Stone");
-		Def.Mesh = FSoftObjectPath(MeshPath);
-		Def.Material = FSoftObjectPath(StoneMaterial);
-		Def.HighlightMaterial = FSoftObjectPath(HighlightPath);
+
+		// Neispravan unos preskacemo pojedinacno - jedan tipfeler ne smije
+		// srusiti cijelu datoteku (blok dobije fallback u RegisterFallbackBlocks)
+		if (!Entries[Index].IsValid() || !Entries[Index]->TryGetObject(EntryObject) ||
+			!FJsonObjectConverter::JsonObjectToUStruct(EntryObject->ToSharedRef(), &Def))
+		{
+			UE_LOG(LogTemp, Error, TEXT("BlockRegistry: Blocks.json unos #%d se ne moze parsirati - preskacem"), Index);
+			continue;
+		}
+
+		if (Def.BlockType == EBlockType::Air)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("BlockRegistry: Blocks.json unos #%d nema 'blockType' (ili je Air) - preskacem"), Index);
+			continue;
+		}
+
+		if (BlockDefinitions.Contains(Def.BlockType))
+		{
+			UE_LOG(LogTemp, Warning, TEXT("BlockRegistry: Blocks.json unos #%d duplicira blok '%s' - gazim prethodni"),
+				Index, *StaticEnum<EBlockType>()->GetNameStringByValue((int64)Def.BlockType));
+		}
+
+		if (Def.Mesh.IsNull())
+		{
+			Def.Mesh = FSoftObjectPath(GDefaultBlockMeshPath);
+		}
+		if (Def.HighlightMaterial.IsNull())
+		{
+			Def.HighlightMaterial = FSoftObjectPath(GDefaultHighlightPath);
+		}
+
 		RegisterBlock(Def);
 	}
-
-	// === GRASS ===
-	{
-		FBlockDefinition Def;
-		Def.BlockType = EBlockType::Grass;
-		Def.DropItemType = EItemType::Grass;
-		Def.PlaceableFromItem = EItemType::Grass;
-		Def.DropChance = 1.0f;
-		Def.TimeToDestroy = 1.5f;
-		Def.DisplayName = NSLOCTEXT("Blocks", "Grass", "Grass");
-		Def.Mesh = FSoftObjectPath(MeshPath);
-		Def.Material = FSoftObjectPath(GrassMaterial);
-		Def.HighlightMaterial = FSoftObjectPath(HighlightPath);
-		RegisterBlock(Def);
-	}
-
-	// === OAK LOG ===
-	{
-		FBlockDefinition Def;
-		Def.BlockType = EBlockType::OakLog;
-		Def.DropItemType = EItemType::OakLog;
-		Def.PlaceableFromItem = EItemType::OakLog;
-		Def.DropChance = 1.0f;
-		Def.TimeToDestroy = 2.0f;
-		Def.DisplayName = NSLOCTEXT("Blocks", "OakLog", "Oak Log");
-		Def.Mesh = FSoftObjectPath(MeshPath);
-		Def.Material = FSoftObjectPath(OakLogMaterial);
-		Def.HighlightMaterial = FSoftObjectPath(HighlightPath);
-		RegisterBlock(Def);
-	}
-
-	// === BIRCH LOG ===
-	{
-		FBlockDefinition Def;
-		Def.BlockType = EBlockType::BirchLog;
-		Def.DropItemType = EItemType::BirchLog;
-		Def.PlaceableFromItem = EItemType::BirchLog;
-		Def.DropChance = 1.0f;
-		Def.TimeToDestroy = 2.0f;
-		Def.DisplayName = NSLOCTEXT("Blocks", "BirchLog", "Birch Log");
-		Def.Mesh = FSoftObjectPath(MeshPath);
-		Def.Material = FSoftObjectPath(BirchLogMaterial);
-		Def.HighlightMaterial = FSoftObjectPath(HighlightPath);
-		RegisterBlock(Def);
-	}
-
-	// === OAK LEAVES ===
-	{
-		FBlockDefinition Def;
-		Def.BlockType = EBlockType::OakLeaves;
-		Def.DropItemType = EItemType::OakSapling;  // Droppa sapling, ne leaves
-		Def.PlaceableFromItem = EItemType::None;   // Ne može se postaviti
-		Def.DropChance = 0.05f;  // 5% šansa
-		Def.TimeToDestroy = 0.5f;
-		Def.DisplayName = NSLOCTEXT("Blocks", "OakLeaves", "Oak Leaves");
-		Def.Mesh = FSoftObjectPath(MeshPath);
-		Def.Material = FSoftObjectPath(OakLeavesMaterial);
-		Def.HighlightMaterial = FSoftObjectPath(HighlightPath);
-		RegisterBlock(Def);
-	}
-
-	// === BIRCH LEAVES ===
-	{
-		FBlockDefinition Def;
-		Def.BlockType = EBlockType::BirchLeaves;
-		Def.DropItemType = EItemType::BirchSapling;  // Droppa sapling, ne leaves
-		Def.PlaceableFromItem = EItemType::None;     // Ne može se postaviti
-		Def.DropChance = 0.05f;  // 5% šansa
-		Def.TimeToDestroy = 0.5f;
-		Def.DisplayName = NSLOCTEXT("Blocks", "BirchLeaves", "Birch Leaves");
-		Def.Mesh = FSoftObjectPath(MeshPath);
-		Def.Material = FSoftObjectPath(BirchLeavesMaterial);
-		Def.HighlightMaterial = FSoftObjectPath(HighlightPath);
-		RegisterBlock(Def);
-	}
-
-	// === OAK PLANKS ===
-	{
-		FBlockDefinition Def;
-		Def.BlockType = EBlockType::OakPlanks;
-		Def.DropItemType = EItemType::OakPlanks;
-		Def.PlaceableFromItem = EItemType::OakPlanks;
-		Def.DropChance = 1.0f;
-		Def.TimeToDestroy = 2.0f;
-		Def.DisplayName = NSLOCTEXT("Blocks", "OakPlanks", "Oak Planks");
-		Def.Mesh = FSoftObjectPath(MeshPath);
-		Def.Material = FSoftObjectPath(OakPlankMaterial);
-		Def.HighlightMaterial = FSoftObjectPath(HighlightPath);
-		RegisterBlock(Def);
-	}
-
-	// === BIRCH PLANKS ===
-	{
-		FBlockDefinition Def;
-		Def.BlockType = EBlockType::BirchPlanks;
-		Def.DropItemType = EItemType::BirchPlanks;
-		Def.PlaceableFromItem = EItemType::BirchPlanks;
-		Def.DropChance = 1.0f;
-		Def.TimeToDestroy = 2.0f;
-		Def.DisplayName = NSLOCTEXT("Blocks", "BirchPlanks", "Birch Planks");
-		Def.Mesh = FSoftObjectPath(MeshPath);
-		Def.Material = FSoftObjectPath(BirchPlankMaterial);
-		Def.HighlightMaterial = FSoftObjectPath(HighlightPath);
-		RegisterBlock(Def);
-	}
-
-	// === CRAFTING TABLE ===
-	{
-		FBlockDefinition Def;
-		Def.BlockType = EBlockType::CraftingTable;
-		Def.DropItemType = EItemType::CraftingTable;
-		Def.PlaceableFromItem = EItemType::CraftingTable;
-		Def.DropChance = 1.0f;
-		Def.TimeToDestroy = 2.5f;
-		Def.DisplayName = NSLOCTEXT("Blocks", "CraftingTable", "Crafting Table");
-		Def.Mesh = FSoftObjectPath(MeshPath);
-		Def.Material = FSoftObjectPath(CraftingTableMaterial);
-		Def.HighlightMaterial = FSoftObjectPath(HighlightPath);
-		RegisterBlock(Def);
-	}
-
 }
 
-void UBlockRegistry::RegisterAllItems()
+void UBlockRegistry::LoadItemsFromJson()
 {
-	const FString MeshPath = TEXT("/Engine/BasicShapes/Cube.Cube");
-
-	// Iste MI putanje kao za blokove - item drop mora izgledati kao blok iz kojeg
-	// je pao, pa se dvije liste moraju mijenjati zajedno.
-	const FString DirtMaterial = TEXT("/Game/Blocks/Materials/MI_Dirt.MI_Dirt");
-	const FString StoneMaterial = TEXT("/Game/Blocks/Materials/MI_Stone.MI_Stone");
-	const FString GrassMaterial = TEXT("/Game/Blocks/Materials/MI_Grass.MI_Grass");
-	const FString OakLogMaterial = TEXT("/Game/Blocks/Materials/MI_OakLog.MI_OakLog");
-	const FString BirchLogMaterial = TEXT("/Game/Blocks/Materials/MI_BirchLog.MI_BirchLog");
-	const FString OakLeavesMaterial = TEXT("/Game/Blocks/Materials/MI_OakLeaves.MI_OakLeaves");
-	const FString BirchLeavesMaterial = TEXT("/Game/Blocks/Materials/MI_BirchLeaves.MI_BirchLeaves");
-	const FString OakPlankMaterial = TEXT("/Game/Blocks/Materials/MI_OakPlanks.MI_OakPlanks");
-	const FString BirchPlankMaterial = TEXT("/Game/Blocks/Materials/MI_BirchPlanks.MI_BirchPlanks");
-	const FString CraftingTableMaterial = TEXT("/Game/Blocks/Materials/MI_CraftingTable.MI_CraftingTable");
-
-	// === DIRT ===
+	TArray<TSharedPtr<FJsonValue>> Entries;
+	if (!LoadJsonArrayFromContentData(TEXT("Items.json"), Entries))
 	{
-		FItemDefinition Def;
-		Def.ItemType = EItemType::Dirt;
-		Def.DisplayName = NSLOCTEXT("Items", "Dirt", "Dirt");
-		Def.Mesh = FSoftObjectPath(MeshPath);
-		Def.Material = FSoftObjectPath(DirtMaterial);
-		RegisterItem(Def);
+		return;
 	}
 
-	// === STONE ===
+	for (int32 Index = 0; Index < Entries.Num(); ++Index)
 	{
+		const TSharedPtr<FJsonObject>* EntryObject = nullptr;
 		FItemDefinition Def;
-		Def.ItemType = EItemType::Stone;
-		Def.DisplayName = NSLOCTEXT("Items", "Stone", "Stone");
-		Def.Mesh = FSoftObjectPath(MeshPath);
-		Def.Material = FSoftObjectPath(StoneMaterial);
+
+		if (!Entries[Index].IsValid() || !Entries[Index]->TryGetObject(EntryObject) ||
+			!FJsonObjectConverter::JsonObjectToUStruct(EntryObject->ToSharedRef(), &Def))
+		{
+			UE_LOG(LogTemp, Error, TEXT("BlockRegistry: Items.json unos #%d se ne moze parsirati - preskacem"), Index);
+			continue;
+		}
+
+		if (Def.ItemType == EItemType::None)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("BlockRegistry: Items.json unos #%d nema 'itemType' (ili je None) - preskacem"), Index);
+			continue;
+		}
+
+		if (ItemDefinitions.Contains(Def.ItemType))
+		{
+			UE_LOG(LogTemp, Warning, TEXT("BlockRegistry: Items.json unos #%d duplicira item '%s' - gazim prethodni"),
+				Index, *StaticEnum<EItemType>()->GetNameStringByValue((int64)Def.ItemType));
+		}
+
+		if (Def.Mesh.IsNull())
+		{
+			Def.Mesh = FSoftObjectPath(GDefaultBlockMeshPath);
+		}
+
 		RegisterItem(Def);
 	}
+}
 
-	// === GRASS ===
+void UBlockRegistry::RegisterFallbackBlocks()
+{
+	const UEnum* Enum = StaticEnum<EBlockType>();
+
+	// NumEnums()-1 preskace autogenerirani _MAX unos
+	for (int32 Index = 0; Index < Enum->NumEnums() - 1; ++Index)
 	{
+		const EBlockType Type = (EBlockType)Enum->GetValueByIndex(Index);
+		if (Type == EBlockType::Air || BlockDefinitions.Contains(Type))
+		{
+			continue;
+		}
+
+		const FString TypeName = Enum->GetNameStringByIndex(Index);
+		UE_LOG(LogTemp, Error, TEXT("BlockRegistry: nema JSON definicije za blok '%s' - koristim fallback (siva kocka)"), *TypeName);
+
+		// Bez materijala - ISM/mesh ostaje na default sivom engine materijalu.
+		// Bez dropa i placementa: fallback blok postoji u svijetu, ali nije item.
+		FBlockDefinition Def;
+		Def.BlockType = Type;
+		Def.DisplayName = FText::FromString(TypeName);
+		Def.Mesh = FSoftObjectPath(GDefaultBlockMeshPath);
+		Def.HighlightMaterial = FSoftObjectPath(GDefaultHighlightPath);
+		RegisterBlock(Def);
+	}
+}
+
+void UBlockRegistry::RegisterFallbackItems()
+{
+	const UEnum* Enum = StaticEnum<EItemType>();
+
+	for (int32 Index = 0; Index < Enum->NumEnums() - 1; ++Index)
+	{
+		const EItemType Type = (EItemType)Enum->GetValueByIndex(Index);
+		if (Type == EItemType::None || ItemDefinitions.Contains(Type))
+		{
+			continue;
+		}
+
+		const FString TypeName = Enum->GetNameStringByIndex(Index);
+		UE_LOG(LogTemp, Error, TEXT("BlockRegistry: nema JSON definicije za item '%s' - koristim fallback (siva kocka)"), *TypeName);
+
 		FItemDefinition Def;
-		Def.ItemType = EItemType::Grass;
-		Def.DisplayName = NSLOCTEXT("Items", "Grass", "Grass");
-		Def.Mesh = FSoftObjectPath(MeshPath);
-		Def.Material = FSoftObjectPath(GrassMaterial);
+		Def.ItemType = Type;
+		Def.DisplayName = FText::FromString(TypeName);
+		Def.Mesh = FSoftObjectPath(GDefaultBlockMeshPath);
 		RegisterItem(Def);
 	}
-
-	// === OAK LOG ===
-	{
-		FItemDefinition Def;
-		Def.ItemType = EItemType::OakLog;
-		Def.DisplayName = NSLOCTEXT("Items", "OakLog", "Oak Log");
-		Def.Mesh = FSoftObjectPath(MeshPath);
-		Def.Material = FSoftObjectPath(OakLogMaterial);
-		RegisterItem(Def);
-	}
-
-	// === BIRCH LOG ===
-	{
-		FItemDefinition Def;
-		Def.ItemType = EItemType::BirchLog;
-		Def.DisplayName = NSLOCTEXT("Items", "BirchLog", "Birch Log");
-		Def.Mesh = FSoftObjectPath(MeshPath);
-		Def.Material = FSoftObjectPath(BirchLogMaterial);
-		RegisterItem(Def);
-	}
-
-	// === OAK SAPLING ===
-	{
-		FItemDefinition Def;
-		Def.ItemType = EItemType::OakSapling;
-		Def.DisplayName = NSLOCTEXT("Items", "OakSapling", "Oak Sapling");
-		Def.Mesh = FSoftObjectPath(MeshPath);
-		Def.Material = FSoftObjectPath(OakLeavesMaterial);
-		RegisterItem(Def);
-	}
-
-	// === BIRCH SAPLING ===
-	{
-		FItemDefinition Def;
-		Def.ItemType = EItemType::BirchSapling;
-		Def.DisplayName = NSLOCTEXT("Items", "BirchSapling", "Birch Sapling");
-		Def.Mesh = FSoftObjectPath(MeshPath);
-		Def.Material = FSoftObjectPath(BirchLeavesMaterial);
-		RegisterItem(Def);
-	}
-
-	// === OAK PLANKS ===
-	{
-		FItemDefinition Def;
-		Def.ItemType = EItemType::OakPlanks;
-		Def.DisplayName = NSLOCTEXT("Items", "OakPlanks", "Oak Planks");
-		Def.Mesh = FSoftObjectPath(MeshPath);
-		Def.Material = FSoftObjectPath(OakPlankMaterial);
-		RegisterItem(Def);
-	}
-
-	// === BIRCH PLANKS ===
-	{
-		FItemDefinition Def;
-		Def.ItemType = EItemType::BirchPlanks;
-		Def.DisplayName = NSLOCTEXT("Items", "BirchPlanks", "Birch Planks");
-		Def.Mesh = FSoftObjectPath(MeshPath);
-		Def.Material = FSoftObjectPath(BirchPlankMaterial);
-		RegisterItem(Def);
-	}
-
-	// === STICK ===
-	{
-		FItemDefinition Def;
-		Def.ItemType = EItemType::Stick;
-		Def.DisplayName = NSLOCTEXT("Items", "Stick", "Stick");
-		Def.Mesh = FSoftObjectPath(MeshPath);
-		Def.Material = FSoftObjectPath(OakLogMaterial);  // Koristi log materijal
-		RegisterItem(Def);
-	}
-
-	// === CRAFTING TABLE ===
-	{
-		FItemDefinition Def;
-		Def.ItemType = EItemType::CraftingTable;
-		Def.DisplayName = NSLOCTEXT("Items", "CraftingTable", "Crafting Table");
-		Def.Mesh = FSoftObjectPath(MeshPath);
-		Def.Material = FSoftObjectPath(CraftingTableMaterial);
-		RegisterItem(Def);
-	}
-
 }
 
 // === Block API ===

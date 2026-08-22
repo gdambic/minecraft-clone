@@ -6,7 +6,9 @@ Generira materijalni sustav za voxel blokove:
 
   1. popravi import postavke svih tekstura u /Game/Blocks/Textures
   2. izgradi master materijale M_VoxelBlock i M_VoxelBlock_Masked
-  3. izgradi MI_<Blok> instancu po tipu bloka iz pronadenih tekstura
+  3. izgradi MI instancu po bloku iz Content/Data/Blocks.json (jedini izvor
+     istine): "material" polje daje putanju MI asseta, "masked" (default
+     false) bira masked master (alpha-cutout, za lisce)
 
 Pokretanje iz editora:   Window > Developer Tools > Output Log > Python
                          exec(open(r"C:/RVS/C++GameDev/MinecraftClone/Scripts/build_block_materials.py").read())
@@ -18,6 +20,9 @@ Skripta je idempotentna: postojeci se materijali NE brisu nego im se graf
 ocisti i ponovno izgradi, pa reference iz koda i iz MI instanci prezive.
 Slobodno je pokreni ponovno svaki put kad dodas ili promijenis teksturu.
 """
+
+import json
+import os
 
 import unreal
 
@@ -39,20 +44,8 @@ GENERATE_MIPS = True
 # Konstantna hrapavost - pixel-art blokovi ne trebaju ORM mapu.
 DEFAULT_ROUGHNESS = 0.9
 
-# Blokovi za koje se generira MI. Drugi clan: koristi li masked master
-# (alpha-cutout, za lisce).
-BLOCKS = [
-    ("Dirt",          False),
-    ("Stone",         False),
-    ("Grass",         False),
-    ("OakLog",        False),
-    ("BirchLog",      False),
-    ("OakLeaves",     True),
-    ("BirchLeaves",   True),
-    ("OakPlanks",     False),
-    ("BirchPlanks",   False),
-    ("CraftingTable", False),
-]
+# Popis blokova se cita iz Blocks.json - isti file koji cita UBlockRegistry.
+BLOCKS_JSON = "Data/Blocks.json"
 
 FACES = ("Top", "Side", "Bottom")
 
@@ -131,6 +124,44 @@ def _pick_normal_space():
             return source, target, name
 
     return None, None, None
+
+
+# ---------------------------------------------------------------------------
+# 0. Popis blokova iz Blocks.json
+# ---------------------------------------------------------------------------
+
+def load_blocks_from_json():
+    """
+    Vrati [(block_name, masked, mi_package_path)] iz Content/Data/Blocks.json.
+
+    "material" polje odreduje putanju MI asseta koji se gradi - skripta time
+    garantirano proizvodi tocno onaj asset koji UBlockRegistry ocekuje.
+    Blok bez "material" polja se preskace: namjerno nema vlastiti MI (siva
+    fallback kocka).
+    """
+    path = os.path.join(unreal.Paths.project_content_dir(), BLOCKS_JSON)
+    try:
+        with open(path, "r", encoding="utf-8") as handle:
+            entries = json.load(handle)
+    except (OSError, ValueError) as err:
+        _fail("ne mogu procitati {0}: {1}".format(path, err))
+        return []
+
+    blocks = []
+    for entry in entries:
+        name = entry.get("blockType")
+        if not name or name == "Air":
+            continue
+
+        material = entry.get("material")
+        if not material:
+            _info("blok {0} nema 'material' polje - preskacem MI".format(name))
+            continue
+
+        # "/Game/.../MI_X.MI_X" -> package path "/Game/.../MI_X"
+        blocks.append((name, bool(entry.get("masked", False)), material.split(".")[0]))
+
+    return blocks
 
 
 # ---------------------------------------------------------------------------
@@ -315,11 +346,11 @@ def _resolve_face_texture(block_name, face):
     return _load("{0}/{1}.{2}".format(TEXTURE_DIR, name, name)), name
 
 
-def build_material_instances(masters):
+def build_material_instances(masters, blocks):
     created = 0
     skipped = []
 
-    for block_name, masked in BLOCKS:
+    for block_name, masked, mi_package in blocks:
         parent = masters[MASTER_MASKED if masked else MASTER_OPAQUE]
         if parent is None:
             skipped.append((block_name, "master materijal nije izgraden"))
@@ -340,16 +371,15 @@ def build_material_instances(masters):
             skipped.append((block_name, "nedostaje " + ", ".join(missing)))
             continue
 
-        mi_name = "MI_{0}".format(block_name)
-        mi_path = "{0}/{1}".format(MATERIAL_DIR, mi_name)
+        mi_dir, mi_name = mi_package.rsplit("/", 1)
 
-        instance = _load("{0}.{1}".format(mi_path, mi_name))
+        instance = _load("{0}.{1}".format(mi_package, mi_name))
         if instance is None:
             instance = unreal.AssetToolsHelpers.get_asset_tools().create_asset(
-                mi_name, MATERIAL_DIR, unreal.MaterialInstanceConstant,
+                mi_name, mi_dir, unreal.MaterialInstanceConstant,
                 unreal.MaterialInstanceConstantFactoryNew())
             if instance is None:
-                _fail("ne mogu kreirati {0}".format(mi_path))
+                _fail("ne mogu kreirati {0}".format(mi_package))
                 continue
 
         MEL.set_material_instance_parent(instance, parent)
@@ -377,6 +407,12 @@ def main():
         if not EAL.does_directory_exist(directory):
             EAL.make_directory(directory)
 
+    blocks = load_blocks_from_json()
+    if not blocks:
+        _fail("Blocks.json nije dao nijedan blok - prekidam")
+        return
+    _info("Blocks.json: {0} blokova za obradu".format(len(blocks)))
+
     fix_texture_import_settings()
 
     masters = {
@@ -384,7 +420,7 @@ def main():
         MASTER_MASKED: build_master_material(MASTER_MASKED, masked=True),
     }
 
-    created, skipped = build_material_instances(masters)
+    created, skipped = build_material_instances(masters, blocks)
 
     _info("=== gotovo: {0} master materijala, {1} MI instanci, {2} preskoceno, "
           "{3} gresaka ===".format(

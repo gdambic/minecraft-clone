@@ -100,6 +100,8 @@ Source/MinecraftClone/
 
 ## Content Organization
 
+- `Content/Data/Blocks.json`, `Items.json` - definicije blokova/itema; učitava ih `UBlockRegistry` (enum vrijednost bez JSON unosa dobije fallback: siva kocka + Error u logu)
+- `Content/Data/Recipes/` - crafting recepti (JSON, file-per-recipe)
 - `Content/Blueprints/Blocks/` - Block blueprints (BP_Dirt, BP_Stone, etc.)
 - `Content/Input/Actions/` - Enhanced Input actions
 - `Content/FirstPerson/Blueprints/` - Character and controller BPs

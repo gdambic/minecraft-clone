@@ -76,9 +76,17 @@ protected:
 	/** Registriraj item definiciju */
 	void RegisterItem(const FItemDefinition& Definition);
 
-	/** Registriraj sve ugrađene blokove i iteme */
-	void RegisterAllBlocks();
-	void RegisterAllItems();
+	/** Učitaj definicije iz Content/Data/Blocks.json odnosno Items.json */
+	void LoadBlocksFromJson();
+	void LoadItemsFromJson();
+
+	/**
+	 * Za svaku EBlockType/EItemType vrijednost bez JSON definicije registrira
+	 * fallback (defaultna kocka bez materijala = siva) + UE_LOG(Error).
+	 * Garantira da registry pokriva cijeli enum pa blok nikad ne nestane iz igre.
+	 */
+	void RegisterFallbackBlocks();
+	void RegisterFallbackItems();
 
 private:
 	/** Mapa svih blok definicija */

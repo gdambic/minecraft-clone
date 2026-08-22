@@ -1,0 +1,121 @@
+[
+  {
+    "blockType": "Dirt",
+    "dropItemType": "Dirt",
+    "placeableFromItem": "Dirt",
+    "dropChance": 1.0,
+    "timeToDestroy": 1.5,
+    "displayName": "Dirt",
+    "material": "/Game/Blocks/Materials/MI_Dirt.MI_Dirt"
+  },
+  {
+    "blockType": "Andesite",
+    "dropItemType": "Andesite",
+    "placeableFromItem": "Andesite",
+    "dropChance": 1.0,
+    "timeToDestroy": 3.0,
+    "displayName": "Andesite",
+    "material": "/Game/Blocks/Materials/MI_Andesite.MI_Andesite"
+  },
+  {
+    "blockType": "Basalt",
+    "dropItemType": "Basalt",
+    "placeableFromItem": "Basalt",
+    "dropChance": 1.0,
+    "timeToDestroy": 3.0,
+    "displayName": "Basalt",
+    "material": "/Game/Blocks/Materials/MI_Basalt.MI_Basalt"
+  },
+  {
+    "blockType": "Limestone",
+    "dropItemType": "Limestone",
+    "placeableFromItem": "Limestone",
+    "dropChance": 1.0,
+    "timeToDestroy": 3.0,
+    "displayName": "Limestone",
+    "material": "/Game/Blocks/Materials/MI_Limestone.MI_Limestone"
+  },
+  {
+    "blockType": "Stone",
+    "dropItemType": "Stone",
+    "placeableFromItem": "Stone",
+    "dropChance": 1.0,
+    "timeToDestroy": 3.0,
+    "displayName": "Stone",
+    "material": "/Game/Blocks/Materials/MI_Stone.MI_Stone"
+  },
+  {
+    "blockType": "Grass",
+    "dropItemType": "Grass",
+    "placeableFromItem": "Grass",
+    "dropChance": 1.0,
+    "timeToDestroy": 1.5,
+    "displayName": "Grass",
+    "material": "/Game/Blocks/Materials/MI_Grass.MI_Grass"
+  },
+  {
+    "blockType": "OakLog",
+    "dropItemType": "OakLog",
+    "placeableFromItem": "OakLog",
+    "dropChance": 1.0,
+    "timeToDestroy": 2.0,
+    "displayName": "Oak Log",
+    "material": "/Game/Blocks/Materials/MI_OakLog.MI_OakLog"
+  },
+  {
+    "blockType": "BirchLog",
+    "dropItemType": "BirchLog",
+    "placeableFromItem": "BirchLog",
+    "dropChance": 1.0,
+    "timeToDestroy": 2.0,
+    "displayName": "Birch Log",
+    "material": "/Game/Blocks/Materials/MI_BirchLog.MI_BirchLog"
+  },
+  {
+    "blockType": "OakLeaves",
+    "dropItemType": "OakSapling",
+    "placeableFromItem": "None",
+    "dropChance": 0.05,
+    "timeToDestroy": 0.5,
+    "displayName": "Oak Leaves",
+    "masked": true,
+    "material": "/Game/Blocks/Materials/MI_OakLeaves.MI_OakLeaves"
+  },
+  {
+    "blockType": "BirchLeaves",
+    "dropItemType": "BirchSapling",
+    "placeableFromItem": "None",
+    "dropChance": 0.05,
+    "timeToDestroy": 0.5,
+    "displayName": "Birch Leaves",
+    "masked": true,
+    "material": "/Game/Blocks/Materials/MI_BirchLeaves.MI_BirchLeaves"
+  },
+  {
+    "blockType": "OakPlanks",
+    "dropItemType": "OakPlanks",
+    "placeableFromItem": "OakPlanks",
+    "dropChance": 1.0,
+    "timeToDestroy": 2.0,
+    "displayName": "Oak Planks",
+    "material": "/Game/Blocks/Materials/MI_OakPlanks.MI_OakPlanks"
+  },
+  {
+    "blockType": "BirchPlanks",
+    "dropItemType": "BirchPlanks",
+    "placeableFromItem": "BirchPlanks",
+    "dropChance": 1.0,
+    "timeToDestroy": 2.0,
+    "displayName": "Birch Planks",
+    "material": "/Game/Blocks/Materials/MI_BirchPlanks.MI_BirchPlanks"
+  },
+  {
+    "blockType": "CraftingTable",
+    "dropItemType": "CraftingTable",
+    "placeableFromItem": "CraftingTable",
+    "dropChance": 1.0,
+    "timeToDestroy": 2.5,
+    "displayName": "Crafting Table",
+    "material": "/Game/Blocks/Materials/MI_CraftingTable.MI_CraftingTable"
+  }
+]

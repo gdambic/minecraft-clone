@@ -61,6 +61,12 @@ Skripta je idempotentna — postojeći materijali se ne brišu nego im se graf o
 ponovno izgradi, pa reference iz koda prežive. Pokreni je ponovno svaki put kad dodaš
 ili promijeniš teksturu.
 
+Popis blokova skripta čita iz `Content/Data/Blocks.json` (jedini izvor istine —
+isti file koji čita `UBlockRegistry`): polje `material` određuje putanju MI asseta,
+a opcionalno polje `masked` (default `false`) bira masked master s alpha-cutoutom
+(lišće). Novi blok dakle NE zahtijeva diranje skripte — dovoljan je JSON unos i
+tri PNG-a.
+
 Točan popis PNG datoteka koje treba nacrtati je u `TEXTURE_SPEC.md`.
 
 ### Što skripta postavlja na teksturama

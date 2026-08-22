@@ -77,6 +77,10 @@ void AVoxelWorld::GenerateWorld()
 		BlockData.Add(FIntVector(RandX, RandY, SurfaceLevel + 1), EBlockType::Dirt);
 	}
 
+	// Showcase red: po jedan blok svake definicije uz rub svijeta (prije
+	// prolaza 2 da instance dobiju kroz standardni exposure put)
+	PlaceShowcaseBlocks(Registry);
+
 	// PROLAZ 2: ISM instance SAMO za izlozene blokove (zakopani ostaju samo
 	// podaci). Batch AddInstances po tipu - jedan poziv umjesto tisuca.
 	TMap<EBlockType, TArray<FIntVector>> ExposedByType;
@@ -511,6 +515,33 @@ bool AVoxelWorld::PlaceBlockAt(FIntVector GridPosition, EBlockType Type)
 	// Postavljeni blok je po definiciji izlozen - odmah dodaj instancu
 	AddBlockInstance(GridPosition, Type);
 	return true;
+}
+
+void AVoxelWorld::PlaceShowcaseBlocks(UBlockRegistry* Registry)
+{
+	TArray<FBlockDefinition> Definitions = Registry->GetAllBlockDefinitions();
+
+	// TMap redoslijed nije garantiran - sortiraj po enum vrijednosti
+	Definitions.Sort([](const FBlockDefinition& A, const FBlockDefinition& B)
+	{
+		return (uint8)A.BlockType < (uint8)B.BlockType;
+	});
+
+	const int32 Z = SurfaceLevel + 1;
+	int32 X = 0;
+	for (const FBlockDefinition& Def : Definitions)
+	{
+		if (X >= WorldSizeX)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("VoxelWorld: showcase red ne stane u WorldSizeX=%d - preskacem ostatak"), WorldSizeX);
+			break;
+		}
+		// Add gazi eventualni random Dirt na istoj poziciji
+		BlockData.Add(FIntVector(X, 0, Z), Def.BlockType);
+		++X;
+	}
+
+	UE_LOG(LogTemp, Log, TEXT("VoxelWorld: showcase red - %d blokova uz rub Y=0 na Z=%d"), X, Z);
 }
 
 TArray<EBlockType> AVoxelWorld::GetPlaceableBlockTypes() const

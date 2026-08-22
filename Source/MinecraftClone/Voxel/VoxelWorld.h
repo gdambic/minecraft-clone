@@ -178,6 +178,9 @@ private:
 
 	void GenerateWorld();
 
+	/** Po jedan blok svake registrirane definicije uz rub Y=0, na SurfaceLevel+1. */
+	void PlaceShowcaseBlocks(class UBlockRegistry* Registry);
+
 	/** Ima li blok barem jednu izloženu (vidljivu) stranu. Dno svijeta (Z<0) se tretira kao čvrsto. */
 	bool IsBlockExposed(FIntVector Pos) const;
 

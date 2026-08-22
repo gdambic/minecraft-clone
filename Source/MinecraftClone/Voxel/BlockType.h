@@ -7,6 +7,9 @@ enum class EBlockType : uint8
 {
 	Air,         // Prazan prostor - nema renderiranja
 	Dirt,        // Smeđi blok zemlje
+	Andesite,
+	Basalt,
+	Limestone,
 	Stone,       // Sivi kameni blok
 	Grass,       // Zeleni travnati blok
 	OakLog,      // Deblo hrasta

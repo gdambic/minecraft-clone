@@ -7,6 +7,9 @@ enum class EItemType : uint8
 {
 	None,
 	Dirt,
+	Andesite,
+	Basalt,
+	Limestone,
 	Stone,
 	Grass,
 	OakLog,       // Deblo hrasta

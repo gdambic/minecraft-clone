@@ -1,0 +1,4 @@
+1. Dodaš u Enume EBlockType i EItemType, rebuild.
+2. Dodaš u Content/Data/Blocks.json
+3. Importaš T_ teksture u Editor u Content/Blocks/Textures
+4. Tools -> pa naš alat
