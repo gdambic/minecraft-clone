@@ -17,6 +17,12 @@ ACreatureBase::ACreatureBase()
 		MoveComp->MaxWalkSpeed = WalkSpeed;
 		MoveComp->bOrientRotationToMovement = true;
 		MoveComp->RotationRate = FRotator(0.0f, 500.0f, 0.0f);
+
+		// Default MaxStepHeight (~45uu) je manji od BlockSize (100uu) - kapsula bi
+		// se fizicki sudarala s rubom bloka i ne mogla se popeti, iako je NavMesh
+		// (AVoxelWorld::EnsureNavMeshStepHeight) vec dopustio taj korak u pathu.
+		// Drzati u sinku s BlockSize + margina koristenom tamo.
+		MoveComp->MaxStepHeight = 110.0f;
 	}
 
 	// Don't rotate character to controller rotation (AI will handle this)

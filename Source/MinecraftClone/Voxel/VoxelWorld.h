@@ -75,9 +75,23 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "World")
 	float BlockSize;
 
-	// Broj random blokova na vrhu
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "World")
-	int32 RandomBlockCount;
+	// === TERRAIN (noise) ===
+
+	/** Seed generiranja - isti seed uvijek daje isti teren te raspored stabala/mobova. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "World|Terrain")
+	int32 WorldSeed;
+
+	/** "Zoom" terenskog noisea - manje = razvučenija, blaža brda. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "World|Terrain")
+	float NoiseScale;
+
+	/** Maksimalno odstupanje visine stupca od SurfaceLevel (u blokovima). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "World|Terrain")
+	int32 HeightAmplitude;
+
+	/** Broj oktava fraktalnog noisea - više = detaljniji, ali skuplji teren. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "World|Terrain")
+	int32 Octaves;
 
 	// === TREES ===
 
@@ -141,6 +155,10 @@ public:
 	UFUNCTION(BlueprintPure, Category = "World")
 	EBlockType GetBlockTypeAt(FIntVector GridPosition) const;
 
+	/** Visina površine (Z najvišeg čvrstog bloka) na stupcu (X,Y) - isti algoritam kao generacija terena. */
+	UFUNCTION(BlueprintPure, Category = "World")
+	int32 GetTerrainHeightAt(int32 X, int32 Y) const;
+
 	/**
 	 * Poziva ABlock nakon što je uništen (drop je već spawnan).
 	 * Uklanja podatke i actor, lazy-spawna izložene susjede i pokreće leaf decay.
@@ -178,7 +196,20 @@ private:
 
 	void GenerateWorld();
 
-	/** Po jedan blok svake registrirane definicije uz rub Y=0, na SurfaceLevel+1. */
+	/**
+	 * Recastov default AgentMaxStepHeight (35uu) je manji od BlockSize (100uu),
+	 * pa svaki rub bloka NavMesh vidi kao litice - mobovi ostanu zarobljeni na
+	 * jednoj "polici" terena. Podigni step height na BlockSize prije nego se
+	 * doda ijedna instanca (Dynamic generation voxelizira tile-ove kako geometrija
+	 * dolazi, pa postavka mora biti gotova prije prve AddInstance).
+	 */
+	void EnsureNavMeshStepHeight() const;
+
+	/** Pomak uzorkovanja terenskog noisea izveden iz WorldSeed - postavlja ga GenerateWorld() prije generacije terena. */
+	float NoiseOffsetX = 0.f;
+	float NoiseOffsetY = 0.f;
+
+	/** Po jedan blok svake registrirane definicije uz rub Y=0, na visini terena+1. */
 	void PlaceShowcaseBlocks(class UBlockRegistry* Registry);
 
 	/** Ima li blok barem jednu izloženu (vidljivu) stranu. Dno svijeta (Z<0) se tretira kao čvrsto. */

@@ -22,8 +22,8 @@ public:
 	/** Generiraj stablo na zadanoj grid poziciji */
 	static void GenerateTree(AVoxelWorld* World, FIntVector BasePosition, ETreeType TreeType);
 
-	/** Generiraj više stabala na random pozicijama */
-	static void GenerateRandomTrees(AVoxelWorld* World, int32 TreeCount, int32 WorldSizeX, int32 WorldSizeY, int32 SurfaceLevel);
+	/** Generiraj više stabala na random pozicijama (visina tla po stupcu ide preko World->GetTerrainHeightAt) */
+	static void GenerateRandomTrees(AVoxelWorld* World, int32 TreeCount, int32 WorldSizeX, int32 WorldSizeY);
 
 private:
 	/** Generiraj hrast (4-6 blokova deblo) */

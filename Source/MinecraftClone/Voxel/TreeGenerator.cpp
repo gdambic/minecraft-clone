@@ -104,7 +104,7 @@ void FTreeGenerator::GenerateCanopy(AVoxelWorld* World, FIntVector CenterPositio
 	}
 }
 
-void FTreeGenerator::GenerateRandomTrees(AVoxelWorld* World, int32 TreeCount, int32 WorldSizeX, int32 WorldSizeY, int32 SurfaceLevel)
+void FTreeGenerator::GenerateRandomTrees(AVoxelWorld* World, int32 TreeCount, int32 WorldSizeX, int32 WorldSizeY)
 {
 	if (!World)
 	{
@@ -112,8 +112,8 @@ void FTreeGenerator::GenerateRandomTrees(AVoxelWorld* World, int32 TreeCount, in
 		return;
 	}
 
-	UE_LOG(LogTemp, Log, TEXT("TreeGenerator: Starting generation. TreeCount=%d, WorldSize=%dx%d, SurfaceLevel=%d"),
-		TreeCount, WorldSizeX, WorldSizeY, SurfaceLevel);
+	UE_LOG(LogTemp, Log, TEXT("TreeGenerator: Starting generation. TreeCount=%d, WorldSize=%dx%d"),
+		TreeCount, WorldSizeX, WorldSizeY);
 
 	int32 PlacedTrees = 0;
 	int32 FailedAttempts = 0;
@@ -126,10 +126,11 @@ void FTreeGenerator::GenerateRandomTrees(AVoxelWorld* World, int32 TreeCount, in
 		// Random pozicija (drži se dalje od rubova)
 		int32 RandX = FMath::RandRange(3, WorldSizeX - 4);
 		int32 RandY = FMath::RandRange(3, WorldSizeY - 4);
-		FIntVector TreeBase(RandX, RandY, SurfaceLevel + 1);
+		const int32 GroundZ = World->GetTerrainHeightAt(RandX, RandY);
+		FIntVector TreeBase(RandX, RandY, GroundZ + 1);
 
 		// Provjeri ima li tla ispod (u podacima - radi i za zakopane blokove)
-		if (World->GetBlockTypeAt(FIntVector(RandX, RandY, SurfaceLevel)) == EBlockType::Air)
+		if (World->GetBlockTypeAt(FIntVector(RandX, RandY, GroundZ)) == EBlockType::Air)
 		{
 			NoGroundCount++;
 			continue;
@@ -144,7 +145,7 @@ void FTreeGenerator::GenerateRandomTrees(AVoxelWorld* World, int32 TreeCount, in
 		{
 			GenerateTree(World, TreeBase, TreeType);
 			PlacedTrees++;
-			UE_LOG(LogTemp, Log, TEXT("TreeGenerator: Placed tree at (%d, %d, %d)"), RandX, RandY, SurfaceLevel + 1);
+			UE_LOG(LogTemp, Log, TEXT("TreeGenerator: Placed tree at (%d, %d, %d)"), RandX, RandY, GroundZ + 1);
 		}
 		else
 		{

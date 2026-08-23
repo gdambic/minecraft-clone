@@ -23,3 +23,27 @@ pri kopanju/postavljanju blokova.
 
 **Napomena:** ako svijet naraste (npr. 300×300 = 30.000 UU), volumen treba
 pratiti veličinu svijeta, a tile size po potrebi opet povećati.
+
+## 2. BTTask_FindWanderLocation masovno failanje
+
+**Problem:** `BTTask_FindWanderLocation: Could not find valid wander
+location` ispisuje se ogromnom brzinom u logu - u headless testu (`-nullrhi`,
+vidi sekcija "Headless Test Run" u CLAUDE.md) izmjereno ~10.000-13.000 failova
+u 40-ak sekundi, za sve mobove zajedno.
+
+**Dijagnoza:** Potvrđeno (2026-08-23), kad je uveden noise-based teren, da
+problem NIJE vezan uz visinske razlike terena - identičan volumen failova
+izmjeren i na potpuno ravnom testnom terenu (`HeightAmplitude=0`), znači
+postojao je i prije. Uzrok je vjerojatno u
+`BTTask_FindWanderLocation.cpp`: `NavSys->GetRandomReachablePointInRadius(
+Origin, Creature->GetWanderRadius(), RandomLocation)` bez ikakvog cooldowna/
+retry-limita - ako je `WanderRadius` velik u odnosu na dostupni navmesh oko
+moba (rubovi svijeta, litice), većina nasumičnih pokušaja promašuje, a
+Behavior Tree ih ponavlja gotovo bez pauze.
+
+**Mogući fix:** smanjiti `WanderRadius` na nešto realnije u odnosu na
+gustoću navmesha, i/ili dodati kratki cooldown/retry-limit u
+`BTTask_FindWanderLocation` da neuspjeli pokušaji ne pune log iz frame u
+frame. Treba prvo utvrditi je li ovo samo log-šum (BT ionako čeka do sljedće
+prilike) ili stvarno degradira ponašanje mobova (stoje u mjestu jer nikad ne
+dobiju validnu wander lokaciju).

@@ -2,15 +2,19 @@
 #include "Block.h"
 #include "ItemDrop.h"
 #include "TreeGenerator.h"
+#include "TerrainGenerator.h"
 #include "TimerManager.h"
 #include "Zombie.h"
 #include "MobBase.h"
 #include "BlockRegistry.h"
 #include "AI/NavigationSystemBase.h"
+#include "NavigationSystem.h"
+#include "NavMesh/RecastNavMesh.h"
 #include "Components/InstancedStaticMeshComponent.h"
 #include "Engine/HitResult.h"
 #include "Engine/StaticMesh.h"
 #include "Materials/MaterialInterface.h"
+#include "Math/RandomStream.h"
 
 AVoxelWorld::AVoxelWorld()
 {
@@ -21,8 +25,11 @@ AVoxelWorld::AVoxelWorld()
 	WorldSizeY = 100;
 	WorldSizeZ = 10;
 	BlockSize = 100.0f;
-	RandomBlockCount = 20;
 	SurfaceLevel = 3;
+	WorldSeed = 1337;
+	NoiseScale = 0.08f;
+	HeightAmplitude = 6;
+	Octaves = 3;
 	TreeCount = 10;
 }
 
@@ -44,10 +51,12 @@ void AVoxelWorld::GenerateWorld()
 
 	// === [PERF] Početak mjerenja - vidi Docs/PLAN_UbrzanjePokretanja.md, sekcija 2 ===
 	UE_LOG(LogTemp, Warning, TEXT("[PERF] ================================================"));
-	UE_LOG(LogTemp, Warning, TEXT("[PERF] GenerateWorld  %dx%d, %d slojeva (SurfaceLevel=%d)"),
-		WorldSizeX, WorldSizeY, SurfaceLevel + 1, SurfaceLevel);
+	UE_LOG(LogTemp, Warning, TEXT("[PERF] GenerateWorld  %dx%d, seed=%d, SurfaceLevel=%d +/-%d"),
+		WorldSizeX, WorldSizeY, WorldSeed, SurfaceLevel, HeightAmplitude);
 
 	const double T0 = FPlatformTime::Seconds();
+
+	EnsureNavMeshStepHeight();
 
 	// --- Faza 1: assets (fiksni trosak, NE skalira s velicinom svijeta) ---
 	// Razrijesi mesh/materijale JEDNOM i spremi u cache - petlje ispod koriste gotove pointere
@@ -56,25 +65,41 @@ void AVoxelWorld::GenerateWorld()
 	const double T1 = FPlatformTime::Seconds();
 
 	// --- Faza 2: teren (skalirajuci trosak) ---
-	// PROLAZ 1: samo podaci - izvor istine, bez actora (par ms)
-	for (int32 Z = 0; Z <= SurfaceLevel; Z++)
+	// Seed odreduje i teren (pomak uzorkovanja noisea) i raspored stabala/mobova
+	// (globalni RNG stream koji koriste FMath::RandRange pozivi nizvodno) - isti
+	// WorldSeed uvijek daje identican svijet.
+	FMath::RandInit(WorldSeed);
+	const FRandomStream NoiseSeedStream(WorldSeed);
+	NoiseOffsetX = NoiseSeedStream.FRandRange(-100000.f, 100000.f);
+	NoiseOffsetY = NoiseSeedStream.FRandRange(-100000.f, 100000.f);
+
+	// PROLAZ 1: samo podaci - izvor istine, bez actora. Visina stupca dolazi iz
+	// fraktalnog Perlin noisea (FTerrainGenerator, Minecraftov height-map pristup
+	// bez bioma/spilja): grass na vrhu, par slojeva dirt ispod, stone dublje.
+	const int32 DirtLayers = 3;
+	for (int32 X = 0; X < WorldSizeX; X++)
 	{
-		EBlockType Type = (Z == SurfaceLevel) ? EBlockType::Grass : EBlockType::Stone;
-		for (int32 X = 0; X < WorldSizeX; X++)
+		for (int32 Y = 0; Y < WorldSizeY; Y++)
 		{
-			for (int32 Y = 0; Y < WorldSizeY; Y++)
+			const int32 Height = GetTerrainHeightAt(X, Y);
+			for (int32 Z = 0; Z <= Height; Z++)
 			{
+				EBlockType Type;
+				if (Z == Height)
+				{
+					Type = EBlockType::Grass;
+				}
+				else if (Z > Height - DirtLayers)
+				{
+					Type = EBlockType::Dirt;
+				}
+				else
+				{
+					Type = EBlockType::Stone;
+				}
 				BlockData.Add(FIntVector(X, Y, Z), Type);
 			}
 		}
-	}
-
-	// Random Dirt blokovi iznad površine
-	for (int32 i = 0; i < RandomBlockCount; i++)
-	{
-		int32 RandX = FMath::RandRange(0, WorldSizeX - 1);
-		int32 RandY = FMath::RandRange(0, WorldSizeY - 1);
-		BlockData.Add(FIntVector(RandX, RandY, SurfaceLevel + 1), EBlockType::Dirt);
 	}
 
 	// Showcase red: po jedan blok svake definicije uz rub svijeta (prije
@@ -106,8 +131,8 @@ void AVoxelWorld::GenerateWorld()
 		TerrainMs, TerrainBlocks, TerrainInstances, TerrainBlocks - TerrainInstances,
 		TerrainBlocks > 0 ? TerrainMs / TerrainBlocks : 0.0);
 
-	UE_LOG(LogTemp, Log, TEXT("VoxelWorld: Generated %d layers (0-%d) + %d random blocks"),
-		SurfaceLevel + 1, SurfaceLevel, RandomBlockCount);
+	UE_LOG(LogTemp, Log, TEXT("VoxelWorld: Generated terrain (seed=%d, SurfaceLevel=%d +/-%d)"),
+		WorldSeed, SurfaceLevel, HeightAmplitude);
 
 	// --- Faza 3: stabla ---
 	GenerateTrees();
@@ -154,6 +179,35 @@ void AVoxelWorld::GenerateWorld()
 		2.5f,
 		true // Looping
 	);
+}
+
+void AVoxelWorld::EnsureNavMeshStepHeight() const
+{
+	UNavigationSystemV1* NavSys = FNavigationSystem::GetCurrent<UNavigationSystemV1>(GetWorld());
+	if (!NavSys)
+	{
+		return;
+	}
+
+	ARecastNavMesh* RecastNavMesh = Cast<ARecastNavMesh>(NavSys->GetDefaultNavDataInstance());
+	if (!RecastNavMesh)
+	{
+		return;
+	}
+
+	const float RequiredStepHeight = BlockSize + 10.0f;
+	if (RecastNavMesh->GetAgentMaxStepHeight(ENavigationDataResolution::Default) < RequiredStepHeight)
+	{
+		RecastNavMesh->SetAgentMaxStepHeight(ENavigationDataResolution::Default, RequiredStepHeight);
+
+		// SetAgentMaxStepHeight sam po sebi NE utjece na vec izgradjeni generator -
+		// FRecastNavMeshGenerator::Init() svoju kopiju (walkableClimb) snimi JEDNOM
+		// pri konstrukciji, prije nego ovaj kod uopce stigne promijeniti postavku.
+		// Rekonstrukcija generatora tjera ga da ponovno procita novu vrijednost.
+		RecastNavMesh->ConditionalConstructGenerator();
+
+		UE_LOG(LogTemp, Log, TEXT("VoxelWorld: NavMesh AgentMaxStepHeight -> %.1f (BlockSize=%.1f), generator rekonstruiran"), RequiredStepHeight, BlockSize);
+	}
 }
 
 bool AVoxelWorld::IsBlockExposed(FIntVector Pos) const
@@ -451,6 +505,12 @@ EBlockType AVoxelWorld::GetBlockTypeAt(FIntVector GridPosition) const
 	return Found ? *Found : EBlockType::Air;
 }
 
+int32 AVoxelWorld::GetTerrainHeightAt(int32 X, int32 Y) const
+{
+	return FTerrainGenerator::GetColumnHeight(X, Y, NoiseOffsetX, NoiseOffsetY,
+		NoiseScale, Octaves, SurfaceLevel, HeightAmplitude);
+}
+
 void AVoxelWorld::SetBlockType(int32 X, int32 Y, int32 Z, EBlockType NewType)
 {
 	FIntVector GridPos(X, Y, Z);
@@ -527,7 +587,6 @@ void AVoxelWorld::PlaceShowcaseBlocks(UBlockRegistry* Registry)
 		return (uint8)A.BlockType < (uint8)B.BlockType;
 	});
 
-	const int32 Z = SurfaceLevel + 1;
 	int32 X = 0;
 	for (const FBlockDefinition& Def : Definitions)
 	{
@@ -536,12 +595,13 @@ void AVoxelWorld::PlaceShowcaseBlocks(UBlockRegistry* Registry)
 			UE_LOG(LogTemp, Warning, TEXT("VoxelWorld: showcase red ne stane u WorldSizeX=%d - preskacem ostatak"), WorldSizeX);
 			break;
 		}
-		// Add gazi eventualni random Dirt na istoj poziciji
+		// Svaki stupac ima svoju visinu terena - stavi odmah iznad povrsine
+		const int32 Z = GetTerrainHeightAt(X, 0) + 1;
 		BlockData.Add(FIntVector(X, 0, Z), Def.BlockType);
 		++X;
 	}
 
-	UE_LOG(LogTemp, Log, TEXT("VoxelWorld: showcase red - %d blokova uz rub Y=0 na Z=%d"), X, Z);
+	UE_LOG(LogTemp, Log, TEXT("VoxelWorld: showcase red - %d blokova uz rub Y=0"), X);
 }
 
 TArray<EBlockType> AVoxelWorld::GetPlaceableBlockTypes() const
@@ -676,7 +736,7 @@ const FBlockAssets& AVoxelWorld::GetBlockAssets(EBlockType Type, const FBlockDef
 
 void AVoxelWorld::GenerateTrees()
 {
-	FTreeGenerator::GenerateRandomTrees(this, TreeCount, WorldSizeX, WorldSizeY, SurfaceLevel);
+	FTreeGenerator::GenerateRandomTrees(this, TreeCount, WorldSizeX, WorldSizeY);
 }
 
 // === ENEMIES ===
@@ -691,7 +751,7 @@ void AVoxelWorld::SpawnEnemies()
 	// Spawn zombie na nasumičnoj poziciji na površini
 	int32 RandX = FMath::RandRange(10, WorldSizeX - 10);
 	int32 RandY = FMath::RandRange(10, WorldSizeY - 10);
-	int32 SpawnZ = SurfaceLevel + 1;
+	int32 SpawnZ = GetTerrainHeightAt(RandX, RandY) + 1;
 	UE_LOG(LogTemp, Warning, TEXT("DEBUG SpawnEnemies: SpawnZ = %d"), SpawnZ);
 
 	FVector WorldPos = GridToWorld(RandX, RandY, SpawnZ);
@@ -720,8 +780,6 @@ void AVoxelWorld::SpawnMobs()
 		return;
 	}
 
-	int32 SpawnZ = SurfaceLevel + 1;
-
 	for (const FMobSpawnEntry& Entry : MobSpawns)
 	{
 		if (!Entry.MobClass)
@@ -737,6 +795,7 @@ void AVoxelWorld::SpawnMobs()
 			// Random pozicija na površini (izbjegavaj rubove)
 			int32 RandX = FMath::RandRange(10, WorldSizeX - 10);
 			int32 RandY = FMath::RandRange(10, WorldSizeY - 10);
+			int32 SpawnZ = GetTerrainHeightAt(RandX, RandY) + 1;
 
 			FVector WorldPos = GridToWorld(RandX, RandY, SpawnZ);
 			// Podignuti iznad površine da izbjegnemo collision
