@@ -2,95 +2,115 @@
   {
     "itemType": "Dirt",
     "displayName": "Dirt",
-    "material": "/Game/Blocks/Materials/MI_Dirt.MI_Dirt"
+    "material": "/Game/Blocks/Materials/MI_Dirt.MI_Dirt",
+    "display": { "type": "block", "block": "Dirt" }
   },
   {
     "itemType": "Stone",
     "displayName": "Stone",
-    "material": "/Game/Blocks/Materials/MI_Stone.MI_Stone"
+    "material": "/Game/Blocks/Materials/MI_Stone.MI_Stone",
+    "display": { "type": "block", "block": "Stone" }
   },
   {
     "itemType": "Grass",
     "displayName": "Grass",
-    "material": "/Game/Blocks/Materials/MI_Grass.MI_Grass"
+    "material": "/Game/Blocks/Materials/MI_Grass.MI_Grass",
+    "display": { "type": "block", "block": "Grass" }
   },
   {
     "itemType": "OakLog",
     "displayName": "Oak Log",
-    "material": "/Game/Blocks/Materials/MI_OakLog.MI_OakLog"
+    "material": "/Game/Blocks/Materials/MI_OakLog.MI_OakLog",
+    "display": { "type": "block", "block": "OakLog" }
   },
   {
     "itemType": "BirchLog",
     "displayName": "Birch Log",
-    "material": "/Game/Blocks/Materials/MI_BirchLog.MI_BirchLog"
+    "material": "/Game/Blocks/Materials/MI_BirchLog.MI_BirchLog",
+    "display": { "type": "block", "block": "BirchLog" }
   },
   {
     "itemType": "OakSapling",
     "displayName": "Oak Sapling",
-    "material": "/Game/Blocks/Materials/MI_OakLeaves.MI_OakLeaves"
+    "material": "/Game/Blocks/Materials/MI_OakLeaves.MI_OakLeaves",
+    "display": { "type": "none" }
   },
   {
     "itemType": "BirchSapling",
     "displayName": "Birch Sapling",
-    "material": "/Game/Blocks/Materials/MI_BirchLeaves.MI_BirchLeaves"
+    "material": "/Game/Blocks/Materials/MI_BirchLeaves.MI_BirchLeaves",
+    "display": { "type": "none" }
   },
   {
     "itemType": "OakPlanks",
     "displayName": "Oak Planks",
-    "material": "/Game/Blocks/Materials/MI_OakPlanks.MI_OakPlanks"
+    "material": "/Game/Blocks/Materials/MI_OakPlanks.MI_OakPlanks",
+    "display": { "type": "block", "block": "OakPlanks" }
   },
   {
     "itemType": "BirchPlanks",
     "displayName": "Birch Planks",
-    "material": "/Game/Blocks/Materials/MI_BirchPlanks.MI_BirchPlanks"
+    "material": "/Game/Blocks/Materials/MI_BirchPlanks.MI_BirchPlanks",
+    "display": { "type": "block", "block": "BirchPlanks" }
   },
   {
     "itemType": "Stick",
     "displayName": "Stick",
-    "material": "/Game/Blocks/Materials/MI_OakLog.MI_OakLog"
+    "material": "/Game/Blocks/Materials/MI_OakLog.MI_OakLog",
+    "display": { "type": "none" }
   },
   {
     "itemType": "CraftingTable",
     "displayName": "Crafting Table",
-    "material": "/Game/Blocks/Materials/MI_CraftingTable.MI_CraftingTable"
+    "material": "/Game/Blocks/Materials/MI_CraftingTable.MI_CraftingTable",
+    "display": { "type": "block", "block": "CraftingTable" }
   },
   {
     "itemType": "Wool",
-    "displayName": "Wool"
+    "displayName": "Wool",
+    "display": { "type": "none" }
   },
   {
     "itemType": "WoodenSword",
-    "displayName": "Wooden Sword"
+    "displayName": "Wooden Sword",
+    "display": { "type": "none" }
   },
   {
     "itemType": "StoneSword",
-    "displayName": "Stone Sword"
+    "displayName": "Stone Sword",
+    "display": { "type": "none" }
   },
   {
     "itemType": "IronSword",
-    "displayName": "Iron Sword"
+    "displayName": "Iron Sword",
+    "display": { "type": "none" }
   },
   {
     "itemType": "DiamondSword",
-    "displayName": "Diamond Sword"
+    "displayName": "Diamond Sword",
+    "display": { "type": "none" }
   },
   {
     "itemType": "Porkchop",
-    "displayName": "Porkchop"
+    "displayName": "Porkchop",
+    "display": { "type": "none" }
   },
   {
     "itemType": "Andesite",
     "displayName": "Andesite",
-    "material": "/Game/Blocks/Materials/MI_Andesite.MI_Andesite"
+    "material": "/Game/Blocks/Materials/MI_Andesite.MI_Andesite",
+    "display": { "type": "block", "block": "Andesite" }
   },
   {
     "itemType": "Basalt",
     "displayName": "Basalt",
-    "material": "/Game/Blocks/Materials/MI_Basalt.MI_Basalt"
+    "material": "/Game/Blocks/Materials/MI_Basalt.MI_Basalt",
+    "display": { "type": "block", "block": "Basalt" }
   },
   {
     "itemType": "Limestone",
     "displayName": "Limestone",
-    "material": "/Game/Blocks/Materials/MI_Limestone.MI_Limestone"
+    "material": "/Game/Blocks/Materials/MI_Limestone.MI_Limestone",
+    "display": { "type": "block", "block": "Limestone" }
   }
 ]

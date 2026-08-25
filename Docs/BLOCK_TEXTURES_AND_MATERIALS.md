@@ -239,9 +239,6 @@ generiranju terena (`VoxelWorld.cpp:62`).
 
 - `BlockRegistry.cpp` ima ~300 linija copy-paste koda koji je čisti **podatak**, ne logika.
 - Svaka promjena tvrdoće ili drop šanse traži rekompilaciju.
-- `FItemDefinition::Icon` (`BlockDefinition.h:107`) **nikad se ne čita.** UI vuče ikone iz
-  zasebnog `DT_ItemData` preko `FItemData::Icon` (`InventorySlotWidget.cpp:77`). Dva
-  paralelna izvora istih podataka.
 
 ## Prijedlog A — definicije u JSON / DataTable
 
@@ -304,5 +301,37 @@ linija enuma — ne isplati se u ovoj fazi.
 materijale i sve `MI_*` instance iz mape s teksturama. Skripta traži `PythonScriptPlugin`,
 koji je uključen u `MinecraftClone.uproject`.
 
-**Prijedlog A nije implementiran** — definicije blokova i itema su i dalje ~300 linija
-copy-paste koda u `BlockRegistry.cpp`. `FItemDefinition::Icon` se i dalje ne čita.
+**Prijedlog A djelomično implementiran** — `UInventorySlotWidget::GetItemData`
+(`InventorySlotWidget.cpp`) dohvaća podatke o itemu preko `UBlockRegistry::Get(this)`
+umjesto starog `DT_ItemData` DataTable-a. `DT_ItemData.uasset` je time neiskorišten i
+može se obrisati nakon provjere referenci u editoru.
+
+Ostatak Prijedloga A nije implementiran — definicije blokova i itema su i dalje ~300
+linija copy-paste koda u `BlockRegistry.cpp` (`RegisterAllBlocks`/`RegisterAllItems`
+nisu petlja po DataTable-u).
+
+## Inventory ikone — generirani izometrijski sprite bloka
+
+Inventory/hotbar sličica se, kao u pravom Minecraftu, gradi 2D kompozitiranjem
+Top+Side tekstura bloka u izometrijsku kocku (vrh 100 % svjetline, lijeva ploha
+~80 %, desna ~60 %, prozirna pozadina). Nema SceneCapture-a, svjetala ni shadera.
+
+**Generiranje (edit-time):** `Scripts/generate_item_sprites.py`, pokreće se kroz
+**Tools > MinecraftClone > Generate Items Sprites** (registrirano u
+`Content/Python/init_unreal.py`). Skripta čita `Items.json` polje `"display"`
+(`{"type": "block", "block": "<BlockType>"}`), iz `Blocks.json` nađe `MI_*`
+materijal bloka, iz njega pročita `Top`/`Side` texture parametre, složi ikonu i
+importa je kao `Content/Items/Generated/T_Item_<Block>` s pixel-art postavkama
+(Nearest, UserInterface2D, bez mipova). Pregazuje postojeće. Pokreni je ponovno
+nakon svake promjene block tekstura ili `display` polja.
+
+**Prikaz (runtime):** `UInventorySlotWidget` čita `FItemDefinition::Display`
+(parsira se iz `Items.json` preko `UBlockRegistry`) i po konvenciji učita
+`/Game/Items/Generated/T_Item_<Block>` (`LoadGeneratedItemIcon` u
+`InventorySlotWidget.cpp`). Item bez block prikaza (`display.type: "none"` —
+alati, hrana, sadnice) pada na transparentni placeholder; ti itemi čekaju budući
+`"sprite"` display tip s ručno crtanim 2D sličicama.
+
+Blok čiji `MI_*` još ne postoji (teksture nisu nacrtane) preskače se pri
+generiranju i item ostaje bez ikone — nacrtaj teksture, pokreni Build Block
+Materials pa Generate Items Sprites.

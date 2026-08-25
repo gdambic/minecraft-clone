@@ -8,7 +8,6 @@
 class UHorizontalBox;
 class UInventorySlotWidget;
 class AFirstPersonCharacter;
-class UDataTable;
 
 /**
  * C++ bazna klasa za Hotbar widget.
@@ -34,10 +33,6 @@ public:
 	/** Klasa widgeta za slot (WBP_InventorySlot) */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Hotbar|Config")
 	TSubclassOf<UInventorySlotWidget> InventorySlotWidgetClass;
-
-	/** DataTable s podacima o itemima */
-	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Hotbar|Config")
-	TObjectPtr<UDataTable> ItemDataTable;
 
 	// ==================== Glavne funkcije ====================
 

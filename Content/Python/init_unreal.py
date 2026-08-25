@@ -4,9 +4,11 @@ init_unreal.py
 
 PythonScriptPlugin sam pokrece ovu datoteku pri svakom pokretanju editora.
 
-Registrira stavku **Tools > MinecraftClone > Build Block Materials** koja pokrece
-Scripts/build_block_materials.py. Time otpada lijepljenje exec(open(...)) u Python
-konzolu.
+Registrira stavke:
+- **Tools > MinecraftClone > Build Block Materials** - pokrece Scripts/build_block_materials.py
+- **Tools > MinecraftClone > Generate Items Sprites** - pokrece Scripts/generate_item_sprites.py
+
+Time otpada lijepljenje exec(open(...)) u Python konzolu.
 
 Datoteka mora ostati u Content/Python/ - plugin trazi bas tu putanju.
 """
@@ -18,6 +20,9 @@ SECTION_NAME = "MinecraftClone"
 
 SCRIPT_PATH = unreal.Paths.convert_relative_path_to_full(
     unreal.Paths.project_dir() + "Scripts/build_block_materials.py")
+
+SCRIPT_PATH_ITEM_SPRITES = unreal.Paths.convert_relative_path_to_full(
+    unreal.Paths.project_dir() + "Scripts/generate_item_sprites.py")
 
 
 def _register_menu():
@@ -48,13 +53,25 @@ def _register_menu():
         'exec(open(r"{0}").read())'.format(SCRIPT_PATH))
     menu.add_menu_entry(SECTION_NAME, entry)
 
+    entry_item_sprites = unreal.ToolMenuEntry(
+        name="GenerateItemSprites",
+        type=unreal.MultiBlockType.MENU_ENTRY)
+    entry_item_sprites.set_label("Generate Items Sprites")
+    entry_item_sprites.set_tool_tip(
+        "Renderiraj izometrijske ikone blok-itema iz Items.json 'display' polja "
+        "u Content/Items/Generated")
+    entry_item_sprites.set_string_command(
+        unreal.ToolMenuStringCommandType.PYTHON, "",
+        'exec(open(r"{0}").read())'.format(SCRIPT_PATH_ITEM_SPRITES))
+    menu.add_menu_entry(SECTION_NAME, entry_item_sprites)
+
     menus.refresh_all_widgets()
     return True
 
 
 try:
     if _register_menu():
-        unreal.log("[MinecraftClone] Tools > MinecraftClone > Build Block Materials registriran")
+        unreal.log("[MinecraftClone] Tools > MinecraftClone > Build Block Materials / Generate Items Sprites registrirano")
     else:
         unreal.log("[MinecraftClone] ToolMenus nedostupan (headless) - izbornik preskocen")
 except Exception as error:

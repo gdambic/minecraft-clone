@@ -3,7 +3,6 @@
 #include "CoreMinimal.h"
 #include "BlockType.h"
 #include "ItemType.h"
-#include "Engine/Texture2D.h"
 #include "BlockDefinition.generated.h"
 
 /**
@@ -78,6 +77,26 @@ struct MINECRAFTCLONE_API FBlockAssets
 };
 
 /**
+ * Nacin prikaza itema u inventory/hotbar UI-ju (JSON polje "display").
+ * type "block": ikona je generirana izometrijska kocka bloka Block -
+ * ucitava se po konvenciji /Game/Items/Generated/T_Item_<Block>
+ * (generira je Tools > MinecraftClone > Generate Items Sprites).
+ * type "none": nema ikone (transparent placeholder).
+ */
+USTRUCT(BlueprintType)
+struct MINECRAFTCLONE_API FItemDisplayDefinition
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Item")
+	FString Type = TEXT("none");
+
+	/** Ime bloka (EBlockType vrijednost) ciji se izgled prikazuje, za type "block" */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Item")
+	FString Block;
+};
+
+/**
  * Definicija itema - sadrži podatke za item drop vizuale i UI.
  * Registrira se u UBlockRegistry.
  */
@@ -102,13 +121,13 @@ struct MINECRAFTCLONE_API FItemDefinition
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Item")
 	FSoftObjectPath Material;
 
-	/** Ikona za inventory/hotbar UI */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Item")
-	TSoftObjectPtr<UTexture2D> Icon;
-
 	/** Maksimalan stack size (64 = default Minecraft stil) */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Item")
 	int32 MaxStackSize = 64;
+
+	/** Nacin prikaza u UI (JSON polje "display") */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Item")
+	FItemDisplayDefinition Display;
 
 	/** Je li definicija validna */
 	bool IsValid() const { return ItemType != EItemType::None; }

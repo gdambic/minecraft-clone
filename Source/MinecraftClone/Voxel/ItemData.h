@@ -7,7 +7,7 @@
 
 /**
  * Struktura koja definira podatke o itemu za Data Table.
- * Koristi se za prikaz u UI (ikona, naziv) i gameplay (max stack).
+ * Koristi se za prikaz u UI (naziv) i gameplay (max stack).
  */
 USTRUCT(BlueprintType)
 struct FItemData : public FTableRowBase
@@ -21,10 +21,6 @@ struct FItemData : public FTableRowBase
 	/** Naziv itema za prikaz u UI */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Item")
 	FText DisplayName;
-
-	/** Ikona za inventory/hotbar */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Item")
-	TSoftObjectPtr<UTexture2D> Icon;
 
 	/** Maksimalan stack size (64 = default Minecraft stil) */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Item")

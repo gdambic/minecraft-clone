@@ -3,9 +3,30 @@
 #include "Components/TextBlock.h"
 #include "Components/Border.h"
 #include "Components/Button.h"
-#include "Engine/DataTable.h"
+#include "BlockRegistry.h"
 #include "Engine/Texture2D.h"
 #include "Styling/SlateColor.h"
+
+namespace
+{
+	/**
+	 * Ucitaj generiranu ikonu bloka po konvenciji:
+	 * Content/Items/Generated/T_Item_<Block> (generira je editor alat
+	 * Tools > MinecraftClone > Generate Items Sprites iz Items.json "display").
+	 */
+	UTexture2D* LoadGeneratedItemIcon(const FItemDefinition& Def)
+	{
+		if (Def.Display.Type != TEXT("block") || Def.Display.Block.IsEmpty())
+		{
+			return nullptr;
+		}
+
+		const FString Path = FString::Printf(
+			TEXT("/Game/Items/Generated/T_Item_%s.T_Item_%s"),
+			*Def.Display.Block, *Def.Display.Block);
+		return Cast<UTexture2D>(FSoftObjectPath(Path).TryLoad());
+	}
+}
 
 void UInventorySlotWidget::NativeConstruct()
 {
@@ -62,10 +83,10 @@ void UInventorySlotWidget::SetSlotData(EItemType ItemType, int32 Quantity)
 	}
 	else
 	{
-		// Dohvati podatke o itemu
-		FItemData Data = GetItemData(ItemType);
+		// Dohvati podatke o itemu (naziv za tooltip)
+		FItemDefinition Data = GetItemData(ItemType);
 
-		UpdateIconVisual(Data);
+		UpdateIconVisual(ItemType);
 		UpdateQuantityVisual(Quantity);
 		UpdateTooltip(Data);
 	}
@@ -73,34 +94,22 @@ void UInventorySlotWidget::SetSlotData(EItemType ItemType, int32 Quantity)
 
 UTexture2D* UInventorySlotWidget::GetItemIcon(EItemType ItemType) const
 {
-	FItemData Data = GetItemData(ItemType);
-	return Data.Icon.LoadSynchronous();
+	return LoadGeneratedItemIcon(GetItemData(ItemType));
 }
 
-FItemData UInventorySlotWidget::GetItemData(EItemType ItemType) const
+FItemDefinition UInventorySlotWidget::GetItemData(EItemType ItemType) const
 {
-	if (!ItemDataTable)
+	UBlockRegistry* Registry = UBlockRegistry::Get(this);
+	if (!Registry)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("UInventorySlotWidget::GetItemData - ItemDataTable is not set!"));
-		return FItemData();
+		UE_LOG(LogTemp, Warning, TEXT("UInventorySlotWidget::GetItemData - BlockRegistry not available!"));
+		return FItemDefinition();
 	}
 
-	// Pretvori enum u string za Row Name
-	FString RowName = UEnum::GetValueAsString(ItemType);
-	// Ukloni "EItemType::" prefix ako postoji
-	RowName.RemoveFromStart(TEXT("EItemType::"));
-
-	FItemData* FoundRow = ItemDataTable->FindRow<FItemData>(FName(*RowName), TEXT("GetItemData"));
-	if (FoundRow)
-	{
-		return *FoundRow;
-	}
-
-	UE_LOG(LogTemp, Warning, TEXT("UInventorySlotWidget::GetItemData - Row '%s' not found in DataTable"), *RowName);
-	return FItemData();
+	return Registry->GetItemDefinitionCopy(ItemType);
 }
 
-void UInventorySlotWidget::UpdateIconVisual(const FItemData& Data)
+void UInventorySlotWidget::UpdateIconVisual(EItemType ItemType)
 {
 	if (!ItemIcon)
 	{
@@ -109,15 +118,16 @@ void UInventorySlotWidget::UpdateIconVisual(const FItemData& Data)
 
 	ItemIcon->SetVisibility(ESlateVisibility::Visible);
 
-	// Učitaj i postavi teksturu
-	UTexture2D* IconTexture = Data.Icon.LoadSynchronous();
+	// Generirani izometrijski sprite bloka (Items.json "display" -> T_Item_<Block>)
+	UTexture2D* IconTexture = LoadGeneratedItemIcon(GetItemData(ItemType));
 	if (IconTexture)
 	{
-		ItemIcon->SetBrushFromTexture(IconTexture, true);
+		ItemIcon->SetBrushTintColor(FSlateColor(FLinearColor::White));
+		ItemIcon->SetBrushFromTexture(IconTexture, false);
 	}
 	else
 	{
-		// Ako nema ikone, prikaži placeholder (transparentno)
+		// Item bez block prikaza (alat, hrana, sadnica...) - placeholder (transparentno)
 		ItemIcon->SetBrushTintColor(FSlateColor(FLinearColor::Transparent));
 	}
 }
@@ -141,7 +151,7 @@ void UInventorySlotWidget::UpdateQuantityVisual(int32 Quantity)
 	}
 }
 
-void UInventorySlotWidget::UpdateTooltip(const FItemData& Data)
+void UInventorySlotWidget::UpdateTooltip(const FItemDefinition& Data)
 {
 	// Postavi tooltip na DisplayName itema
 	SetToolTipText(Data.DisplayName);

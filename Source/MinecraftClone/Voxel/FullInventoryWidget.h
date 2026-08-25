@@ -10,7 +10,6 @@ class UHorizontalBox;
 class UCanvasPanel;
 class UInventorySlotWidget;
 class AFirstPersonCharacter;
-class UDataTable;
 
 /**
  * C++ bazna klasa za Full Inventory widget (inventory + crafting).
@@ -56,10 +55,6 @@ public:
 	/** Klasa widgeta za slot (WBP_InventorySlot) */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Full Inventory|Config")
 	TSubclassOf<UInventorySlotWidget> InventorySlotWidgetClass;
-
-	/** DataTable s podacima o itemima */
-	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Full Inventory|Config")
-	TObjectPtr<UDataTable> ItemDataTable;
 
 	/** Veličina cursor slota */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Full Inventory|Config")

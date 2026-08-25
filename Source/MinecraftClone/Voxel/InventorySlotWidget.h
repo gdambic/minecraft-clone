@@ -3,14 +3,14 @@
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
 #include "ItemType.h"
-#include "ItemData.h"
+#include "BlockDefinition.h"
 #include "InventorySlotWidget.generated.h"
 
 class UImage;
 class UTextBlock;
 class UBorder;
 class UButton;
-class UDataTable;
+class UTexture2D;
 
 /** Delegate za klik na slot */
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnSlotClicked, int32, SlotIndex);
@@ -62,12 +62,6 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Inventory Slot|Style")
 	FLinearColor EmptySlotColor = FLinearColor(0.1f, 0.1f, 0.1f, 0.8f);
 
-	// ==================== Data Table ====================
-
-	/** DataTable s podacima o itemima (ikone, nazivi, stack size) */
-	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Inventory Slot|Data")
-	TObjectPtr<UDataTable> ItemDataTable;
-
 	// ==================== Slot identifikacija ====================
 
 	/** Index slota u inventaru (-1 = cursor slot, 0-26 = main, 27-35 = hotbar, 36-39 = crafting input, 40 = crafting output) */
@@ -100,20 +94,21 @@ public:
 	void SetSlotData(EItemType ItemType, int32 Quantity);
 
 	/**
-	 * Dohvaća teksturu ikone za zadani tip itema.
+	 * Dohvaća generiranu ikonu itema (izometrijski sprite bloka iz
+	 * Content/Items/Generated, konvencija T_Item_<Block>).
 	 * @param ItemType - tip itema
-	 * @return Tekstura ikone ili nullptr ako ne postoji
+	 * @return Tekstura ikone ili nullptr ako item nema block prikaz
 	 */
 	UFUNCTION(BlueprintCallable, Category = "Inventory Slot")
 	UTexture2D* GetItemIcon(EItemType ItemType) const;
 
 	/**
-	 * Dohvaća podatke o itemu iz DataTable.
+	 * Dohvaća podatke o itemu iz BlockRegistry-ja (izvor: Content/Data/Items.json).
 	 * @param ItemType - tip itema
-	 * @return FItemData struktura s podacima
+	 * @return FItemDefinition struktura s podacima
 	 */
 	UFUNCTION(BlueprintCallable, Category = "Inventory Slot")
-	FItemData GetItemData(EItemType ItemType) const;
+	FItemDefinition GetItemData(EItemType ItemType) const;
 
 	// ==================== Stanje slota ====================
 
@@ -160,14 +155,14 @@ protected:
 	int32 CurrentQuantity = 0;
 
 private:
-	/** Ažurira vizual ikone */
-	void UpdateIconVisual(const FItemData& Data);
+	/** Ažurira vizual ikone - generirani izometrijski sprite bloka */
+	void UpdateIconVisual(EItemType ItemType);
 
 	/** Ažurira vizual količine */
 	void UpdateQuantityVisual(int32 Quantity);
 
 	/** Ažurira tooltip */
-	void UpdateTooltip(const FItemData& Data);
+	void UpdateTooltip(const FItemDefinition& Data);
 
 	/** Postavlja slot u prazno stanje */
 	void ClearSlotVisual();

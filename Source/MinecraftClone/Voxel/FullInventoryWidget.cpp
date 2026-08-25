@@ -341,7 +341,6 @@ UInventorySlotWidget* UFullInventoryWidget::CreateSlotWidget(int32 SlotIndex)
 	if (SlotWidget)
 	{
 		SlotWidget->SlotIndex = SlotIndex;
-		SlotWidget->ItemDataTable = ItemDataTable;
 	}
 
 	return SlotWidget;

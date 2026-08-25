@@ -69,9 +69,6 @@ void UHotbarWidget::CreateHotbarSlots()
 		UInventorySlotWidget* SlotWidget = CreateWidget<UInventorySlotWidget>(GetOwningPlayer(), InventorySlotWidgetClass);
 		if (SlotWidget)
 		{
-			// Postavi ItemDataTable na slot
-			SlotWidget->ItemDataTable = ItemDataTable;
-
 			// Dodaj u kontejner
 			UHorizontalBoxSlot* BoxSlot = SlotContainer->AddChildToHorizontalBox(SlotWidget);
 			if (BoxSlot)
