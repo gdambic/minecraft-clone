@@ -1,10 +1,13 @@
 #include "FirstPersonArmComponent.h"
 #include "FirstPersonCharacter.h"
+#include "BlockRegistry.h"
+#include "WeaponData.h"
 #include "Camera/CameraComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Kismet/GameplayStatics.h"
 #include "Engine/StaticMesh.h"
+#include "Materials/MaterialInterface.h"
 #include "UObject/ConstructorHelpers.h"
 #include "MinecraftClone.h"
 
@@ -33,6 +36,10 @@ void UFirstPersonArmComponent::BeginPlay()
 
 	CreateArmMesh();
 	CreateHeldItemMesh();
+
+	// Character moze postaviti item prije nego sto meshevi postoje
+	// (SetHeldItem prije Super::BeginPlay) - primijeni to stanje sada
+	SetHeldItem(CurrentHeldItem);
 
 	UE_LOG(LogMinecraftClone, Log, TEXT("FirstPersonArmComponent initialized successfully"));
 }
@@ -74,6 +81,9 @@ void UFirstPersonArmComponent::CreateArmMesh()
 	{
 		ArmMesh->SetMaterial(0, ArmMaterial);
 	}
+
+	// Zapamti materijal kocke da se moze vratiti nakon item sprite-a
+	DefaultArmMaterial = ArmMesh->GetMaterial(0);
 
 	// Register the component
 	ArmMesh->RegisterComponent();
@@ -292,33 +302,60 @@ void UFirstPersonArmComponent::SetHeldItem(EItemType ItemType)
 {
 	CurrentHeldItem = ItemType;
 
-	if (!HeldItemMesh)
+	// Meshevi jos ne postoje (poziv prije BeginPlay komponente) - stanje je
+	// zapamceno u CurrentHeldItem, BeginPlay ce ga primijeniti
+	if (!ArmMesh || !HeldItemMesh)
 	{
 		return;
 	}
 
-	// Check if this is a weapon
-	bool bIsWeapon = (ItemType == EItemType::WoodenSword ||
-					  ItemType == EItemType::StoneSword ||
-					  ItemType == EItemType::IronSword ||
-					  ItemType == EItemType::DiamondSword);
-
-	HeldItemMesh->SetVisibility(bIsWeapon);
-
-	if (bIsWeapon)
+	// Prazan slot: nista u ruci
+	if (ItemType == EItemType::None)
 	{
+		ArmMesh->SetVisibility(false);
+		HeldItemMesh->SetVisibility(false);
+		return;
+	}
+
+	ArmMesh->SetVisibility(true);
+
+	// Oruzje: postojeca kocka ruke + placeholder mac; pravi prikaz je buduci posao
+	if (UWeaponDataLibrary::IsWeapon(ItemType))
+	{
+		ArmMesh->SetMaterial(0, DefaultArmMaterial);
+		ArmMesh->SetRelativeScale3D(ArmScale);
+		HeldItemMesh->SetVisibility(true);
 		UpdateSwordAppearance(ItemType);
+		return;
+	}
+
+	// Obican item: kocka u ruci s materijalom bloka - isti MI kao teren,
+	// pa izgleda tocno kao blok u svijetu
+	HeldItemMesh->SetVisibility(false);
+
+	UMaterialInterface* BlockMaterial = nullptr;
+	if (UBlockRegistry* Registry = UBlockRegistry::Get(this))
+	{
+		BlockMaterial = Registry->GetBlockMaterialForItem(ItemType);
+	}
+
+	if (BlockMaterial)
+	{
+		ArmMesh->SetMaterial(0, BlockMaterial);
+		ArmMesh->SetRelativeScale3D(HeldBlockScale);
+	}
+	else
+	{
+		// Item bez placeable bloka (alat, hrana...) ili blok bez materijala -
+		// siva kocka, ista fallback konvencija kao za blokove u svijetu
+		ArmMesh->SetMaterial(0, DefaultArmMaterial);
+		ArmMesh->SetRelativeScale3D(ArmScale);
 	}
 }
 
 void UFirstPersonArmComponent::ClearHeldItem()
 {
-	CurrentHeldItem = EItemType::None;
-
-	if (HeldItemMesh)
-	{
-		HeldItemMesh->SetVisibility(false);
-	}
+	SetHeldItem(EItemType::None);
 }
 
 void UFirstPersonArmComponent::UpdateSwordAppearance(EItemType SwordType)

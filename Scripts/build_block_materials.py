@@ -6,6 +6,7 @@ Generira materijalni sustav za voxel blokove:
 
   1. popravi import postavke svih tekstura u /Game/Blocks/Textures
   2. izgradi master materijale M_VoxelBlock i M_VoxelBlock_Masked
+     te M_ItemSprite (sprite itema u ruci, /Game/Items/Generated/Materials)
   3. izgradi MI instancu po bloku iz Content/Data/Blocks.json (jedini izvor
      istine): "material" polje daje putanju MI asseta, "masked" (default
      false) bira masked master (alpha-cutout, za lisce)
@@ -35,6 +36,13 @@ MATERIAL_DIR = "/Game/Blocks/Materials"
 
 MASTER_OPAQUE = "M_VoxelBlock"
 MASTER_MASKED = "M_VoxelBlock_Masked"
+
+# Sprite materijal za prikaz itema u ruci (HOLDING). C++ ga ucitava po ovoj
+# putanji (FirstPersonArmComponent) i mijenja SpriteTexture parametar po
+# odabranom itemu - jedan materijal za sve iteme.
+ITEM_SPRITE_MATERIAL_DIR = "/Game/Items/Generated/Materials"
+ITEM_SPRITE_MATERIAL = "M_ItemSprite"
+ITEM_SPRITE_PARAM = "SpriteTexture"
 
 # Mipovi: 16x16 bez mipova daje ostre piksele izbliza, ali u daljini titra
 # (aliasing kroz TSR). S mipovima je mirno, a Filter=Nearest i dalje cuva
@@ -330,6 +338,62 @@ def build_master_material(asset_name, masked):
 
 
 # ---------------------------------------------------------------------------
+# 2b. Sprite materijal za item u ruci (HOLDING)
+# ---------------------------------------------------------------------------
+
+def build_item_sprite_material():
+    """
+    Graf (jedan node, dvije zice):
+
+        TextureSampleParameter2D "SpriteTexture"
+            RGB -> Base Color
+            A   -> Opacity Mask
+
+    Masked + two-sided: pikseli izvan izometrijske kocke sprite-a su prozirni,
+    pa quad u ruci vizualno nestane i ostane samo "kocka". Roughness konstanta
+    kao kod blokova da item u ruci svjetlom izgleda kao ostatak svijeta.
+    """
+    package_path = "{0}/{1}".format(ITEM_SPRITE_MATERIAL_DIR, ITEM_SPRITE_MATERIAL)
+
+    material = _load("{0}.{1}".format(package_path, ITEM_SPRITE_MATERIAL))
+    if material is None:
+        material = unreal.AssetToolsHelpers.get_asset_tools().create_asset(
+            ITEM_SPRITE_MATERIAL, ITEM_SPRITE_MATERIAL_DIR,
+            unreal.Material, unreal.MaterialFactoryNew())
+        if material is None:
+            _fail("ne mogu kreirati materijal {0}".format(package_path))
+            return None
+        _info("kreiran {0}".format(package_path))
+    else:
+        MEL.delete_all_material_expressions(material)
+        _info("postojeci {0} - graf ocisen i gradi se ponovno".format(package_path))
+
+    material.set_editor_property("blend_mode", unreal.BlendMode.BLEND_MASKED)
+    material.set_editor_property("two_sided", True)
+    # Sprite ima binarnu alphu (potpuno unutra ili potpuno izvan kocke)
+    material.set_editor_property("opacity_mask_clip_value", 0.5)
+
+    sampler = _expr(material, unreal.MaterialExpressionTextureSampleParameter2D,
+                    -400, 0)
+    sampler.set_editor_property("parameter_name", ITEM_SPRITE_PARAM)
+    fallback = _load(FALLBACK_TEXTURE)
+    if fallback is not None:
+        sampler.set_editor_property("texture", fallback)
+
+    _connect_property(sampler, "", material, unreal.MaterialProperty.MP_BASE_COLOR)
+    _connect_property(sampler, "A", material, unreal.MaterialProperty.MP_OPACITY_MASK)
+
+    roughness = _expr(material, unreal.MaterialExpressionScalarParameter, -400, 300)
+    roughness.set_editor_property("parameter_name", "Roughness")
+    roughness.set_editor_property("default_value", DEFAULT_ROUGHNESS)
+    _connect_property(roughness, "", material, unreal.MaterialProperty.MP_ROUGHNESS)
+
+    MEL.recompile_material(material)
+    EAL.save_loaded_asset(material, only_if_is_dirty=False)
+    return material
+
+
+# ---------------------------------------------------------------------------
 # 3. Material Instance po bloku
 # ---------------------------------------------------------------------------
 
@@ -403,7 +467,7 @@ def main():
     _failures[:] = []
     _info("=== pocetak ===")
 
-    for directory in (TEXTURE_DIR, MATERIAL_DIR):
+    for directory in (TEXTURE_DIR, MATERIAL_DIR, ITEM_SPRITE_MATERIAL_DIR):
         if not EAL.does_directory_exist(directory):
             EAL.make_directory(directory)
 
@@ -420,11 +484,14 @@ def main():
         MASTER_MASKED: build_master_material(MASTER_MASKED, masked=True),
     }
 
+    sprite_material = build_item_sprite_material()
+
     created, skipped = build_material_instances(masters, blocks)
 
-    _info("=== gotovo: {0} master materijala, {1} MI instanci, {2} preskoceno, "
-          "{3} gresaka ===".format(
+    _info("=== gotovo: {0} master materijala, sprite materijal {1}, "
+          "{2} MI instanci, {3} preskoceno, {4} gresaka ===".format(
               len([m for m in masters.values() if m is not None]),
+              "OK" if sprite_material is not None else "NEUSPJEH",
               created, len(skipped), len(_failures)))
 
     if _failures:

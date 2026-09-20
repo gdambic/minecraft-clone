@@ -7,27 +7,6 @@
 #include "Engine/Texture2D.h"
 #include "Styling/SlateColor.h"
 
-namespace
-{
-	/**
-	 * Ucitaj generiranu ikonu bloka po konvenciji:
-	 * Content/Items/Generated/T_Item_<Block> (generira je editor alat
-	 * Tools > MinecraftClone > Generate Items Sprites iz Items.json "display").
-	 */
-	UTexture2D* LoadGeneratedItemIcon(const FItemDefinition& Def)
-	{
-		if (Def.Display.Type != TEXT("block") || Def.Display.Block.IsEmpty())
-		{
-			return nullptr;
-		}
-
-		const FString Path = FString::Printf(
-			TEXT("/Game/Items/Generated/T_Item_%s.T_Item_%s"),
-			*Def.Display.Block, *Def.Display.Block);
-		return Cast<UTexture2D>(FSoftObjectPath(Path).TryLoad());
-	}
-}
-
 void UInventorySlotWidget::NativeConstruct()
 {
 	Super::NativeConstruct();
@@ -94,7 +73,8 @@ void UInventorySlotWidget::SetSlotData(EItemType ItemType, int32 Quantity)
 
 UTexture2D* UInventorySlotWidget::GetItemIcon(EItemType ItemType) const
 {
-	return LoadGeneratedItemIcon(GetItemData(ItemType));
+	UBlockRegistry* Registry = UBlockRegistry::Get(this);
+	return Registry ? Registry->GetItemIconTexture(ItemType) : nullptr;
 }
 
 FItemDefinition UInventorySlotWidget::GetItemData(EItemType ItemType) const
@@ -119,7 +99,7 @@ void UInventorySlotWidget::UpdateIconVisual(EItemType ItemType)
 	ItemIcon->SetVisibility(ESlateVisibility::Visible);
 
 	// Generirani izometrijski sprite bloka (Items.json "display" -> T_Item_<Block>)
-	UTexture2D* IconTexture = LoadGeneratedItemIcon(GetItemData(ItemType));
+	UTexture2D* IconTexture = GetItemIcon(ItemType);
 	if (IconTexture)
 	{
 		ItemIcon->SetBrushTintColor(FSlateColor(FLinearColor::White));

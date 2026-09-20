@@ -5,6 +5,9 @@
 #include "BlockDefinition.h"
 #include "BlockRegistry.generated.h"
 
+class UTexture2D;
+class UMaterialInterface;
+
 /**
  * Centralni registar svih blokova i itema u igri.
  * GameInstanceSubsystem - automatski se kreira i živi kroz cijelu sesiju.
@@ -63,6 +66,24 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "BlockRegistry")
 	TArray<FItemDefinition> GetAllItemDefinitions() const;
 
+	/**
+	 * Dohvati generiranu ikonu itema (izometrijski sprite bloka iz
+	 * Content/Items/Generated, konvencija T_Item_<Display.Block>).
+	 * Jedini izvor istine za "koju teksturu prikazati" - koriste ga i
+	 * inventory UI i prikaz itema u ruci.
+	 * Vraća nullptr ako item nema block prikaz ili tekstura ne postoji.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "BlockRegistry")
+	UTexture2D* GetItemIconTexture(EItemType ItemType);
+
+	/**
+	 * Dohvati materijal bloka koji se postavlja iz danog itema - isti MI koji
+	 * koristi teren, pa item u ruci izgleda točno kao blok u svijetu.
+	 * Vraća nullptr ako item nije placeable blok ili materijal ne postoji.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "BlockRegistry")
+	UMaterialInterface* GetBlockMaterialForItem(EItemType ItemType);
+
 	// === Static Helper ===
 
 	/** Dohvati registry iz bilo kojeg UObject konteksta */
@@ -104,4 +125,12 @@ private:
 	/** Cache: Block -> Item mapping za brzi lookup */
 	UPROPERTY()
 	TMap<EBlockType, EItemType> BlockToItemMap;
+
+	/** Cache učitanih ikona - TryLoad se radi jednom po tipu (i nullptr se pamti) */
+	UPROPERTY()
+	TMap<EItemType, TObjectPtr<UTexture2D>> ItemIconCache;
+
+	/** Cache blok materijala po itemu - TryLoad jednom po tipu (i nullptr se pamti) */
+	UPROPERTY()
+	TMap<EItemType, TObjectPtr<UMaterialInterface>> ItemBlockMaterialCache;
 };

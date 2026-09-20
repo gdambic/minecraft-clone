@@ -20,12 +20,15 @@ void UHotbarWidget::NativeConstruct()
 	}
 
 	// Bind na delegate ako imamo player charactera
+	// (unbind prvo: SetPlayerCharacter je mogao vec bindati prije AddToViewport)
 	if (PlayerCharacter)
 	{
 		if (UInventoryComponent* InvComp = PlayerCharacter->GetInventoryComponent())
 		{
+			InvComp->OnSlotChanged.RemoveDynamic(this, &UHotbarWidget::OnSlotChangedHandler);
 			InvComp->OnSlotChanged.AddDynamic(this, &UHotbarWidget::OnSlotChangedHandler);
 		}
+		PlayerCharacter->OnSelectedItemChanged.RemoveDynamic(this, &UHotbarWidget::OnSelectedItemChangedHandler);
 		PlayerCharacter->OnSelectedItemChanged.AddDynamic(this, &UHotbarWidget::OnSelectedItemChangedHandler);
 	}
 }

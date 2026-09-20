@@ -5,6 +5,7 @@
 #include "BlockType.h"
 #include "ItemType.h"
 #include "WeaponData.h"
+#include "InventoryComponent.h"
 #include "FirstPersonCharacter.generated.h"
 
 class UCameraComponent;
@@ -175,6 +176,14 @@ protected:
 
 	/** Scroll inventory selection */
 	void ScrollInventory(const FInputActionValue& Value);
+
+	/**
+	 * Handler za promjenu sadržaja slota - osvježi prikaz itema u ruci ako je
+	 * promijenjen odabrani hotbar slot (npr. postavljen zadnji blok iz ruke,
+	 * pickup u odabrani prazan slot, drag-drop u inventoryju).
+	 */
+	UFUNCTION()
+	void OnInventorySlotChanged(int32 SlotIndex, FInventorySlot NewSlot);
 
 protected:
 	/** Called from Input Actions for movement input */

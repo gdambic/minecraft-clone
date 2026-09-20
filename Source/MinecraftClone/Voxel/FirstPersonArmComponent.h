@@ -33,18 +33,26 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Arm")
 	UStaticMeshComponent* HeldItemMesh;
 
+	/**
+	 * Scale of the arm cube while a block item is held. Uniform by default so
+	 * the held block is a true cube, exactly like a world block (world blocks
+	 * are 100 UU, so 0.25 = 25 UU cube).
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Arm|Held Item")
+	FVector HeldBlockScale = FVector(0.25f, 0.25f, 0.25f);
+
 	// === POSITIONING ===
 
-	/** Base offset from camera (lower right corner) */
-	UPROPERTY(EditDefaultsOnly, Category = "Arm|Position")
+	/** Base offset from camera (X = distance from player) */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Arm|Position")
 	FVector ArmBaseOffset = FVector(40.0f, 20.0f, -25.0f);
 
 	/** Base rotation of arm */
-	UPROPERTY(EditDefaultsOnly, Category = "Arm|Position")
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Arm|Position")
 	FRotator ArmBaseRotation = FRotator(0.0f, -10.0f, 0.0f);
 
 	/** Scale of the arm mesh */
-	UPROPERTY(EditDefaultsOnly, Category = "Arm|Position")
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Arm|Position")
 	FVector ArmScale = FVector(0.08f, 0.25f, 0.08f);
 
 	// === SWING ANIMATION ===
@@ -151,6 +159,10 @@ private:
 
 	// Current held item type
 	EItemType CurrentHeldItem = EItemType::None;
+
+	// Material the arm cube shows when no block material applies (weapons, fallback)
+	UPROPERTY()
+	UMaterialInterface* DefaultArmMaterial;
 
 	// Update swing animation
 	void UpdateSwing(float DeltaTime);

@@ -1,5 +1,7 @@
 #include "BlockRegistry.h"
 #include "Engine/GameInstance.h"
+#include "Engine/Texture2D.h"
+#include "Materials/MaterialInterface.h"
 #include "Kismet/GameplayStatics.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
@@ -285,6 +287,47 @@ TArray<FItemDefinition> UBlockRegistry::GetAllItemDefinitions() const
 	TArray<FItemDefinition> Result;
 	ItemDefinitions.GenerateValueArray(Result);
 	return Result;
+}
+
+UTexture2D* UBlockRegistry::GetItemIconTexture(EItemType ItemType)
+{
+	if (const TObjectPtr<UTexture2D>* Cached = ItemIconCache.Find(ItemType))
+	{
+		return *Cached;
+	}
+
+	UTexture2D* Texture = nullptr;
+	const FItemDefinition* Def = GetItemDefinition(ItemType);
+	if (Def && Def->Display.Type == TEXT("block") && !Def->Display.Block.IsEmpty())
+	{
+		// Konvencija: /Game/Items/Generated/T_Item_<Block> (generira je editor
+		// alat Tools > MinecraftClone > Generate Items Sprites iz Items.json)
+		const FString Path = FString::Printf(
+			TEXT("/Game/Items/Generated/T_Item_%s.T_Item_%s"),
+			*Def->Display.Block, *Def->Display.Block);
+		Texture = Cast<UTexture2D>(FSoftObjectPath(Path).TryLoad());
+	}
+
+	ItemIconCache.Add(ItemType, Texture);
+	return Texture;
+}
+
+UMaterialInterface* UBlockRegistry::GetBlockMaterialForItem(EItemType ItemType)
+{
+	if (const TObjectPtr<UMaterialInterface>* Cached = ItemBlockMaterialCache.Find(ItemType))
+	{
+		return *Cached;
+	}
+
+	UMaterialInterface* Material = nullptr;
+	const FBlockDefinition* Def = GetBlockForItem(ItemType);
+	if (Def && Def->Material.IsValid())
+	{
+		Material = Cast<UMaterialInterface>(Def->Material.TryLoad());
+	}
+
+	ItemBlockMaterialCache.Add(ItemType, Material);
+	return Material;
 }
 
 // === Static Helper ===

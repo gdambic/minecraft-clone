@@ -141,6 +141,13 @@ void AFirstPersonCharacter::BeginPlay()
 		UE_LOG(LogMinecraftClone, Warning, TEXT("FirstPersonCharacter: VoxelWorld not found in scene!"));
 	}
 
+	// Prati promjene sadržaja slotova - ruka se mora osvježiti i kad se
+	// odabrani slot isprazni/napuni bez promjene indeksa
+	if (InventoryComponent)
+	{
+		InventoryComponent->OnSlotChanged.AddDynamic(this, &AFirstPersonCharacter::OnInventorySlotChanged);
+	}
+
 	// Početni inventory - stavi iteme u hotbar (slotovi 27-35)
 	if (InventoryComponent)
 	{
@@ -365,6 +372,15 @@ void AFirstPersonCharacter::ScrollInventory(const FInputActionValue& Value)
 		{
 			FirstPersonArmComponent->SetHeldItem(NewItemType);
 		}
+	}
+}
+
+void AFirstPersonCharacter::OnInventorySlotChanged(int32 SlotIndex, FInventorySlot NewSlot)
+{
+	if (FirstPersonArmComponent &&
+		SlotIndex == UInventoryComponent::HotbarStartIndex + SelectedItemIndex)
+	{
+		FirstPersonArmComponent->SetHeldItem(NewSlot.ItemType);
 	}
 }
 
