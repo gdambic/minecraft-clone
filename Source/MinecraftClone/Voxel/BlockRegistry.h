@@ -102,6 +102,31 @@ public:
 	 */
 	const FItemExtrudedMeshData* GetItemExtrudedMesh(EItemType ItemType);
 
+	// === Biome API ===
+
+	/**
+	 * Dohvati definiciju bioma po indeksu (indeks = pozicija u Biomes.json,
+	 * vraca ga FBiomeGenerator). Indeks izvan raspona vraca prvi biom -
+	 * lista nikad nije prazna (fallback bijeli biom ako JSON fali).
+	 */
+	const FBiomeDefinition& GetBiome(int32 Index) const;
+
+	/** Blueprint verzija - vraca kopiju */
+	UFUNCTION(BlueprintPure, Category = "BlockRegistry")
+	FBiomeDefinition GetBiomeCopy(int32 Index) const;
+
+	/** Broj registriranih bioma (uvijek >= 1) */
+	UFUNCTION(BlueprintPure, Category = "BlockRegistry")
+	int32 GetBiomeCount() const;
+
+	/**
+	 * Default tint = tint PRVOG bioma u Biomes.json. Koriste ga svi prikazi
+	 * itema izvan svijeta (drop, ruka, inventory ikona) - item je apstraktan
+	 * i svugdje isti, tek blok u svijetu ima biom. Bijelo za None.
+	 */
+	UFUNCTION(BlueprintPure, Category = "BlockRegistry")
+	FLinearColor GetDefaultBiomeTint(EBiomeTintType TintType) const;
+
 	// === Static Helper ===
 
 	/** Dohvati registry iz bilo kojeg UObject konteksta */
@@ -120,6 +145,13 @@ protected:
 	void LoadItemsFromJson();
 
 	/**
+	 * Učitaj biome iz Content/Data/Biomes.json. Ako datoteka fali ili je
+	 * prazna, registrira jedan fallback biom s bijelim tintom (= današnji
+	 * izgled) + UE_LOG(Error) - lista bioma nikad nije prazna.
+	 */
+	void LoadBiomesFromJson();
+
+	/**
 	 * Za svaku EBlockType/EItemType vrijednost bez JSON definicije registrira
 	 * fallback (defaultna kocka bez materijala = siva) + UE_LOG(Error).
 	 * Garantira da registry pokriva cijeli enum pa blok nikad ne nestane iz igre.
@@ -135,6 +167,10 @@ private:
 	/** Mapa svih item definicija */
 	UPROPERTY()
 	TMap<EItemType, FItemDefinition> ItemDefinitions;
+
+	/** Lista bioma redoslijedom iz Biomes.json - indeks je identitet bioma */
+	UPROPERTY()
+	TArray<FBiomeDefinition> BiomeDefinitions;
 
 	/** Cache: Item -> Block mapping za brzi lookup */
 	UPROPERTY()

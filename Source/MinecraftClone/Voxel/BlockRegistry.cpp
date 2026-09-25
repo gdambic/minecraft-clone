@@ -2,6 +2,7 @@
 #include "Engine/GameInstance.h"
 #include "Engine/Texture2D.h"
 #include "Materials/MaterialInterface.h"
+#include "Materials/MaterialInstanceDynamic.h"
 #include "Kismet/GameplayStatics.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
@@ -44,13 +45,14 @@ void UBlockRegistry::Initialize(FSubsystemCollectionBase& Collection)
 
 	LoadBlocksFromJson();
 	LoadItemsFromJson();
+	LoadBiomesFromJson();
 
 	// Fallback nakon oba loadera - rupa u JSON-u ne smije znaciti rupu u igri
 	RegisterFallbackBlocks();
 	RegisterFallbackItems();
 
-	UE_LOG(LogTemp, Log, TEXT("BlockRegistry: Initialized with %d blocks and %d items"),
-		BlockDefinitions.Num(), ItemDefinitions.Num());
+	UE_LOG(LogTemp, Log, TEXT("BlockRegistry: Initialized with %d blocks, %d items and %d biomes"),
+		BlockDefinitions.Num(), ItemDefinitions.Num(), BiomeDefinitions.Num());
 }
 
 void UBlockRegistry::RegisterBlock(const FBlockDefinition& Definition)
@@ -169,6 +171,44 @@ void UBlockRegistry::LoadItemsFromJson()
 		}
 
 		RegisterItem(Def);
+	}
+}
+
+void UBlockRegistry::LoadBiomesFromJson()
+{
+	TArray<TSharedPtr<FJsonValue>> Entries;
+	if (LoadJsonArrayFromContentData(TEXT("Biomes.json"), Entries))
+	{
+		for (int32 Index = 0; Index < Entries.Num(); ++Index)
+		{
+			const TSharedPtr<FJsonObject>* EntryObject = nullptr;
+			FBiomeDefinition Def;
+
+			if (!Entries[Index].IsValid() || !Entries[Index]->TryGetObject(EntryObject) ||
+				!FJsonObjectConverter::JsonObjectToUStruct(EntryObject->ToSharedRef(), &Def))
+			{
+				UE_LOG(LogTemp, Error, TEXT("BlockRegistry: Biomes.json unos #%d se ne moze parsirati - preskacem"), Index);
+				continue;
+			}
+
+			if (!Def.IsValid())
+			{
+				UE_LOG(LogTemp, Warning, TEXT("BlockRegistry: Biomes.json unos #%d nema 'name' - preskacem"), Index);
+				continue;
+			}
+
+			BiomeDefinitions.Add(Def);
+		}
+	}
+
+	// Lista nikad nije prazna: bijeli fallback biom = danasnji izgled bez tinta
+	if (BiomeDefinitions.IsEmpty())
+	{
+		UE_LOG(LogTemp, Error, TEXT("BlockRegistry: nijedan biom nije ucitan - koristim fallback (bijeli tint, bez bioma)"));
+		FBiomeDefinition Fallback;
+		Fallback.Name = TEXT("Fallback");
+		Fallback.DisplayName = FText::FromString(TEXT("Fallback"));
+		BiomeDefinitions.Add(Fallback);
 	}
 }
 
@@ -387,8 +427,46 @@ UMaterialInterface* UBlockRegistry::GetBlockMaterialForItem(EItemType ItemType)
 		Material = Cast<UMaterialInterface>(Def->Material.TryLoad());
 	}
 
+	// Blok s biome tintom: item u ruci nosi default tint (prvi biom u JSON-u),
+	// kao Minecraft - item je apstraktan, tek blok u svijetu ima biom
+	if (Material && Def->BiomeTint != EBiomeTintType::None)
+	{
+		UMaterialInstanceDynamic* TintedMID = UMaterialInstanceDynamic::Create(Material, this);
+		TintedMID->SetVectorParameterValue(TEXT("TintFallback"), GetDefaultBiomeTint(Def->BiomeTint));
+		Material = TintedMID;
+	}
+
 	ItemBlockMaterialCache.Add(ItemType, Material);
 	return Material;
+}
+
+// === Biome API ===
+
+const FBiomeDefinition& UBlockRegistry::GetBiome(int32 Index) const
+{
+	// BiomeDefinitions nikad nije prazan (fallback u LoadBiomesFromJson);
+	// indeks izvan raspona pada na prvi biom umjesto crasha
+	return BiomeDefinitions.IsValidIndex(Index) ? BiomeDefinitions[Index] : BiomeDefinitions[0];
+}
+
+FBiomeDefinition UBlockRegistry::GetBiomeCopy(int32 Index) const
+{
+	return GetBiome(Index);
+}
+
+int32 UBlockRegistry::GetBiomeCount() const
+{
+	return BiomeDefinitions.Num();
+}
+
+FLinearColor UBlockRegistry::GetDefaultBiomeTint(EBiomeTintType TintType) const
+{
+	if (TintType == EBiomeTintType::None)
+	{
+		return FLinearColor::White;
+	}
+	const FBiomeDefinition& Biome = GetBiome(0);
+	return TintType == EBiomeTintType::Foliage ? Biome.FoliageTint : Biome.GrassTint;
 }
 
 // === Static Helper ===

@@ -144,7 +144,8 @@ def _pick_normal_space():
 
 def load_blocks_from_json():
     """
-    Vrati [(block_name, masked, mi_package_path)] iz Content/Data/Blocks.json.
+    Vrati [(block_name, masked, mi_package_path, biome_tint)] iz
+    Content/Data/Blocks.json.
 
     "material" polje odreduje putanju MI asseta koji se gradi - skripta time
     garantirano proizvodi tocno onaj asset koji UBlockRegistry ocekuje.
@@ -171,7 +172,8 @@ def load_blocks_from_json():
             continue
 
         # "/Game/.../MI_X.MI_X" -> package path "/Game/.../MI_X"
-        blocks.append((name, bool(entry.get("masked", False)), material.split(".")[0]))
+        blocks.append((name, bool(entry.get("masked", False)), material.split(".")[0],
+                       entry.get("biomeTint")))
 
     return blocks
 
@@ -222,7 +224,7 @@ def fix_texture_import_settings():
 # 2. Master materijali
 # ---------------------------------------------------------------------------
 
-def build_master_material(asset_name, masked):
+def build_master_material(asset_name, masked, with_tint=False):
     """
     Graf:
 
@@ -236,6 +238,21 @@ def build_master_material(asset_name, masked):
 
     Mask(B) daje +1 na gornjoj strani kocke, -1 na donjoj, 0 na bokovima.
     Mnozenje s +-10 i clamp pretvore to u ostru 0/1 masku.
+
+    with_tint dodaje biome tint granu (vidi Docs/PLAN_Biomes.md):
+
+        FinalTint = PerInstanceCustomData3Vector(default bijelo)
+                    * VectorParameter "TintFallback" (default bijelo)
+
+      - Top ulaz u lerp postaje Top * FinalTint (grayscale trava -> boja bioma)
+      - Side ulaz postaje Lerp(Side, SideOverlay * FinalTint,
+                               SideOverlay.A * "SideOverlayStrength")
+        SideOverlay je tintani rub trave PREKO netintane zemlje; strength je
+        0 po defaultu pa blokovi bez overlay teksture ostaju netaknuti.
+
+    Na ISM putu boju daje custom data (TintFallback bijel); na actor/item putu
+    custom data pada na bijeli default a boju daje TintFallback - uvijek mnozi
+    tocno jedna boja. Blokovi bez custom data i bez parametra: bijelo x bijelo.
     """
     package_path = "{0}/{1}".format(MATERIAL_DIR, asset_name)
 
@@ -315,10 +332,62 @@ def build_master_material(asset_name, masked):
     top_mask = sharp_mask(10.0, 400)
     bottom_mask = sharp_mask(-10.0, 620)
 
+    # --- biome tint grana (samo opaque master dok je lisce izvan opsega) ---
+    top_source = samplers["Top"]
+    side_source = samplers["Side"]
+    if with_tint:
+        custom_data = _expr(material, unreal.MaterialExpressionPerInstanceCustomData3Vector,
+                            -1100, -600)
+        custom_data.set_editor_property("const_default_value",
+                                        unreal.LinearColor(1.0, 1.0, 1.0, 1.0))
+        custom_data.set_editor_property("data_index", 0)
+
+        tint_fallback = _expr(material, unreal.MaterialExpressionVectorParameter, -1100, -800)
+        tint_fallback.set_editor_property("parameter_name", "TintFallback")
+        tint_fallback.set_editor_property("default_value",
+                                          unreal.LinearColor(1.0, 1.0, 1.0, 1.0))
+
+        final_tint = _expr(material, unreal.MaterialExpressionMultiply, -900, -700)
+        _connect(custom_data, "", final_tint, "A")
+        _connect(tint_fallback, "", final_tint, "B")
+
+        # Top: cijela grayscale tekstura se tinta
+        tinted_top = _expr(material, unreal.MaterialExpressionMultiply, -700, -300)
+        _connect(samplers["Top"], "", tinted_top, "A")
+        _connect(final_tint, "", tinted_top, "B")
+        top_source = tinted_top
+
+        # Side: tintani overlay (rub trave) preko netintane zemlje
+        overlay = _expr(material, unreal.MaterialExpressionTextureSampleParameter2D,
+                        -1100, -100)
+        overlay.set_editor_property("parameter_name", "SideOverlay")
+        if fallback is not None:
+            overlay.set_editor_property("texture", fallback)
+
+        overlay_strength = _expr(material, unreal.MaterialExpressionScalarParameter,
+                                 -900, 100)
+        overlay_strength.set_editor_property("parameter_name", "SideOverlayStrength")
+        overlay_strength.set_editor_property("default_value", 0.0)
+
+        overlay_alpha = _expr(material, unreal.MaterialExpressionMultiply, -700, 50)
+        _connect(overlay, "A", overlay_alpha, "A")
+        _connect(overlay_strength, "", overlay_alpha, "B")
+
+        tinted_overlay = _expr(material, unreal.MaterialExpressionMultiply, -700, -100)
+        _connect(overlay, "", tinted_overlay, "A")
+        _connect(final_tint, "", tinted_overlay, "B")
+
+        side_with_overlay = _expr(material, unreal.MaterialExpressionLinearInterpolate,
+                                  -500, -50)
+        _connect(samplers["Side"], "", side_with_overlay, "A")
+        _connect(tinted_overlay, "", side_with_overlay, "B")
+        _connect(overlay_alpha, "", side_with_overlay, "Alpha")
+        side_source = side_with_overlay
+
     # --- dva lerpa: prvo gornja, pa donja strana ---
     lerp_top = _expr(material, unreal.MaterialExpressionLinearInterpolate, -150, 0)
-    _connect(samplers["Side"], "", lerp_top, "A")
-    _connect(samplers["Top"], "", lerp_top, "B")
+    _connect(side_source, "", lerp_top, "A")
+    _connect(top_source, "", lerp_top, "B")
     _connect(top_mask, "", lerp_top, "Alpha")
 
     lerp_bottom = _expr(material, unreal.MaterialExpressionLinearInterpolate, 50, 200)
@@ -422,7 +491,7 @@ def build_material_instances(masters, blocks):
     created = 0
     skipped = []
 
-    for block_name, masked, mi_package in blocks:
+    for block_name, masked, mi_package, biome_tint in blocks:
         parent = masters[MASTER_MASKED if masked else MASTER_OPAQUE]
         if parent is None:
             skipped.append((block_name, "master materijal nije izgraden"))
@@ -458,6 +527,21 @@ def build_material_instances(masters, blocks):
         for face, (texture, _texture_name) in resolved.items():
             MEL.set_material_instance_texture_parameter_value(instance, face, texture)
 
+        # Blok s biome tintom: ukljuci tintani side overlay (rub trave) ako
+        # T_<Blok>_SideOverlay postoji. Bez overlaya rub na bocnoj strani
+        # ostaje netintan (siv) - zato warning, ne tihi preskok.
+        if biome_tint and not masked:
+            overlay_name = "T_{0}_SideOverlay".format(block_name)
+            overlay_tex = _load("{0}/{1}.{2}".format(TEXTURE_DIR, overlay_name, overlay_name))
+            if overlay_tex is not None:
+                MEL.set_material_instance_texture_parameter_value(
+                    instance, "SideOverlay", overlay_tex)
+                MEL.set_material_instance_scalar_parameter_value(
+                    instance, "SideOverlayStrength", 1.0)
+            else:
+                _info("UPOZORENJE: blok {0} ima biomeTint, a {1} ne postoji - "
+                      "rub na bocnoj strani ostaje netintan".format(block_name, overlay_name))
+
         EAL.save_loaded_asset(instance, only_if_is_dirty=False)
         created += 1
         _info("{0}  <-  {1}".format(
@@ -487,8 +571,10 @@ def main():
 
     fix_texture_import_settings()
 
+    # Tint grana samo u opaque masteru - lisce (masked) je izvan opsega dok
+    # se biome tint ne prosiri na foliage (PLAN_Biomes.md)
     masters = {
-        MASTER_OPAQUE: build_master_material(MASTER_OPAQUE, masked=False),
+        MASTER_OPAQUE: build_master_material(MASTER_OPAQUE, masked=False, with_tint=True),
         MASTER_MASKED: build_master_material(MASTER_MASKED, masked=True),
     }
 

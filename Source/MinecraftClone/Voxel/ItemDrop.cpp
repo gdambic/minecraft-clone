@@ -275,6 +275,16 @@ void AItemDrop::InitializeFromRegistry(EItemType Type)
 		UMaterialInterface* LoadedMaterial = Cast<UMaterialInterface>(ItemDef->Material.TryLoad());
 		if (LoadedMaterial)
 		{
+			// Blok s biome tintom: drop nosi default tint (prvi biom), ne prati
+			// biom u kojem lezi - isto pravilo kao ikona i item u ruci
+			const FBlockDefinition* BlockDef = Registry->GetBlockForItem(Type);
+			if (BlockDef && BlockDef->BiomeTint != EBiomeTintType::None)
+			{
+				UMaterialInstanceDynamic* TintedMID = UMaterialInstanceDynamic::Create(LoadedMaterial, this);
+				TintedMID->SetVectorParameterValue(TEXT("TintFallback"),
+					Registry->GetDefaultBiomeTint(BlockDef->BiomeTint));
+				LoadedMaterial = TintedMID;
+			}
 			MeshComponent->SetMaterial(0, LoadedMaterial);
 		}
 	}

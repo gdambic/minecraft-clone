@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "BlockType.h"
 #include "ItemType.h"
+#include "BiomeDefinition.h"
 #include "BlockDefinition.generated.h"
 
 /**
@@ -49,6 +50,10 @@ struct MINECRAFTCLONE_API FBlockDefinition
 	/** Putanja do highlight materijala (opcionalno) */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Block")
 	FSoftObjectPath HighlightMaterial;
+
+	/** Boja li se blok po biomu i kojim tintom (JSON "biomeTint": "grass"/"foliage") */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Block")
+	EBiomeTintType BiomeTint = EBiomeTintType::None;
 
 	/** Je li definicija validna */
 	bool IsValid() const { return BlockType != EBlockType::Air; }

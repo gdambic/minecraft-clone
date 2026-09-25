@@ -42,6 +42,13 @@ struct FBlockInstanceSet
 	UPROPERTY()
 	UInstancedStaticMeshComponent* Component = nullptr;
 
+	/**
+	 * Biome tint tipa bloka (iz registry definicije, cache da se ne trazi po
+	 * instanci). != None znaci da komponenta ima 3 custom data floata (RGB)
+	 * koje Add putevi moraju popuniti tintom bioma pozicije.
+	 */
+	EBiomeTintType BiomeTint = EBiomeTintType::None;
+
 	/** Grid pozicija -> indeks instance u komponenti */
 	TMap<FIntVector, int32> GridToInstance;
 
@@ -92,6 +99,13 @@ public:
 	/** Broj oktava fraktalnog noisea - više = detaljniji, ali skuplji teren. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "World|Terrain")
 	int32 Octaves;
+
+	/**
+	 * "Zoom" biome noisea - mora biti znatno manji od NoiseScale da biomi budu
+	 * regije od desetaka blokova (brda zive UNUTAR bioma, ne obrnuto).
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "World|Terrain")
+	float BiomeNoiseScale;
 
 	// === TREES ===
 
@@ -159,6 +173,14 @@ public:
 	UFUNCTION(BlueprintPure, Category = "World")
 	int32 GetTerrainHeightAt(int32 X, int32 Y) const;
 
+	/** Indeks bioma stupca (X,Y) u registry listi - deterministicki iz seeda, nigdje se ne sprema. */
+	UFUNCTION(BlueprintPure, Category = "World")
+	int32 GetBiomeIndexAt(int32 X, int32 Y) const;
+
+	/** Definicija bioma stupca (X,Y). Jedina tocka kroz koju ostatak koda pita za biom. */
+	UFUNCTION(BlueprintPure, Category = "World")
+	FBiomeDefinition GetBiomeAt(int32 X, int32 Y) const;
+
 	/**
 	 * Poziva ABlock nakon što je uništen (drop je već spawnan).
 	 * Uklanja podatke i actor, lazy-spawna izložene susjede i pokreće leaf decay.
@@ -208,6 +230,16 @@ private:
 	/** Pomak uzorkovanja terenskog noisea izveden iz WorldSeed - postavlja ga GenerateWorld() prije generacije terena. */
 	float NoiseOffsetX = 0.f;
 	float NoiseOffsetY = 0.f;
+
+	/** Pomak uzorkovanja biome noisea - takodjer iz WorldSeed (GenerateWorld). */
+	float BiomeOffsetX = 0.f;
+	float BiomeOffsetY = 0.f;
+
+	/**
+	 * Tint bioma na poziciji za zadani tip tinta (Grass/Foliage); bijelo za
+	 * None. Racuna se iz (X,Y) na zahtjev - nula stanja po bloku.
+	 */
+	FLinearColor GetBiomeTintAt(FIntVector Pos, EBiomeTintType TintType) const;
 
 	/** Po jedan blok svake registrirane definicije uz rub Y=0, na visini terena+1. */
 	void PlaceShowcaseBlocks(class UBlockRegistry* Registry);

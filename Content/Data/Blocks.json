@@ -51,6 +51,7 @@
     "dropChance": 1.0,
     "timeToDestroy": 1.5,
     "displayName": "Grass",
+    "biomeTint": "grass",
     "material": "/Game/Blocks/Materials/MI_Grass.MI_Grass"
   },
   {

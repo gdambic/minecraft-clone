@@ -1,0 +1,22 @@
+[
+  {
+    "name": "Plains",
+    "displayName": "Ravnica",
+    "grassTint": "#6FAD6A",
+    "foliageTint": "#6FAD6A",
+    "treeDensity": 1.0,
+    "treeTypes": ["Oak", "Birch"],
+    "surfaceBlock": "Grass",
+    "heightAmplitudeScale": 1.0
+  },
+  {
+    "name": "Desert",
+    "displayName": "Pustinja",
+    "grassTint": "#99C299",
+    "foliageTint": "#99C299",
+    "treeDensity": 0.1,
+    "treeTypes": ["Oak"],
+    "surfaceBlock": "Grass",
+    "heightAmplitudeScale": 0.5
+  }
+]

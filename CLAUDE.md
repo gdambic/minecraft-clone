@@ -148,6 +148,7 @@ Detailed docs in Croatian available in `Docs/`:
 - `PLAN_BlockRegistry.md` - Data-driven block registry design
 - `PLAN_Performance.md` - Rendering/performance analysis
 - `PLAN_MeleeCombat.md` - Melee combat system
+- `PLAN_Biomes.md` - Biomi i biome tint za Grass/lišće (Biomes.json + PerInstanceCustomData)
 - `PLAN_FirstPersonHand.md` - First-person hand/viewmodel system
 - `PLAN_HoldingDisplay.md` - Prikaz odabranog itema u ruci (sprite, implementirano)
 - `PLAN_ItemExtrusion.md` - 3D ekstrudirani item mesh iz 16x16 teksture (Minecraft stil, implementirano)

@@ -39,7 +39,16 @@ import unreal
 
 ITEMS_JSON = "Data/Items.json"
 BLOCKS_JSON = "Data/Blocks.json"
+BIOMES_JSON = "Data/Biomes.json"
 OUTPUT_DIR = "/Game/Items/Generated"
+
+# Blok s "biomeTint" poljem dobiva ikonu tintanu DEFAULT tintom = tint prvog
+# bioma u Biomes.json (isto pravilo kao item u ruci i drop - vidi
+# UBlockRegistry::GetDefaultBiomeTint i Docs/PLAN_Biomes.md).
+# Na bocnoj strani se tinta samo sivi rub trave (isti kriterij po kojem je
+# generiran T_Grass_SideOverlay): piksel je "siv" ako mu se kanali medusobno
+# razlikuju za najvise GRAY_THRESHOLD.
+GRAY_THRESHOLD = 12
 
 CANVAS = 256          # rezolucija ikone
 EDGE = 100.0          # duljina brida kocke u pikselima platna
@@ -90,6 +99,42 @@ def _load_blocks_by_type():
         if name:
             blocks[name] = entry
     return blocks
+
+
+def _load_default_tints():
+    """Vrati {"grass": (r,g,b), "foliage": (r,g,b)} iz PRVOG bioma u Biomes.json."""
+    biomes = _load_json(BIOMES_JSON)
+    if not biomes:
+        return {}
+
+    def hex_to_rgb(value):
+        value = value.lstrip("#")
+        return (int(value[0:2], 16), int(value[2:4], 16), int(value[4:6], 16))
+
+    tints = {}
+    for key, field in (("grass", "grassTint"), ("foliage", "foliageTint")):
+        value = biomes[0].get(field)
+        if value:
+            try:
+                tints[key] = hex_to_rgb(value)
+            except ValueError:
+                _fail("Biomes.json: neispravan {0} '{1}'".format(field, value))
+    return tints
+
+
+def _apply_tint(pixels, tint, gray_only=False):
+    """Pomnozi piksele tintom; gray_only tinta samo sive piksele (rub trave)."""
+    width, height, rows = pixels
+    out = []
+    for row in rows:
+        out_row = []
+        for r, g, b in row:
+            if gray_only and max(abs(r - g), abs(g - b), abs(r - b)) > GRAY_THRESHOLD:
+                out_row.append((r, g, b))
+            else:
+                out_row.append((r * tint[0] // 255, g * tint[1] // 255, b * tint[2] // 255))
+        out.append(out_row)
+    return width, height, out
 
 
 def _collect_blocks_to_render(blocks_by_type):
@@ -315,6 +360,8 @@ def main():
         _fail("Blocks.json nije dao nijedan blok - prekidam")
         return
 
+    default_tints = _load_default_tints()
+
     block_names = _collect_blocks_to_render(blocks_by_type)
     if not block_names:
         _info("nema itema s display.type=block - nema sto generirati")
@@ -351,6 +398,17 @@ def main():
         side_pixels = _read_texture_pixels(side_tex, tmp_dir, kismet_rendering)
         if top_pixels is None or side_pixels is None:
             continue
+
+        # Biome tint: top u cijelosti, na side samo sivi rub trave
+        biome_tint = blocks_by_type[block_name].get("biomeTint")
+        if biome_tint:
+            tint = default_tints.get(biome_tint)
+            if tint is None:
+                _warn("blok '{0}': biomeTint '{1}' bez boje u Biomes.json - ikona bez tinta".format(
+                    block_name, biome_tint))
+            else:
+                top_pixels = _apply_tint(top_pixels, tint)
+                side_pixels = _apply_tint(side_pixels, tint, gray_only=True)
 
         canvas = _compose_icon(top_pixels, side_pixels)
 

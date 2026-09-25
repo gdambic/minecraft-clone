@@ -3,6 +3,7 @@
 #include "ItemDrop.h"
 #include "TreeGenerator.h"
 #include "TerrainGenerator.h"
+#include "BiomeGenerator.h"
 #include "TimerManager.h"
 #include "Zombie.h"
 #include "MobBase.h"
@@ -14,6 +15,7 @@
 #include "Engine/HitResult.h"
 #include "Engine/StaticMesh.h"
 #include "Materials/MaterialInterface.h"
+#include "Materials/MaterialInstanceDynamic.h"
 #include "Math/RandomStream.h"
 
 AVoxelWorld::AVoxelWorld()
@@ -30,6 +32,7 @@ AVoxelWorld::AVoxelWorld()
 	NoiseScale = 0.08f;
 	HeightAmplitude = 6;
 	Octaves = 3;
+	BiomeNoiseScale = 0.012f;
 	TreeCount = 10;
 }
 
@@ -72,6 +75,8 @@ void AVoxelWorld::GenerateWorld()
 	const FRandomStream NoiseSeedStream(WorldSeed);
 	NoiseOffsetX = NoiseSeedStream.FRandRange(-100000.f, 100000.f);
 	NoiseOffsetY = NoiseSeedStream.FRandRange(-100000.f, 100000.f);
+	BiomeOffsetX = NoiseSeedStream.FRandRange(-100000.f, 100000.f);
+	BiomeOffsetY = NoiseSeedStream.FRandRange(-100000.f, 100000.f);
 
 	// PROLAZ 1: samo podaci - izvor istine, bez actora. Visina stupca dolazi iz
 	// fraktalnog Perlin noisea (FTerrainGenerator, Minecraftov height-map pristup
@@ -133,6 +138,25 @@ void AVoxelWorld::GenerateWorld()
 
 	UE_LOG(LogTemp, Log, TEXT("VoxelWorld: Generated terrain (seed=%d, SurfaceLevel=%d +/-%d)"),
 		WorldSeed, SurfaceLevel, HeightAmplitude);
+
+	// Dijagnostika raspodjele bioma - broj stupaca po biomu
+	{
+		TArray<int32> ColumnsPerBiome;
+		ColumnsPerBiome.SetNumZeroed(Registry->GetBiomeCount());
+		for (int32 X = 0; X < WorldSizeX; X++)
+		{
+			for (int32 Y = 0; Y < WorldSizeY; Y++)
+			{
+				ColumnsPerBiome[GetBiomeIndexAt(X, Y)]++;
+			}
+		}
+		for (int32 Index = 0; Index < ColumnsPerBiome.Num(); Index++)
+		{
+			UE_LOG(LogTemp, Log, TEXT("VoxelWorld: biom %s - %d stupaca (%.0f%%)"),
+				*Registry->GetBiome(Index).Name.ToString(), ColumnsPerBiome[Index],
+				WorldSizeX * WorldSizeY > 0 ? 100.0 * ColumnsPerBiome[Index] / (WorldSizeX * WorldSizeY) : 0.0);
+		}
+	}
 
 	// --- Faza 3: stabla ---
 	GenerateTrees();
@@ -283,9 +307,21 @@ ABlock* AVoxelWorld::PromoteToActor(FIntVector Pos)
 		// tek nakon uspjesnog spawna (neuspjeh ne smije "izbrisati" vizual)
 		RemoveBlockInstance(Pos);
 
+		// Actor nije ISM instanca pa custom data tint za njega ne postoji -
+		// isti tint ide kroz TintFallback parametar (na ISM putu je bijel,
+		// ovdje custom data pada na bijeli default: uvijek mnozi tocno jedna boja)
+		UMaterialInterface* Material = BlockAssets.Material;
+		if (Material && BlockDefinition->BiomeTint != EBiomeTintType::None)
+		{
+			UMaterialInstanceDynamic* TintedMID = UMaterialInstanceDynamic::Create(Material, NewBlock);
+			TintedMID->SetVectorParameterValue(TEXT("TintFallback"),
+				GetBiomeTintAt(Pos, BlockDefinition->BiomeTint));
+			Material = TintedMID;
+		}
+
 		NewBlock->SetGridPosition(Pos);
 		NewBlock->InitializeFromRegistry(*Type, *BlockDefinition,
-			BlockAssets.Mesh, BlockAssets.Material, BlockAssets.HighlightMaterial);
+			BlockAssets.Mesh, Material, BlockAssets.HighlightMaterial);
 		Blocks.Add(Pos, NewBlock);
 	}
 
@@ -328,6 +364,14 @@ void AVoxelWorld::AddBlockInstance(FIntVector Pos, EBlockType Type)
 			Index, Set->InstanceToGrid.Num(), (int32)Type);
 	}
 
+	// RGB tint bioma - bez njega bi custom data ostao 0 (crna trava)
+	if (Set->BiomeTint != EBiomeTintType::None)
+	{
+		const FLinearColor Tint = GetBiomeTintAt(Pos, Set->BiomeTint);
+		const float TintFloats[3] = { Tint.R, Tint.G, Tint.B };
+		Set->Component->SetCustomData(Index, MakeArrayView(TintFloats, 3));
+	}
+
 	Set->GridToInstance.Add(Pos, Index);
 	Set->InstanceToGrid.Add(Pos);
 }
@@ -347,12 +391,31 @@ void AVoxelWorld::AddBlockInstancesBatch(EBlockType Type, const TArray<FIntVecto
 		Transforms.Add(FTransform(GridToWorld(Pos.X, Pos.Y, Pos.Z)));
 	}
 
+	// Indeksi batcha su kontinuirani: AddInstances appenda na kraj
+	const int32 StartIndex = Set->InstanceToGrid.Num();
+
 	Set->Component->AddInstances(Transforms, /*bShouldReturnIndices=*/false, /*bWorldSpace=*/true);
 
 	for (const FIntVector& Pos : Positions)
 	{
 		Set->GridToInstance.Add(Pos, Set->InstanceToGrid.Num());
 		Set->InstanceToGrid.Add(Pos);
+	}
+
+	// RGB tint bioma za cijeli batch - range overload je jedan memcpy, a
+	// delta tracker (CustomDataChanged) sam gura promjenu na GPU krajem framea
+	if (Set->BiomeTint != EBiomeTintType::None)
+	{
+		TArray<float> TintFloats;
+		TintFloats.Reserve(Positions.Num() * 3);
+		for (const FIntVector& Pos : Positions)
+		{
+			const FLinearColor Tint = GetBiomeTintAt(Pos, Set->BiomeTint);
+			TintFloats.Add(Tint.R);
+			TintFloats.Add(Tint.G);
+			TintFloats.Add(Tint.B);
+		}
+		Set->Component->SetCustomData(StartIndex, StartIndex + Positions.Num() - 1, TintFloats);
 	}
 
 	// Engine registrira komponentu u nav octree kod PRVE instance, s bounds
@@ -509,6 +572,34 @@ int32 AVoxelWorld::GetTerrainHeightAt(int32 X, int32 Y) const
 {
 	return FTerrainGenerator::GetColumnHeight(X, Y, NoiseOffsetX, NoiseOffsetY,
 		NoiseScale, Octaves, SurfaceLevel, HeightAmplitude);
+}
+
+int32 AVoxelWorld::GetBiomeIndexAt(int32 X, int32 Y) const
+{
+	UBlockRegistry* Registry = UBlockRegistry::Get(this);
+	const int32 BiomeCount = Registry ? Registry->GetBiomeCount() : 1;
+	return FBiomeGenerator::GetBiomeIndexAt(X, Y, BiomeOffsetX, BiomeOffsetY,
+		BiomeNoiseScale, BiomeCount);
+}
+
+FBiomeDefinition AVoxelWorld::GetBiomeAt(int32 X, int32 Y) const
+{
+	UBlockRegistry* Registry = UBlockRegistry::Get(this);
+	if (!Registry)
+	{
+		return FBiomeDefinition();
+	}
+	return Registry->GetBiome(GetBiomeIndexAt(X, Y));
+}
+
+FLinearColor AVoxelWorld::GetBiomeTintAt(FIntVector Pos, EBiomeTintType TintType) const
+{
+	if (TintType == EBiomeTintType::None)
+	{
+		return FLinearColor::White;
+	}
+	const FBiomeDefinition Biome = GetBiomeAt(Pos.X, Pos.Y);
+	return TintType == EBiomeTintType::Foliage ? Biome.FoliageTint : Biome.GrassTint;
 }
 
 void AVoxelWorld::SetBlockType(int32 X, int32 Y, int32 Z, EBlockType NewType)
@@ -683,10 +774,21 @@ void AVoxelWorld::BuildBlockAssetCache()
 			// RemoveInstance u 5.6 po defaultu radi order-preserving RemoveAt;
 			// bookkeeping u RemoveBlockInstance racuna na RemoveAtSwap semantiku
 			ISM->SetRemoveSwap();
+
+			// Blokovi s biome tintom nose RGB tint kao 3 custom data floata po
+			// instanci - mora se postaviti PRIJE prve AddInstance. Engine pri
+			// RemoveAtSwap sam premjesta i custom data (InstancedStaticMesh.cpp:3827).
+			if (Def.BiomeTint != EBiomeTintType::None)
+			{
+				ISM->SetNumCustomDataFloats(3);
+			}
+
 			ISM->SetupAttachment(GetRootComponent());
 			ISM->RegisterComponent();
 
-			InstanceSets.Add(Def.BlockType).Component = ISM;
+			FBlockInstanceSet& NewSet = InstanceSets.Add(Def.BlockType);
+			NewSet.Component = ISM;
+			NewSet.BiomeTint = Def.BiomeTint;
 		}
 
 		// Statistika za [PERF] log
