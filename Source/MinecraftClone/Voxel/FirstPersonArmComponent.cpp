@@ -1,15 +1,24 @@
 #include "FirstPersonArmComponent.h"
 #include "FirstPersonCharacter.h"
 #include "BlockRegistry.h"
+#include "ItemMeshExtruder.h"
 #include "WeaponData.h"
 #include "Camera/CameraComponent.h"
 #include "Components/StaticMeshComponent.h"
+#include "ProceduralMeshComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Kismet/GameplayStatics.h"
 #include "Engine/StaticMesh.h"
+#include "Engine/Texture2D.h"
 #include "Materials/MaterialInterface.h"
+#include "Materials/MaterialInstanceDynamic.h"
 #include "UObject/ConstructorHelpers.h"
 #include "MinecraftClone.h"
+
+namespace
+{
+	const FName GSpriteTextureParam(TEXT("SpriteTexture"));
+}
 
 UFirstPersonArmComponent::UFirstPersonArmComponent()
 {
@@ -34,30 +43,39 @@ void UFirstPersonArmComponent::BeginPlay()
 		return;
 	}
 
-	CreateArmMesh();
-	CreateHeldItemMesh();
+	// Native mesh komponente zivi na characteru (prezive PIE izmjene svojstava)
+	ArmMesh = OwnerCharacter->GetArmMeshComponent();
+	HeldItemMesh = OwnerCharacter->GetHeldItemMeshComponent();
+	HeldSpriteMesh = OwnerCharacter->GetHeldSpriteMeshComponent();
+	if (!ArmMesh || !HeldItemMesh || !HeldSpriteMesh)
+	{
+		UE_LOG(LogMinecraftClone, Error, TEXT("FirstPersonArmComponent: character nema mesh komponente ruke!"));
+		return;
+	}
 
-	// Character moze postaviti item prije nego sto meshevi postoje
+	// BP hijerarhija zna premjestiti naslijedene komponente (dijagnostika je
+	// pokazala FPArmMesh na kapsuli umjesto na kameri - zato je item u ruci
+	// pratio tijelo, a ne pogled). Eksplicitni runtime attach na kameru
+	// garantira da ruka prati i pitch i yaw pogleda.
+	ArmMesh->AttachToComponent(OwnerCamera, FAttachmentTransformRules::KeepRelativeTransform);
+	HeldItemMesh->AttachToComponent(ArmMesh, FAttachmentTransformRules::KeepRelativeTransform);
+	HeldSpriteMesh->AttachToComponent(ArmMesh, FAttachmentTransformRules::KeepRelativeTransform);
+	UE_LOG(LogMinecraftClone, Log, TEXT("FirstPersonArmComponent: ruka attachana na %s"),
+		*GetNameSafe(ArmMesh->GetAttachParent()));
+
+	SetupArmMesh();
+	SetupHeldItemMesh();
+	SetupHeldSpriteMesh();
+
+	// Character moze postaviti item prije nego sto su meshevi konfigurirani
 	// (SetHeldItem prije Super::BeginPlay) - primijeni to stanje sada
 	SetHeldItem(CurrentHeldItem);
 
 	UE_LOG(LogMinecraftClone, Log, TEXT("FirstPersonArmComponent initialized successfully"));
 }
 
-void UFirstPersonArmComponent::CreateArmMesh()
+void UFirstPersonArmComponent::SetupArmMesh()
 {
-	if (!OwnerCharacter || !OwnerCamera)
-	{
-		return;
-	}
-
-	// Create arm mesh component
-	ArmMesh = NewObject<UStaticMeshComponent>(OwnerCharacter, TEXT("FPArmMesh"));
-	if (!ArmMesh)
-	{
-		return;
-	}
-
 	// Load cube mesh for placeholder arm
 	UStaticMesh* CubeMesh = LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Cube.Cube"));
 	if (CubeMesh)
@@ -65,8 +83,6 @@ void UFirstPersonArmComponent::CreateArmMesh()
 		ArmMesh->SetStaticMesh(CubeMesh);
 	}
 
-	// Setup attachment and transform
-	ArmMesh->SetupAttachment(OwnerCamera);
 	ArmMesh->SetRelativeLocation(ArmBaseOffset);
 	ArmMesh->SetRelativeRotation(ArmBaseRotation);
 	ArmMesh->SetRelativeScale3D(ArmScale);
@@ -75,6 +91,7 @@ void UFirstPersonArmComponent::CreateArmMesh()
 	ArmMesh->SetOnlyOwnerSee(true);
 	ArmMesh->SetCastShadow(false);
 	ArmMesh->bCastDynamicShadow = false;
+	ArmMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 
 	// Set material if available
 	if (ArmMaterial)
@@ -84,34 +101,16 @@ void UFirstPersonArmComponent::CreateArmMesh()
 
 	// Zapamti materijal kocke da se moze vratiti nakon item sprite-a
 	DefaultArmMaterial = ArmMesh->GetMaterial(0);
-
-	// Register the component
-	ArmMesh->RegisterComponent();
 }
 
-void UFirstPersonArmComponent::CreateHeldItemMesh()
+void UFirstPersonArmComponent::SetupHeldItemMesh()
 {
-	if (!OwnerCharacter || !ArmMesh)
-	{
-		return;
-	}
-
-	// Create held item mesh component
-	HeldItemMesh = NewObject<UStaticMeshComponent>(OwnerCharacter, TEXT("FPHeldItemMesh"));
-	if (!HeldItemMesh)
-	{
-		return;
-	}
-
 	// Load cube mesh for sword placeholder
 	UStaticMesh* CubeMesh = LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Cube.Cube"));
 	if (CubeMesh)
 	{
 		HeldItemMesh->SetStaticMesh(CubeMesh);
 	}
-
-	// Attach to arm mesh
-	HeldItemMesh->SetupAttachment(ArmMesh);
 
 	// Position sword relative to arm (extending forward and up from hand)
 	HeldItemMesh->SetRelativeLocation(FVector(80.0f, 0.0f, 60.0f));
@@ -122,12 +121,87 @@ void UFirstPersonArmComponent::CreateHeldItemMesh()
 	HeldItemMesh->SetOnlyOwnerSee(true);
 	HeldItemMesh->SetCastShadow(false);
 	HeldItemMesh->bCastDynamicShadow = false;
+	HeldItemMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 
 	// Start hidden (no item equipped)
 	HeldItemMesh->SetVisibility(false);
+}
 
-	// Register the component
-	HeldItemMesh->RegisterComponent();
+void UFirstPersonArmComponent::SetupHeldSpriteMesh()
+{
+	if (!HeldSpriteMesh)
+	{
+		return;
+	}
+
+	// Apsolutna skala jer bi neuniformna skala ruke izoblicila kvadratni sprite
+	HeldSpriteMesh->SetUsingAbsoluteScale(true);
+
+	HeldSpriteMesh->SetOnlyOwnerSee(true);
+	HeldSpriteMesh->SetCastShadow(false);
+	HeldSpriteMesh->bCastDynamicShadow = false;
+	HeldSpriteMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+
+	HeldSpriteMesh->SetVisibility(false);
+
+	// Geometrija se gradi lijeno u BuildHeldSpriteMesh kad se item uzme u ruku
+	HeldSpriteMesh->ClearAllMeshSections();
+	BuiltSpriteMeshItem = EItemType::None;
+
+	if (UBlockRegistry* Registry = UBlockRegistry::Get(this))
+	{
+		if (UMaterialInterface* SpriteMaterial = Registry->GetItemSpriteMaterial())
+		{
+			HeldSpriteMID = UMaterialInstanceDynamic::Create(SpriteMaterial, this);
+		}
+	}
+}
+
+void UFirstPersonArmComponent::BuildHeldSpriteMesh(EItemType ItemType, UTexture2D* SpriteTexture)
+{
+	if (!HeldSpriteMesh || !HeldSpriteMID)
+	{
+		return;
+	}
+
+	UBlockRegistry* Registry = UBlockRegistry::Get(this);
+	const FItemExtrudedMeshData* MeshData = Registry ? Registry->GetItemExtrudedMesh(ItemType) : nullptr;
+
+	// Ekstruzija nije uspjela (kriv format teksture...): flat quad ploca u
+	// istoj orijentaciji - Masked materijal i dalje reze prozirne piksele
+	FItemExtrudedMeshData FlatQuad;
+	if (!MeshData)
+	{
+		FlatQuad = FItemMeshExtruder::BuildFlatQuad();
+		MeshData = &FlatQuad;
+	}
+
+	HeldSpriteMesh->ClearAllMeshSections();
+	HeldSpriteMesh->CreateMeshSection(0, MeshData->Vertices, MeshData->Triangles,
+		MeshData->Normals, MeshData->UVs, TArray<FColor>(), TArray<FProcMeshTangent>(), false);
+	HeldSpriteMID->SetTextureParameterValue(GSpriteTextureParam, SpriteTexture);
+	HeldSpriteMesh->SetMaterial(0, HeldSpriteMID);
+	BuiltSpriteMeshItem = ItemType;
+}
+
+void UFirstPersonArmComponent::ApplyHeldSpriteTransform()
+{
+	if (!HeldSpriteMesh || !ArmMesh)
+	{
+		return;
+	}
+
+	// Relativna lokacija se mnozi skalom roditelja - podijeli da offset ostane
+	// u stvarnim Unreal jedinicama bez obzira na trenutnu skalu ruke
+	const FVector ParentScale = ArmMesh->GetRelativeScale3D();
+	FVector RelativeLocation = HeldSpriteOffset;
+	RelativeLocation.X /= FMath::Max(ParentScale.X, KINDA_SMALL_NUMBER);
+	RelativeLocation.Y /= FMath::Max(ParentScale.Y, KINDA_SMALL_NUMBER);
+	RelativeLocation.Z /= FMath::Max(ParentScale.Z, KINDA_SMALL_NUMBER);
+
+	HeldSpriteMesh->SetRelativeLocation(RelativeLocation);
+	HeldSpriteMesh->SetRelativeRotation(HeldSpriteRotation);
+	HeldSpriteMesh->SetWorldScale3D(HeldSpriteScale);
 }
 
 void UFirstPersonArmComponent::TickComponent(float DeltaTime, ELevelTick TickType,
@@ -135,9 +209,28 @@ void UFirstPersonArmComponent::TickComponent(float DeltaTime, ELevelTick TickTyp
 {
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
 
-	if (!ArmMesh)
+	// Sve komponente moraju postojati - nakon hot-reloada koji mijenja tip
+	// native komponente BP instanca zna imati null pokazivac (BeginPlay je
+	// vec logirao Error; potreban je restart editora)
+	if (!OwnerCharacter || !OwnerCamera || !ArmMesh || !HeldItemMesh || !HeldSpriteMesh)
 	{
 		return;
+	}
+
+	// Cuvar hijerarhije: BP construction rerun (npr. izmjena svojstva u
+	// Details tijekom PIE) re-aplicira BP-ovu hijerarhiju i premjesti ruku
+	// s kamere - vrati je i ponovno konfiguriraj
+	if (ArmMesh->GetAttachParent() != OwnerCamera)
+	{
+		UE_LOG(LogMinecraftClone, Warning,
+			TEXT("FirstPersonArmComponent: ruka premjestena na %s - vracam na kameru"),
+			*GetNameSafe(ArmMesh->GetAttachParent()));
+		ArmMesh->AttachToComponent(OwnerCamera, FAttachmentTransformRules::KeepRelativeTransform);
+		HeldItemMesh->AttachToComponent(ArmMesh, FAttachmentTransformRules::KeepRelativeTransform);
+		HeldSpriteMesh->AttachToComponent(ArmMesh, FAttachmentTransformRules::KeepRelativeTransform);
+		SetupArmMesh();
+		SetupHeldItemMesh();
+		SetupHeldSpriteMesh();
 	}
 
 	// Update swing animation
@@ -150,6 +243,11 @@ void UFirstPersonArmComponent::TickComponent(float DeltaTime, ELevelTick TickTyp
 	{
 		UpdateBobbing(DeltaTime);
 	}
+
+	// Idempotentna primjena stanja ruke svaki frame: EditAnywhere parametri
+	// (HeldSpriteOffset/Rotation/Scale, HeldBlockScale...) su zivi u
+	// runtimeu, a setteri na iste vrijednosti su jeftini early-outi
+	SetHeldItem(CurrentHeldItem);
 }
 
 void UFirstPersonArmComponent::PlaySwingAnimation(float Duration)
@@ -304,7 +402,7 @@ void UFirstPersonArmComponent::SetHeldItem(EItemType ItemType)
 
 	// Meshevi jos ne postoje (poziv prije BeginPlay komponente) - stanje je
 	// zapamceno u CurrentHeldItem, BeginPlay ce ga primijeniti
-	if (!ArmMesh || !HeldItemMesh)
+	if (!ArmMesh || !HeldItemMesh || !HeldSpriteMesh)
 	{
 		return;
 	}
@@ -314,43 +412,56 @@ void UFirstPersonArmComponent::SetHeldItem(EItemType ItemType)
 	{
 		ArmMesh->SetVisibility(false);
 		HeldItemMesh->SetVisibility(false);
+		HeldSpriteMesh->SetVisibility(false);
 		return;
 	}
 
-	ArmMesh->SetVisibility(true);
+	UBlockRegistry* Registry = UBlockRegistry::Get(this);
 
-	// Oruzje: postojeca kocka ruke + placeholder mac; pravi prikaz je buduci posao
+	// 1) Placeable blok: kocka s materijalom terena - izgleda tocno kao blok u svijetu
+	UMaterialInterface* BlockMaterial = Registry ? Registry->GetBlockMaterialForItem(ItemType) : nullptr;
+	if (BlockMaterial)
+	{
+		ArmMesh->SetVisibility(true);
+		ArmMesh->SetMaterial(0, BlockMaterial);
+		ArmMesh->SetRelativeScale3D(HeldBlockScale);
+		HeldItemMesh->SetVisibility(false);
+		HeldSpriteMesh->SetVisibility(false);
+		return;
+	}
+
+	// 2) Item sa "sprite" prikazom (mac, alat...): ekstrudirani 3D mesh iz
+	// teksture (Minecraft stil), flat quad ako ekstruzija nije uspjela
+	UTexture2D* SpriteTexture = Registry ? Registry->GetItemIconTexture(ItemType) : nullptr;
+	if (SpriteTexture && HeldSpriteMID)
+	{
+		ArmMesh->SetVisibility(false);
+		ArmMesh->SetRelativeScale3D(ArmScale);
+		HeldItemMesh->SetVisibility(false);
+		if (BuiltSpriteMeshItem != ItemType)
+		{
+			BuildHeldSpriteMesh(ItemType, SpriteTexture);
+		}
+		ApplyHeldSpriteTransform();
+		HeldSpriteMesh->SetVisibility(true);
+		return;
+	}
+
+	HeldSpriteMesh->SetVisibility(false);
+	ArmMesh->SetVisibility(true);
+	ArmMesh->SetMaterial(0, DefaultArmMaterial);
+	ArmMesh->SetRelativeScale3D(ArmScale);
+
+	// 3) Oruzje bez vlastitog sprite-a: stari placeholder mac
 	if (UWeaponDataLibrary::IsWeapon(ItemType))
 	{
-		ArmMesh->SetMaterial(0, DefaultArmMaterial);
-		ArmMesh->SetRelativeScale3D(ArmScale);
 		HeldItemMesh->SetVisibility(true);
 		UpdateSwordAppearance(ItemType);
 		return;
 	}
 
-	// Obican item: kocka u ruci s materijalom bloka - isti MI kao teren,
-	// pa izgleda tocno kao blok u svijetu
+	// 4) Fallback: siva kocka (item bez ikakvog prikaza)
 	HeldItemMesh->SetVisibility(false);
-
-	UMaterialInterface* BlockMaterial = nullptr;
-	if (UBlockRegistry* Registry = UBlockRegistry::Get(this))
-	{
-		BlockMaterial = Registry->GetBlockMaterialForItem(ItemType);
-	}
-
-	if (BlockMaterial)
-	{
-		ArmMesh->SetMaterial(0, BlockMaterial);
-		ArmMesh->SetRelativeScale3D(HeldBlockScale);
-	}
-	else
-	{
-		// Item bez placeable bloka (alat, hrana...) ili blok bez materijala -
-		// siva kocka, ista fallback konvencija kao za blokove u svijetu
-		ArmMesh->SetMaterial(0, DefaultArmMaterial);
-		ArmMesh->SetRelativeScale3D(ArmScale);
-	}
 }
 
 void UFirstPersonArmComponent::ClearHeldItem()

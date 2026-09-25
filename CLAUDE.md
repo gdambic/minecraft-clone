@@ -150,6 +150,8 @@ Detailed docs in Croatian available in `Docs/`:
 - `PLAN_MeleeCombat.md` - Melee combat system
 - `PLAN_FirstPersonHand.md` - First-person hand/viewmodel system
 - `PLAN_HoldingDisplay.md` - Prikaz odabranog itema u ruci (sprite, implementirano)
+- `PLAN_ItemExtrusion.md` - 3D ekstrudirani item mesh iz 16x16 teksture (Minecraft stil, implementirano)
+- `IMPLEMENTACIJA_ItemExtrusion.md` - Detaljno objašnjenje izvedbe item ekstruzije, korak po korak
 - `BLOCK_TEXTURES_AND_MATERIALS.md` - Teksture i materijali blokova, rotacija
 - `TEXTURE_SPEC.md` - Popis PNG datoteka koje treba nacrtati
 - `sheep.md` - Sheep passive mob implementation

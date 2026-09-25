@@ -1,6 +1,8 @@
 #include "ItemDrop.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/SphereComponent.h"
+#include "ProceduralMeshComponent.h"
+#include "ItemMeshExtruder.h"
 #include "FirstPersonCharacter.h"
 #include "InventoryComponent.h"
 #include "Engine/Engine.h"
@@ -8,7 +10,9 @@
 #include "BlockType.h"
 #include "BlockRegistry.h"
 #include "Engine/StaticMesh.h"
+#include "Engine/Texture2D.h"
 #include "Materials/MaterialInterface.h"
+#include "Materials/MaterialInstanceDynamic.h"
 
 AItemDrop::AItemDrop()
 {
@@ -35,6 +39,12 @@ AItemDrop::AItemDrop()
 	MeshComponent->SetupAttachment(RootComponent);
 	MeshComponent->SetRelativeScale3D(FVector(0.1f)); // Mini verzija
 	MeshComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+
+	// Ekstrudirani mesh za sprite iteme - aktivira ga InitializeFromRegistry
+	ExtrudedMeshComponent = CreateDefaultSubobject<UProceduralMeshComponent>(TEXT("ExtrudedMeshComponent"));
+	ExtrudedMeshComponent->SetupAttachment(RootComponent);
+	ExtrudedMeshComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	ExtrudedMeshComponent->SetVisibility(false);
 }
 
 void AItemDrop::BeginPlay()
@@ -53,10 +63,27 @@ void AItemDrop::Tick(float DeltaTime)
 	Super::Tick(DeltaTime);
 
 	// Rotacija
-	if (MeshComponent)
+	if (bIsExtrudedDrop && ExtrudedMeshComponent)
 	{
-		FRotator DeltaRotation(0.0f, RotationSpeed * DeltaTime, 0.0f);
-		MeshComponent->AddRelativeRotation(DeltaRotation);
+		// Uspravni ekstrudirani mesh (ploca u X-Z ravnini) vrti se oko
+		// vertikalne osi kao Minecraft dropped item
+		SpriteSpinYaw = FMath::Fmod(SpriteSpinYaw + RotationSpeed * DeltaTime, 360.0f);
+		ExtrudedMeshComponent->SetRelativeRotation(FRotator(0.0f, SpriteSpinYaw, 0.0f));
+	}
+	else if (MeshComponent)
+	{
+		if (bIsSpriteDrop)
+		{
+			// Uspravan quad koji se vrti oko vertikalne osi - AddRelativeRotation
+			// bi na pitchanom quadu vrtio oko njegove lokalne (horizontalne) osi
+			SpriteSpinYaw = FMath::Fmod(SpriteSpinYaw + RotationSpeed * DeltaTime, 360.0f);
+			MeshComponent->SetRelativeRotation(FRotator(90.0f, SpriteSpinYaw, 0.0f));
+		}
+		else
+		{
+			FRotator DeltaRotation(0.0f, RotationSpeed * DeltaTime, 0.0f);
+			MeshComponent->AddRelativeRotation(DeltaRotation);
+		}
 	}
 
 	// Gravitacija - padaj dok ne udariš u tlo
@@ -98,6 +125,9 @@ void AItemDrop::Tick(float DeltaTime)
 				{
 					SetActorLocation(FVector(CurrentLocation.X, CurrentLocation.Y, BlockTopZ + 20.0f));
 					bIsGrounded = true;
+					UE_LOG(LogTemp, Log, TEXT("ItemDrop: %s sletio na %s (blok)"),
+						*StaticEnum<EItemType>()->GetNameStringByValue((int64)ItemType),
+						*GetActorLocation().ToCompactString());
 				}
 				else
 				{
@@ -113,6 +143,10 @@ void AItemDrop::Tick(float DeltaTime)
 				{
 					SetActorLocation(FVector(CurrentLocation.X, CurrentLocation.Y, SurfaceZ + 20.0f));
 					bIsGrounded = true;
+					UE_LOG(LogTemp, Log, TEXT("ItemDrop: %s sletio na %s (povrsina: %s)"),
+						*StaticEnum<EItemType>()->GetNameStringByValue((int64)ItemType),
+						*GetActorLocation().ToCompactString(),
+						*GetNameSafe(HitResult.GetComponent()));
 				}
 				else
 				{
@@ -128,6 +162,9 @@ void AItemDrop::Tick(float DeltaTime)
 			// Ako padne predaleko ispod svijeta, uništi
 			if (NewLocation.Z < -1000.0f)
 			{
+				UE_LOG(LogTemp, Warning, TEXT("ItemDrop: %s propao kroz svijet i unisten na %s"),
+					*StaticEnum<EItemType>()->GetNameStringByValue((int64)ItemType),
+					*NewLocation.ToCompactString());
 				Destroy();
 				return;
 			}
@@ -175,6 +212,51 @@ void AItemDrop::InitializeFromRegistry(EItemType Type)
 	{
 		UE_LOG(LogTemp, Warning, TEXT("ItemDrop::InitializeFromRegistry: No definition for item type %d"), (int32)Type);
 		return;
+	}
+
+	// Item sa "sprite" prikazom (mac, alat...): ekstrudirani rotirajuci 3D
+	// mesh (Minecraft stil), fallback uspravni quad ako ekstruzija ne uspije
+	if (ItemDef->Display.Type == TEXT("sprite") && MeshComponent)
+	{
+		UTexture2D* SpriteTexture = Registry->GetItemIconTexture(Type);
+		UMaterialInterface* SpriteMaterial = Registry->GetItemSpriteMaterial();
+		if (SpriteTexture && SpriteMaterial)
+		{
+			UMaterialInstanceDynamic* SpriteMID = UMaterialInstanceDynamic::Create(SpriteMaterial, this);
+			SpriteMID->SetTextureParameterValue(TEXT("SpriteTexture"), SpriteTexture);
+
+			const FItemExtrudedMeshData* MeshData = Registry->GetItemExtrudedMesh(Type);
+			if (MeshData && ExtrudedMeshComponent)
+			{
+				ExtrudedMeshComponent->CreateMeshSection(0, MeshData->Vertices,
+					MeshData->Triangles, MeshData->Normals, MeshData->UVs,
+					TArray<FColor>(), TArray<FProcMeshTangent>(), false);
+				ExtrudedMeshComponent->SetMaterial(0, SpriteMID);
+				ExtrudedMeshComponent->SetRelativeScale3D(FVector(0.25f)); // 25 UU
+				ExtrudedMeshComponent->SetVisibility(true);
+				MeshComponent->SetVisibility(false);
+				bIsExtrudedDrop = true;
+				UE_LOG(LogTemp, Log, TEXT("ItemDrop: ekstrudirani drop za %s na %s"),
+					*StaticEnum<EItemType>()->GetNameStringByValue((int64)Type),
+					*GetActorLocation().ToCompactString());
+				return;
+			}
+
+			UStaticMesh* PlaneMesh = LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Plane.Plane"));
+			if (PlaneMesh)
+			{
+				MeshComponent->SetStaticMesh(PlaneMesh);
+			}
+
+			MeshComponent->SetMaterial(0, SpriteMID);
+			MeshComponent->SetRelativeScale3D(FVector(0.25f)); // 25 UU sprite
+			MeshComponent->SetRelativeRotation(FRotator(90.0f, 0.0f, 0.0f)); // uspravno
+			bIsSpriteDrop = true;
+			UE_LOG(LogTemp, Log, TEXT("ItemDrop: sprite drop za %s na %s"),
+				*StaticEnum<EItemType>()->GetNameStringByValue((int64)Type),
+				*GetActorLocation().ToCompactString());
+			return;
+		}
 	}
 
 	// Postavi mesh

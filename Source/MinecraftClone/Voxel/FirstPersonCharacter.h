@@ -9,6 +9,8 @@
 #include "FirstPersonCharacter.generated.h"
 
 class UCameraComponent;
+class UStaticMeshComponent;
+class UProceduralMeshComponent;
 class UInputAction;
 class ABlock;
 class AVoxelWorld;
@@ -42,6 +44,21 @@ class MINECRAFTCLONE_API AFirstPersonCharacter : public ACharacter
 	/** First person arm component for hand visualization and swing animation */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components", meta = (AllowPrivateAccess = "true"))
 	UFirstPersonArmComponent* FirstPersonArmComponent;
+
+	/**
+	 * Meshevi ruke - native komponente (kao i kamera) da prežive PIE izmjene
+	 * svojstava koje uništavaju runtime-kreirane komponente. Konfigurira ih
+	 * i njima upravlja UFirstPersonArmComponent.
+	 */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components", meta = (AllowPrivateAccess = "true"))
+	UStaticMeshComponent* ArmMeshComponent;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components", meta = (AllowPrivateAccess = "true"))
+	UStaticMeshComponent* HeldItemMeshComponent;
+
+	/** Ekstrudirani sprite itema (mac, alat...) - proceduralni mesh iz teksture */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components", meta = (AllowPrivateAccess = "true"))
+	UProceduralMeshComponent* HeldSpriteMeshComponent;
 
 protected:
 	/** Jump Input Action */
@@ -185,6 +202,14 @@ protected:
 	UFUNCTION()
 	void OnInventorySlotChanged(int32 SlotIndex, FInventorySlot NewSlot);
 
+	/**
+	 * Stvori startni WoodenSword drop 2 bloka desno od igrača.
+	 * Poziva se timerom malo nakon BeginPlay - teren se generira u
+	 * VoxelWorld::BeginPlay pa u characterovom BeginPlay još ne postoji,
+	 * a drop treba tlo na koje će pasti.
+	 */
+	void SpawnStartingSwordDrop();
+
 protected:
 	/** Called from Input Actions for movement input */
 	void MoveInput(const FInputActionValue& Value);
@@ -215,4 +240,9 @@ protected:
 public:
 	/** Returns first person camera component */
 	UCameraComponent* GetFirstPersonCameraComponent() const { return FirstPersonCameraComponent; }
+
+	/** Meshevi ruke (native komponente kojima upravlja UFirstPersonArmComponent) */
+	UStaticMeshComponent* GetArmMeshComponent() const { return ArmMeshComponent; }
+	UStaticMeshComponent* GetHeldItemMeshComponent() const { return HeldItemMeshComponent; }
+	UProceduralMeshComponent* GetHeldSpriteMeshComponent() const { return HeldSpriteMeshComponent; }
 };

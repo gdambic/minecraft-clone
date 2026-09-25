@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "Subsystems/GameInstanceSubsystem.h"
 #include "BlockDefinition.h"
+#include "ItemMeshExtruder.h"
 #include "BlockRegistry.generated.h"
 
 class UTexture2D;
@@ -84,6 +85,23 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "BlockRegistry")
 	UMaterialInterface* GetBlockMaterialForItem(EItemType ItemType);
 
+	/**
+	 * Master materijal za flat sprite prikaz itema (M_ItemSprite, texture
+	 * parametar "SpriteTexture") - koriste ga prikaz u ruci i item drop.
+	 * Vraća nullptr (+ Error u logu) ako asset nije izgrađen.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "BlockRegistry")
+	UMaterialInterface* GetItemSpriteMaterial();
+
+	/**
+	 * Dohvati ekstrudirani 3D mesh itema (Minecraft stil: tekstura debljine
+	 * 1 piksela s bocnim stranicama po rubovima piksela; FItemMeshExtruder).
+	 * Samo za iteme s display type "sprite". Vraca nullptr ako item nema
+	 * sprite prikaz ili ekstruzija ne uspije - pozivatelj tada koristi flat
+	 * quad fallback. Generira se jednom po itemu (cache). Samo C++.
+	 */
+	const FItemExtrudedMeshData* GetItemExtrudedMesh(EItemType ItemType);
+
 	// === Static Helper ===
 
 	/** Dohvati registry iz bilo kojeg UObject konteksta */
@@ -133,4 +151,12 @@ private:
 	/** Cache blok materijala po itemu - TryLoad jednom po tipu (i nullptr se pamti) */
 	UPROPERTY()
 	TMap<EItemType, TObjectPtr<UMaterialInterface>> ItemBlockMaterialCache;
+
+	/** Cache M_ItemSprite master materijala (bool pamti i neuspjeli load) */
+	UPROPERTY()
+	TObjectPtr<UMaterialInterface> ItemSpriteMaterial;
+	bool bItemSpriteMaterialLoaded = false;
+
+	/** Cache ekstrudiranih mesheva - nullptr pamti i neuspjeh/ne-sprite item */
+	TMap<EItemType, TSharedPtr<FItemExtrudedMeshData>> ItemExtrudedMeshCache;
 };

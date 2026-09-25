@@ -6,7 +6,9 @@
 #include "FirstPersonArmComponent.generated.h"
 
 class UStaticMeshComponent;
+class UProceduralMeshComponent;
 class USoundBase;
+class UTexture2D;
 
 /**
  * Component that handles first-person arm rendering, animations, and sounds.
@@ -24,14 +26,24 @@ public:
 		FActorComponentTickFunction* ThisTickFunction) override;
 
 	// === ARM MESH ===
+	// Reference na native mesh komponente charactera (vidi AFirstPersonCharacter) -
+	// ova komponenta ih konfigurira i upravlja njihovim stanjem
 
 	/** Static mesh for the arm (simple box placeholder) */
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Arm")
+	UPROPERTY(BlueprintReadOnly, Category = "Arm")
 	UStaticMeshComponent* ArmMesh;
 
 	/** Static mesh for held item (sword, etc.) */
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Arm")
+	UPROPERTY(BlueprintReadOnly, Category = "Arm")
 	UStaticMeshComponent* HeldItemMesh;
+
+	/**
+	 * Ekstrudirani mesh itema sa "sprite" prikazom (mac, alat...) - Minecraft
+	 * stil: tekstura debljine 1 piksela s bocnim stranicama po rubovima
+	 * piksela (FItemMeshExtruder). Fallback bez ekstruzije: flat quad.
+	 */
+	UPROPERTY(BlueprintReadOnly, Category = "Arm")
+	UProceduralMeshComponent* HeldSpriteMesh;
 
 	/**
 	 * Scale of the arm cube while a block item is held. Uniform by default so
@@ -40,6 +52,21 @@ public:
 	 */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Arm|Held Item")
 	FVector HeldBlockScale = FVector(0.25f, 0.25f, 0.25f);
+
+	/** Offset of the sprite mesh from the arm, in Unreal units (X = distance from player) */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Arm|Held Item")
+	FVector HeldSpriteOffset = FVector(11.2f, 14.4f, 9.5f);
+
+	/**
+	 * Rotation of the sprite mesh (rucno stimano u Editoru 2026-09-25;
+	 * Details panel prikazuje Roll/Pitch/Yaw = -3.2 / 36.8 / 2.9).
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Arm|Held Item")
+	FRotator HeldSpriteRotation = FRotator(36.8f, 2.9f, -3.2f);
+
+	/** World-space scale of the sprite mesh (ploca je 100x100 UU at scale 1) */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Arm|Held Item")
+	FVector HeldSpriteScale = FVector(0.35f, 0.35f, 0.35f);
 
 	// === POSITIONING ===
 
@@ -160,9 +187,17 @@ private:
 	// Current held item type
 	EItemType CurrentHeldItem = EItemType::None;
 
+	// Item ciji je mesh trenutno izgraden u HeldSpriteMesh sekciji -
+	// CreateMeshSection nije jeftin, a SetHeldItem se zove svaki tick
+	EItemType BuiltSpriteMeshItem = EItemType::None;
+
 	// Material the arm cube shows when no block material applies (weapons, fallback)
 	UPROPERTY()
 	UMaterialInterface* DefaultArmMaterial;
+
+	// Dynamic material instance for the sprite quad (parent: M_ItemSprite)
+	UPROPERTY()
+	class UMaterialInstanceDynamic* HeldSpriteMID;
 
 	// Update swing animation
 	void UpdateSwing(float DeltaTime);
@@ -173,11 +208,20 @@ private:
 	// Calculate bob offset based on movement
 	FVector CalculateBobOffset() const;
 
-	// Create the arm mesh component
-	void CreateArmMesh();
+	// Configure the character's native arm mesh (asset, transform, material)
+	void SetupArmMesh();
 
-	// Create the held item mesh component
-	void CreateHeldItemMesh();
+	// Configure the character's native held item mesh
+	void SetupHeldItemMesh();
+
+	// Configure the sprite mesh + create its dynamic material
+	void SetupHeldSpriteMesh();
+
+	// Izgradi ekstrudirani mesh (ili flat quad fallback) za item u HeldSpriteMesh
+	void BuildHeldSpriteMesh(EItemType ItemType, UTexture2D* SpriteTexture);
+
+	// Apply HeldSpriteOffset/Rotation/Scale to the sprite mesh
+	void ApplyHeldSpriteTransform();
 
 	// Update sword mesh appearance based on type
 	void UpdateSwordAppearance(EItemType SwordType);

@@ -1,6 +1,8 @@
 #include "FirstPersonCharacter.h"
 #include "Camera/CameraComponent.h"
 #include "Components/CapsuleComponent.h"
+#include "Components/StaticMeshComponent.h"
+#include "ProceduralMeshComponent.h"
 #include "EnhancedInputComponent.h"
 #include "InputActionValue.h"
 #include "GameFramework/CharacterMovementComponent.h"
@@ -14,6 +16,7 @@
 #include "MobBase.h"
 #include "WeaponData.h"
 #include "FirstPersonArmComponent.h"
+#include "ItemDrop.h"
 
 AFirstPersonCharacter::AFirstPersonCharacter()
 {
@@ -49,6 +52,17 @@ AFirstPersonCharacter::AFirstPersonCharacter()
 
 	// Create first person arm component
 	FirstPersonArmComponent = CreateDefaultSubobject<UFirstPersonArmComponent>(TEXT("FirstPersonArmComponent"));
+
+	// Meshevi ruke kao native komponente (prezive PIE izmjene svojstava);
+	// mesh assete, materijale i transformacije postavlja FirstPersonArmComponent
+	ArmMeshComponent = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("FPArmMesh"));
+	ArmMeshComponent->SetupAttachment(FirstPersonCameraComponent);
+
+	HeldItemMeshComponent = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("FPHeldItemMesh"));
+	HeldItemMeshComponent->SetupAttachment(ArmMeshComponent);
+
+	HeldSpriteMeshComponent = CreateDefaultSubobject<UProceduralMeshComponent>(TEXT("FPHeldSpriteMesh"));
+	HeldSpriteMeshComponent->SetupAttachment(ArmMeshComponent);
 }
 
 void AFirstPersonCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
@@ -157,11 +171,16 @@ void AFirstPersonCharacter::BeginPlay()
 		InventoryComponent->SetSlot(UInventoryComponent::HotbarStartIndex + 1, EItemType::Stone, 10);
 		// Slot 29 = hotbar pozicija 2 (OakLog)
 		InventoryComponent->SetSlot(UInventoryComponent::HotbarStartIndex + 2, EItemType::OakLog, 10);
-		// Slot 30 = hotbar pozicija 3 (WoodenSword) - za testiranje melee combata
-		InventoryComponent->SetSlot(UInventoryComponent::HotbarStartIndex + 3, EItemType::WoodenSword, 1);
 		// Slot 31 = hotbar pozicija 4 (DiamondSword) - za testiranje
 		InventoryComponent->SetSlot(UInventoryComponent::HotbarStartIndex + 4, EItemType::DiamondSword, 1);
 	}
+
+	// WoodenSword se ne dobiva u startnom inventoryju nego kao drop u svijetu.
+	// Odgodeno timerom: teren se generira u VoxelWorld::BeginPlay koji moze
+	// doci NAKON characterovog BeginPlay - trace u ovom trenutku nema sto pogoditi.
+	FTimerHandle SwordDropTimer;
+	GetWorldTimerManager().SetTimer(SwordDropTimer, this,
+		&AFirstPersonCharacter::SpawnStartingSwordDrop, 0.2f, false);
 
 	// Initialize first person arm with current held item
 	if (FirstPersonArmComponent && InventoryComponent)
@@ -171,6 +190,19 @@ void AFirstPersonCharacter::BeginPlay()
 	}
 
 	Super::BeginPlay();
+}
+
+void AFirstPersonCharacter::SpawnStartingSwordDrop()
+{
+	// 2 bloka desno od igraca - 1 blok (100 UU) bi bio unutar auto-pickup
+	// radiusa (150 UU) pa bi se mac pokupio odmah pri spawnu. Drop sam
+	// padne na tlo vlastitom gravitacijom.
+	const FVector SpawnLocation = GetActorLocation() + GetActorRightVector() * 200.0f;
+
+	UE_LOG(LogTemp, Log, TEXT("SpawnStartingSwordDrop: igrac na %s, drop na %s"),
+		*GetActorLocation().ToCompactString(), *SpawnLocation.ToCompactString());
+
+	AItemDrop::SpawnItemDrop(this, EItemType::WoodenSword, SpawnLocation);
 }
 
 void AFirstPersonCharacter::Tick(float DeltaTime)

@@ -6,6 +6,7 @@
 #include "ItemDrop.generated.h"
 
 class USphereComponent;
+class UProceduralMeshComponent;
 class UBlockRegistry;
 
 UCLASS()
@@ -21,6 +22,10 @@ public:
 	/** Mesh komponenta - postavlja se u BP */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "ItemDrop")
 	UStaticMeshComponent* MeshComponent;
+
+	/** Ekstrudirani 3D mesh za sprite iteme (Minecraft stil) - skriven za blok dropove */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "ItemDrop")
+	UProceduralMeshComponent* ExtrudedMeshComponent;
 
 	/** Collision sphere za pickup */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "ItemDrop")
@@ -70,4 +75,13 @@ protected:
 
 private:
 	float CurrentLifetime;
+
+	/** Je li mesh flat sprite quad (display type "sprite") umjesto mini kocke */
+	bool bIsSpriteDrop = false;
+
+	/** Je li aktivan ekstrudirani proceduralni mesh (sprite item s uspjesnom ekstruzijom) */
+	bool bIsExtrudedDrop = false;
+
+	/** Akumulirani yaw za vrtnju uspravnog sprite mesha oko vertikalne osi */
+	float SpriteSpinYaw = 0.0f;
 };

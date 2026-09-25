@@ -34,6 +34,10 @@ import unreal
 TEXTURE_DIR = "/Game/Blocks/Textures"
 MATERIAL_DIR = "/Game/Blocks/Materials"
 
+# Rucno nacrtani item spriteovi (T_Item_<X>, display type "sprite") - trebaju
+# iste pixel-art import postavke kao blok teksture.
+ITEM_TEXTURE_DIR = "/Game/Items/Textures"
+
 MASTER_OPAQUE = "M_VoxelBlock"
 MASTER_MASKED = "M_VoxelBlock_Masked"
 
@@ -182,29 +186,33 @@ def fix_texture_import_settings():
     DXT/BC kompresija radi u blokovima 4x4 piksela, sto na 16x16 teksturi
     vidljivo unistava sliku.
     """
-    if not EAL.does_directory_exist(TEXTURE_DIR):
-        _info("mapa {0} jos ne postoji - preskacem postavke tekstura".format(TEXTURE_DIR))
-        return 0
-
     touched = 0
-    for asset_path in EAL.list_assets(TEXTURE_DIR, recursive=True, include_folder=False):
-        asset = EAL.load_asset(asset_path)
-        if not isinstance(asset, unreal.Texture2D):
+    for directory in (TEXTURE_DIR, ITEM_TEXTURE_DIR):
+        if not EAL.does_directory_exist(directory):
+            _info("mapa {0} jos ne postoji - preskacem postavke tekstura".format(directory))
             continue
 
-        asset.set_editor_property("filter", unreal.TextureFilter.TF_NEAREST)
-        asset.set_editor_property(
-            "compression_settings", unreal.TextureCompressionSettings.TC_EDITOR_ICON)
-        asset.set_editor_property("srgb", True)
-        asset.set_editor_property(
-            "mip_gen_settings",
-            unreal.TextureMipGenSettings.TMGS_FROM_TEXTURE_GROUP if GENERATE_MIPS
-            else unreal.TextureMipGenSettings.TMGS_NO_MIPMAPS)
-        asset.set_editor_property(
-            "lod_group", unreal.TextureGroup.TEXTUREGROUP_WORLD)
+        for asset_path in EAL.list_assets(directory, recursive=True, include_folder=False):
+            asset = EAL.load_asset(asset_path)
+            if not isinstance(asset, unreal.Texture2D):
+                continue
 
-        EAL.save_loaded_asset(asset, only_if_is_dirty=False)
-        touched += 1
+            asset.set_editor_property("filter", unreal.TextureFilter.TF_NEAREST)
+            asset.set_editor_property(
+                "compression_settings", unreal.TextureCompressionSettings.TC_EDITOR_ICON)
+            asset.set_editor_property("srgb", True)
+            asset.set_editor_property(
+                "mip_gen_settings",
+                unreal.TextureMipGenSettings.TMGS_FROM_TEXTURE_GROUP if GENERATE_MIPS
+                else unreal.TextureMipGenSettings.TMGS_NO_MIPMAPS)
+            asset.set_editor_property(
+                "lod_group", unreal.TextureGroup.TEXTUREGROUP_WORLD)
+            # ItemMeshExtruder cita piksele s CPU-a (mip 0) - bez streaminga
+            # su podaci garantirano dostupni i u cooked/packaged buildu
+            asset.set_editor_property("never_stream", True)
+
+            EAL.save_loaded_asset(asset, only_if_is_dirty=False)
+            touched += 1
 
     _info("import postavke popravljene na {0} tekstura".format(touched))
     return touched

@@ -73,7 +73,7 @@
   {
     "itemType": "WoodenSword",
     "displayName": "Wooden Sword",
-    "display": { "type": "none" }
+    "display": { "type": "sprite", "texture": "WoodenSword" }
   },
   {
     "itemType": "StoneSword",

@@ -77,10 +77,12 @@ struct MINECRAFTCLONE_API FBlockAssets
 };
 
 /**
- * Nacin prikaza itema u inventory/hotbar UI-ju (JSON polje "display").
+ * Nacin prikaza itema u inventory/hotbar UI-ju i u ruci (JSON polje "display").
  * type "block": ikona je generirana izometrijska kocka bloka Block -
  * ucitava se po konvenciji /Game/Items/Generated/T_Item_<Block>
  * (generira je Tools > MinecraftClone > Generate Items Sprites).
+ * type "sprite": rucno nacrtana flat tekstura itema (mac, alat, hrana) -
+ * ucitava se po konvenciji /Game/Items/Textures/T_Item_<Texture>.
  * type "none": nema ikone (transparent placeholder).
  */
 USTRUCT(BlueprintType)
@@ -94,6 +96,10 @@ struct MINECRAFTCLONE_API FItemDisplayDefinition
 	/** Ime bloka (EBlockType vrijednost) ciji se izgled prikazuje, za type "block" */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Item")
 	FString Block;
+
+	/** Ime teksture (bez T_Item_ prefiksa), za type "sprite" */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Item")
+	FString Texture;
 };
 
 /**

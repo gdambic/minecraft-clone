@@ -297,19 +297,80 @@ UTexture2D* UBlockRegistry::GetItemIconTexture(EItemType ItemType)
 	}
 
 	UTexture2D* Texture = nullptr;
-	const FItemDefinition* Def = GetItemDefinition(ItemType);
-	if (Def && Def->Display.Type == TEXT("block") && !Def->Display.Block.IsEmpty())
+	FString Path;
+	if (const FItemDefinition* Def = GetItemDefinition(ItemType))
 	{
-		// Konvencija: /Game/Items/Generated/T_Item_<Block> (generira je editor
-		// alat Tools > MinecraftClone > Generate Items Sprites iz Items.json)
-		const FString Path = FString::Printf(
-			TEXT("/Game/Items/Generated/T_Item_%s.T_Item_%s"),
-			*Def->Display.Block, *Def->Display.Block);
+		if (Def->Display.Type == TEXT("block") && !Def->Display.Block.IsEmpty())
+		{
+			// Generirana izometrijska kocka: /Game/Items/Generated/T_Item_<Block>
+			// (generira je Tools > MinecraftClone > Generate Items Sprites)
+			Path = FString::Printf(
+				TEXT("/Game/Items/Generated/T_Item_%s.T_Item_%s"),
+				*Def->Display.Block, *Def->Display.Block);
+		}
+		else if (Def->Display.Type == TEXT("sprite") && !Def->Display.Texture.IsEmpty())
+		{
+			// Rucno nacrtan sprite: /Game/Items/Textures/T_Item_<Texture>
+			Path = FString::Printf(
+				TEXT("/Game/Items/Textures/T_Item_%s.T_Item_%s"),
+				*Def->Display.Texture, *Def->Display.Texture);
+		}
+	}
+
+	if (!Path.IsEmpty())
+	{
 		Texture = Cast<UTexture2D>(FSoftObjectPath(Path).TryLoad());
+		if (!Texture)
+		{
+			UE_LOG(LogTemp, Error, TEXT("BlockRegistry: ikona itema ne postoji na %s"), *Path);
+		}
 	}
 
 	ItemIconCache.Add(ItemType, Texture);
 	return Texture;
+}
+
+UMaterialInterface* UBlockRegistry::GetItemSpriteMaterial()
+{
+	if (!bItemSpriteMaterialLoaded)
+	{
+		bItemSpriteMaterialLoaded = true;
+		ItemSpriteMaterial = Cast<UMaterialInterface>(FSoftObjectPath(
+			TEXT("/Game/Items/Generated/Materials/M_ItemSprite.M_ItemSprite")).TryLoad());
+		if (!ItemSpriteMaterial)
+		{
+			UE_LOG(LogTemp, Error, TEXT("BlockRegistry: M_ItemSprite ne postoji - pokreni Tools > MinecraftClone > Build Block Materials"));
+		}
+	}
+
+	return ItemSpriteMaterial;
+}
+
+const FItemExtrudedMeshData* UBlockRegistry::GetItemExtrudedMesh(EItemType ItemType)
+{
+	if (const TSharedPtr<FItemExtrudedMeshData>* Cached = ItemExtrudedMeshCache.Find(ItemType))
+	{
+		return Cached->Get();
+	}
+
+	TSharedPtr<FItemExtrudedMeshData> MeshData;
+	const FItemDefinition* Def = GetItemDefinition(ItemType);
+	if (Def && Def->Display.Type == TEXT("sprite"))
+	{
+		if (UTexture2D* Texture = GetItemIconTexture(ItemType))
+		{
+			FItemExtrudedMeshData Built = FItemMeshExtruder::Extrude(Texture);
+			if (Built.IsValid())
+			{
+				MeshData = MakeShared<FItemExtrudedMeshData>(MoveTemp(Built));
+			}
+			// Neuspjeh je vec logiran u Extrude(); nullptr u cacheu znaci
+			// da pozivatelji trajno padaju na flat quad
+		}
+	}
+
+	ItemExtrudedMeshCache.Add(ItemType, MeshData);
+	return MeshData.Get();
 }
 
 UMaterialInterface* UBlockRegistry::GetBlockMaterialForItem(EItemType ItemType)

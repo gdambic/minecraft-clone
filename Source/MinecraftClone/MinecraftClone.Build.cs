@@ -21,10 +21,12 @@ public class MinecraftClone : ModuleRules
 			"GameplayTasks",
 			"NavigationSystem",
 			"Json",
-			"JsonUtilities"
+			"JsonUtilities",
+			"ProceduralMeshComponent"
 		});
 
-		PrivateDependencyModuleNames.AddRange(new string[] { });
+		// ImageCore: FImage za citanje piksela iz Texture->Source (ItemMeshExtruder)
+		PrivateDependencyModuleNames.AddRange(new string[] { "ImageCore" });
 
 		PublicIncludePaths.AddRange(new string[] {
 			"MinecraftClone",

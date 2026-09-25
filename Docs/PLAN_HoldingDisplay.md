@@ -111,9 +111,24 @@ Redoslijed grana:
   - postaviti sve blokove iz slota → ruka se isprazni
   - promijeniti `HeldItemOffset` u Editoru → udaljenost se mijenja
 
+## Dopuna: flat sprite itemi (implementirano 2026-09-20)
+
+Novi display type `"sprite"` u Items.json
+(`"display": { "type": "sprite", "texture": "WoodenSword" }`):
+
+- Tekstura po konvenciji `/Game/Items/Textures/T_Item_<Texture>` (ručno
+  nacrtana, import postavke sređuje Build Block Materials skripta).
+- `GetItemIconTexture()` je vraća za inventory/hotbar ikonu.
+- U ruci: `HeldSpriteMesh` quad s `M_ItemSprite` materijalom
+  (`GetItemSpriteMaterial()`), attachan na ruku (nasljeđuje swing/bobbing).
+  Parametri `HeldSpriteOffset/Rotation/Scale` su `EditAnywhere`.
+- Item drop: uspravni rotirajući quad umjesto mini kocke.
+- Redoslijed prikaza u `SetHeldItem`: blok materijal → sprite → placeholder
+  mač (oružje bez spritea) → siva kocka.
+- WoodenSword se više ne dobiva u startnom hotbaru nego kao drop 3 bloka
+  ispred igrača (`FirstPersonCharacter::BeginPlay`).
+
 ## Izvan opsega
 
-- Pravi 3D prikaz oružja u ruci (budući posao, gore grana 2).
-- Flat sprite prikaz ne-blok itema (alati, hrana) u ruci — za to su spremni
-  `M_ItemSprite` materijal i `GetItemIconTexture()`; za sad ti itemi
-  pokazuju sivu fallback kocku.
+- Pravi 3D model oružja u ruci (sprite je trenutni prikaz; ostali mačevi bez
+  spritea i dalje pokazuju placeholder kvadar).
