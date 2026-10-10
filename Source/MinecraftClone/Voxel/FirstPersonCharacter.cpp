@@ -9,9 +9,12 @@
 #include "Kismet/GameplayStatics.h"
 #include "MinecraftClone.h"
 #include "Block.h"
+#include "BlockRegistry.h"
 #include "VoxelWorld.h"
 #include "InventoryComponent.h"
 #include "FirstPersonPlayerController.h"
+#include "InventoryScreenWidget.h"
+#include "Blueprint/UserWidget.h"
 #include "CreatureBase.h"
 #include "MobBase.h"
 #include "WeaponData.h"
@@ -189,7 +192,44 @@ void AFirstPersonCharacter::BeginPlay()
 		FirstPersonArmComponent->SetHeldItem(InitialItem);
 	}
 
+	// Ekrani su u vlasnistvu C++-a: kreiraju se jednom, skriveni, a
+	// OpenScreen/CloseCurrentScreen im pale/gase vidljivost
+	InventoryScreen = CreateScreen(InventoryScreenClass);
+	CraftingTableScreen = CreateScreen(CraftingTableScreenClass);
+
 	Super::BeginPlay();
+}
+
+UInventoryScreenWidget* AFirstPersonCharacter::CreateScreen(TSubclassOf<UInventoryScreenWidget> ScreenClass)
+{
+	if (!ScreenClass)
+	{
+		return nullptr;
+	}
+
+	APlayerController* PC = Cast<APlayerController>(GetController());
+	if (!PC)
+	{
+		return nullptr;
+	}
+
+	UInventoryScreenWidget* Screen = CreateWidget<UInventoryScreenWidget>(PC, ScreenClass);
+	if (Screen)
+	{
+		Screen->AddToViewport();
+		Screen->InitializeScreen();
+	}
+	return Screen;
+}
+
+UInventoryScreenWidget* AFirstPersonCharacter::GetScreenWidget(EOpenScreen Screen) const
+{
+	switch (Screen)
+	{
+	case EOpenScreen::Inventory:     return InventoryScreen;
+	case EOpenScreen::CraftingTable: return CraftingTableScreen;
+	default:                         return nullptr;
+	}
 }
 
 void AFirstPersonCharacter::SpawnStartingSwordDrop()
@@ -209,6 +249,7 @@ void AFirstPersonCharacter::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
 	UpdateBlockLookAt();
+	TickOpenScreenSafety();
 
 	// Destruction logic (IsValid: blok je mogao nestati izvana, npr. leaf decay)
 	if (bIsAttacking && IsValid(CurrentlyLookedAtBlock))
@@ -312,6 +353,13 @@ void AFirstPersonCharacter::StopAttack()
 void AFirstPersonCharacter::PlaceBlock()
 {
 	if (!VoxelWorld || !IsValid(CurrentlyLookedAtBlock) || !InventoryComponent)
+	{
+		return;
+	}
+
+	// Interakcija s blokom ima prednost pred postavljanjem (Minecraft semantika);
+	// radi i praznom rukom jer dolazi prije provjera hotbar slota
+	if (TryInteractWithFocusedBlock())
 	{
 		return;
 	}
@@ -437,32 +485,173 @@ EBlockType AFirstPersonCharacter::GetSelectedBlockType() const
 
 void AFirstPersonCharacter::ToggleInventory()
 {
-	bIsInventoryOpen = !bIsInventoryOpen;
-
-	AFirstPersonPlayerController* PC = Cast<AFirstPersonPlayerController>(GetController());
-	if (PC)
+	// E otvara inventar, ili zatvara bilo koji trenutno otvoreni ekran
+	if (CurrentOpenScreen == EOpenScreen::None)
 	{
-		// Swap IMC-ove kroz PlayerController
-		PC->SetInventoryInputMode(bIsInventoryOpen);
+		OpenScreen(EOpenScreen::Inventory);
+	}
+	else
+	{
+		CloseCurrentScreen();
+	}
+}
 
-		if (bIsInventoryOpen)
+void AFirstPersonCharacter::OpenScreen(EOpenScreen Screen)
+{
+	if (Screen == EOpenScreen::None)
+	{
+		CloseCurrentScreen();
+		return;
+	}
+
+	if (CurrentOpenScreen != EOpenScreen::None)
+	{
+		CloseCurrentScreen();
+	}
+
+	CurrentOpenScreen = Screen;
+	bIsInventoryOpen = true;
+
+	// Aktivna velicina grida odreduje koje crafting slotove matcher i
+	// drag&drop smatraju vazecima (ekran stola ima 3x3 panel)
+	if (InventoryComponent)
+	{
+		InventoryComponent->SetActiveCraftingGridSize(Screen == EOpenScreen::CraftingTable ? 3 : 2);
+	}
+
+	if (UInventoryScreenWidget* Widget = GetScreenWidget(Screen))
+	{
+		Widget->RefreshAll();
+		Widget->SetVisibility(ESlateVisibility::Visible);
+	}
+
+	ApplyScreenInputMode(true);
+	OnInventoryToggled.Broadcast(true);
+}
+
+void AFirstPersonCharacter::CloseCurrentScreen()
+{
+	if (CurrentOpenScreen == EOpenScreen::None)
+	{
+		return;
+	}
+
+	const EOpenScreen ClosedScreen = CurrentOpenScreen;
+
+	if (InventoryComponent)
+	{
+		// Redoslijed je bitan: held item prvo (dok je njegov originalni slot
+		// jos aktivan), pa tek onda povrat/smanjenje crafting grida
+		InventoryComponent->ReturnHeldItem();
+
+		if (ClosedScreen == EOpenScreen::CraftingTable)
 		{
-			// Pokaži kursor i omogući UI interakciju
-			PC->SetShowMouseCursor(true);
-			FInputModeGameAndUI InputMode;
-			InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
-			InputMode.SetHideCursorDuringCapture(false);
-			PC->SetInputMode(InputMode);
+			// Interno vraca iteme iz 3x3 grida u inventar prije smanjenja
+			InventoryComponent->SetActiveCraftingGridSize(2);
 		}
 		else
 		{
-			// Sakrij kursor i vrati na game-only input
-			PC->SetShowMouseCursor(false);
-			PC->SetInputMode(FInputModeGameOnly());
+			// Minecraft semantika i za osobni 2x2: itemi iz grida natrag u inventar
+			InventoryComponent->ReturnCraftingInputToInventory();
 		}
 	}
 
-	OnInventoryToggled.Broadcast(bIsInventoryOpen);
+	if (UInventoryScreenWidget* Widget = GetScreenWidget(ClosedScreen))
+	{
+		Widget->SetVisibility(ESlateVisibility::Collapsed);
+	}
+
+	ApplyScreenInputMode(false);
+
+	CurrentOpenScreen = EOpenScreen::None;
+	bIsInventoryOpen = false;
+
+	OnInventoryToggled.Broadcast(false);
+}
+
+void AFirstPersonCharacter::ApplyScreenInputMode(bool bUIMode)
+{
+	AFirstPersonPlayerController* PC = Cast<AFirstPersonPlayerController>(GetController());
+	if (!PC)
+	{
+		return;
+	}
+
+	// Swap IMC-ove kroz PlayerController
+	PC->SetInventoryInputMode(bUIMode);
+
+	if (bUIMode)
+	{
+		// Pokaži kursor i omogući UI interakciju
+		PC->SetShowMouseCursor(true);
+		FInputModeGameAndUI InputMode;
+		InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+		InputMode.SetHideCursorDuringCapture(false);
+		PC->SetInputMode(InputMode);
+	}
+	else
+	{
+		// Sakrij kursor i vrati na game-only input
+		PC->SetShowMouseCursor(false);
+		PC->SetInputMode(FInputModeGameOnly());
+	}
+}
+
+bool AFirstPersonCharacter::TryInteractWithFocusedBlock()
+{
+	if (!IsValid(CurrentlyLookedAtBlock))
+	{
+		return false;
+	}
+
+	UBlockRegistry* Registry = UBlockRegistry::Get(this);
+	if (!Registry)
+	{
+		return false;
+	}
+
+	const FBlockDefinition* Def = Registry->GetBlockDefinition(CurrentlyLookedAtBlock->BlockType);
+	if (!Def)
+	{
+		return false;
+	}
+
+	switch (Def->Interaction)
+	{
+	case EBlockInteraction::CraftingTable:
+		OpenCraftingTablePos = CurrentlyLookedAtBlock->GridPosition;
+		OpenScreen(EOpenScreen::CraftingTable);
+		UE_LOG(LogMinecraftClone, Log, TEXT("Interact: CraftingTable na (%d,%d,%d)"),
+			OpenCraftingTablePos.X, OpenCraftingTablePos.Y, OpenCraftingTablePos.Z);
+		return true;
+
+	default:
+		return false;
+	}
+}
+
+void AFirstPersonCharacter::TickOpenScreenSafety()
+{
+	if (CurrentOpenScreen != EOpenScreen::CraftingTable || !VoxelWorld)
+	{
+		return;
+	}
+
+	// Stol unisten (npr. izvana) -> zatvori ekran
+	if (VoxelWorld->GetBlockTypeAt(OpenCraftingTablePos) != EBlockType::CraftingTable)
+	{
+		CloseCurrentScreen();
+		return;
+	}
+
+	// Igrac predaleko (knockback, pad) -> zatvori ekran
+	const FVector TableCenter = VoxelWorld->GridToWorld(
+		OpenCraftingTablePos.X, OpenCraftingTablePos.Y, OpenCraftingTablePos.Z)
+		+ FVector(VoxelWorld->BlockSize * 0.5f);
+	if (FVector::Dist(GetActorLocation(), TableCenter) > ScreenAutoCloseDistance)
+	{
+		CloseCurrentScreen();
+	}
 }
 
 // === MELEE COMBAT ===

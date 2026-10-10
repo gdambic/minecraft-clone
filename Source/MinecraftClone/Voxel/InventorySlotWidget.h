@@ -64,7 +64,7 @@ public:
 
 	// ==================== Slot identifikacija ====================
 
-	/** Index slota u inventaru (-1 = cursor slot, 0-26 = main, 27-35 = hotbar, 36-39 = crafting input, 40 = crafting output) */
+	/** Index slota u inventaru (-1 = cursor slot, 0-26 = main, 27-35 = hotbar, 36-44 = crafting input, 45 = crafting output) */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Inventory Slot|Data")
 	int32 SlotIndex = -1;
 

@@ -117,6 +117,7 @@
     "dropChance": 1.0,
     "timeToDestroy": 2.5,
     "displayName": "Crafting Table",
-    "material": "/Game/Blocks/Materials/MI_CraftingTable.MI_CraftingTable"
+    "material": "/Game/Blocks/Materials/MI_CraftingTable.MI_CraftingTable",
+    "interaction": "CraftingTable"
   }
 ]

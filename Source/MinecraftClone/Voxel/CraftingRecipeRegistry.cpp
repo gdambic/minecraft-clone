@@ -306,24 +306,15 @@ bool UCraftingRecipeRegistry::TryMatchPatternAtOffset(
 
 EItemType UCraftingRecipeRegistry::StringToItemType(const FString& ItemName) const
 {
-	// Mapiranje stringova na EItemType
-	static TMap<FString, EItemType> ItemTypeMap = {
-		{TEXT("None"), EItemType::None},
-		{TEXT("Dirt"), EItemType::Dirt},
-		{TEXT("Stone"), EItemType::Stone},
-		{TEXT("Grass"), EItemType::Grass},
-		{TEXT("OakLog"), EItemType::OakLog},
-		{TEXT("BirchLog"), EItemType::BirchLog},
-		{TEXT("OakSapling"), EItemType::OakSapling},
-		{TEXT("BirchSapling"), EItemType::BirchSapling},
-		{TEXT("OakPlanks"), EItemType::OakPlanks},
-		{TEXT("BirchPlanks"), EItemType::BirchPlanks},
-		{TEXT("Stick"), EItemType::Stick},
-		{TEXT("CraftingTable"), EItemType::CraftingTable}
-	};
-
-	const EItemType* Found = ItemTypeMap.Find(ItemName);
-	return Found ? *Found : EItemType::None;
+	// Refleksijski lookup - pokriva sve EItemType vrijednosti bez rucnog mapiranja
+	const UEnum* Enum = StaticEnum<EItemType>();
+	const int64 Value = Enum->GetValueByNameString(ItemName);
+	if (Value == INDEX_NONE)
+	{
+		UE_LOG(LogTemp, Error, TEXT("StringToItemType: nepoznat item '%s' u receptu"), *ItemName);
+		return EItemType::None;
+	}
+	return static_cast<EItemType>(Value);
 }
 
 UCraftingRecipeRegistry* UCraftingRecipeRegistry::Get(const UObject* WorldContextObject)

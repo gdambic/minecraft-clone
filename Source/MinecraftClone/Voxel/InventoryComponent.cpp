@@ -4,6 +4,7 @@
 #include "BlockRegistry.h"
 #include "CraftingRecipe.h"
 #include "CraftingRecipeRegistry.h"
+#include "ItemDrop.h"
 #include "Kismet/GameplayStatics.h"
 
 UInventoryComponent::UInventoryComponent()
@@ -13,7 +14,7 @@ UInventoryComponent::UInventoryComponent()
 	// Inicijaliziraj 36 praznih slotova
 	Slots.SetNum(TotalSlots);
 
-	// Inicijaliziraj 5 crafting slotova (4 input + 1 output)
+	// Inicijaliziraj 10 crafting slotova (9 input za max 3x3 + 1 output)
 	CraftingSlots.SetNum(TotalCraftingSlots);
 }
 
@@ -120,7 +121,7 @@ bool UInventoryComponent::SwapSlots(int32 SlotA, int32 SlotB)
 
 bool UInventoryComponent::IsValidSlotIndex(int32 SlotIndex) const
 {
-	// Inventory slotovi (0-35) ili crafting slotovi (36-40)
+	// Inventory slotovi (0-35) ili crafting slotovi (36-45)
 	return (SlotIndex >= 0 && SlotIndex < TotalSlots) || IsCraftingSlotIndex(SlotIndex);
 }
 
@@ -131,7 +132,8 @@ bool UInventoryComponent::IsCraftingSlotIndex(int32 SlotIndex) const
 
 bool UInventoryComponent::IsCraftingInputSlot(int32 SlotIndex) const
 {
-	return SlotIndex >= CraftingInputStartIndex && SlotIndex < CraftingInputStartIndex + CraftingInputSize;
+	// Samo aktivni dio grida (2x2 -> 36..39, 3x3 -> 36..44)
+	return SlotIndex >= CraftingInputStartIndex && SlotIndex < CraftingInputStartIndex + GetActiveCraftingInputCount();
 }
 
 bool UInventoryComponent::IsCraftingOutputSlot(int32 SlotIndex) const
@@ -165,8 +167,8 @@ void UInventoryComponent::UpdateCraftingOutput()
 	// Dohvati crafting grid kao array
 	TArray<EItemType> CraftingGrid = GetCraftingGridAsArray();
 
-	// Pronađi odgovarajući recept
-	CurrentRecipe = RecipeRegistry->FindMatchingRecipe(CraftingGrid, 2);  // 2x2 grid
+	// Pronađi odgovarajući recept za aktivnu velicinu grida
+	CurrentRecipe = RecipeRegistry->FindMatchingRecipe(CraftingGrid, ActiveCraftingGridSize);
 
 	if (CurrentRecipe)
 	{
@@ -191,10 +193,11 @@ void UInventoryComponent::UpdateCraftingOutput()
 
 TArray<EItemType> UInventoryComponent::GetCraftingGridAsArray() const
 {
+	const int32 InputCount = GetActiveCraftingInputCount();
 	TArray<EItemType> Grid;
-	Grid.SetNum(CraftingInputSize);
+	Grid.SetNum(InputCount);
 
-	for (int32 i = 0; i < CraftingInputSize; ++i)
+	for (int32 i = 0; i < InputCount; ++i)
 	{
 		Grid[i] = CraftingSlots[i].ItemType;
 	}
@@ -218,7 +221,7 @@ void UInventoryComponent::ConsumeRecipeIngredients()
 			ToConsume.FindOrAdd(Ingredient.ItemType) += Ingredient.Count;
 		}
 
-		for (int32 i = 0; i < CraftingInputSize && ToConsume.Num() > 0; ++i)
+		for (int32 i = 0; i < GetActiveCraftingInputCount() && ToConsume.Num() > 0; ++i)
 		{
 			if (CraftingSlots[i].IsEmpty())
 			{
@@ -249,7 +252,7 @@ void UInventoryComponent::ConsumeRecipeIngredients()
 	else // Shaped
 	{
 		// Za shaped recepte, potroši po 1 iz svakog slota koji ima item
-		for (int32 i = 0; i < CraftingInputSize; ++i)
+		for (int32 i = 0; i < GetActiveCraftingInputCount(); ++i)
 		{
 			if (!CraftingSlots[i].IsEmpty())
 			{
@@ -318,11 +321,11 @@ void UInventoryComponent::BroadcastSlotChanged(int32 SlotIndex)
 	}
 }
 
-void UInventoryComponent::AddItem(EItemType Type, int32 Amount)
+int32 UInventoryComponent::AddItem(EItemType Type, int32 Amount)
 {
 	if (Type == EItemType::None || Amount <= 0)
 	{
-		return;
+		return 0;
 	}
 
 	int32 RemainingAmount = Amount;
@@ -367,6 +370,59 @@ void UInventoryComponent::AddItem(EItemType Type, int32 Amount)
 		RemainingAmount = 0;
 		BroadcastSlotChanged(EmptySlot);
 	}
+
+	return RemainingAmount;
+}
+
+void UInventoryComponent::SetActiveCraftingGridSize(int32 NewSize)
+{
+	NewSize = FMath::Clamp(NewSize, 2, MaxCraftingGridSize);
+	if (NewSize == ActiveCraftingGridSize)
+	{
+		return;
+	}
+
+	// Grid je kompaktan po aktivnoj sirini pa se sadrzaj ne moze premapirati -
+	// prije promjene velicine sve iteme vrati u inventar
+	ReturnCraftingInputToInventory();
+
+	ActiveCraftingGridSize = NewSize;
+	UpdateCraftingOutput();
+
+	UE_LOG(LogTemp, Log, TEXT("SetActiveCraftingGridSize: %d"), NewSize);
+}
+
+void UInventoryComponent::ReturnCraftingInputToInventory()
+{
+	for (int32 i = 0; i < MaxCraftingInputSize; ++i)
+	{
+		if (CraftingSlots[i].IsEmpty())
+		{
+			continue;
+		}
+
+		const int32 Leftover = AddItem(CraftingSlots[i].ItemType, CraftingSlots[i].Quantity);
+		if (Leftover > 0)
+		{
+			// Inventar pun - dropaj ostatak pred igraca
+			if (AActor* Owner = GetOwner())
+			{
+				AItemDrop::SpawnItemDrop(Owner, CraftingSlots[i].ItemType, Owner->GetActorLocation());
+			}
+		}
+
+		CraftingSlots[i].Clear();
+		BroadcastSlotChanged(CraftingInputStartIndex + i);
+	}
+
+	// Output je izveden iz inputa - ociscen input znaci prazan output
+	FInventorySlot& OutputSlot = CraftingSlots[CraftingSlotToArrayIndex(CraftingOutputIndex)];
+	if (!OutputSlot.IsEmpty())
+	{
+		OutputSlot.Clear();
+		BroadcastSlotChanged(CraftingOutputIndex);
+	}
+	CurrentRecipe = nullptr;
 }
 
 int32 UInventoryComponent::RemoveItem(EItemType Type, int32 Amount)
@@ -625,6 +681,14 @@ bool UInventoryComponent::PlaceItem(int32 SlotIndex)
 	if (IsCraftingOutputSlot(SlotIndex))
 	{
 		UE_LOG(LogTemp, Warning, TEXT("PlaceItem FAILED: Cannot place items in output slot"));
+		return false;
+	}
+
+	// Ne dozvoli stavljanje u neaktivni crafting slot (npr. 3x3 slotovi dok je aktivan 2x2)
+	if (IsCraftingSlotIndex(SlotIndex) && !IsCraftingInputSlot(SlotIndex))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("PlaceItem FAILED: Crafting slot %d nije aktivan (grid %dx%d)"),
+			SlotIndex, ActiveCraftingGridSize, ActiveCraftingGridSize);
 		return false;
 	}
 

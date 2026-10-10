@@ -15,6 +15,7 @@ class UInputAction;
 class ABlock;
 class AVoxelWorld;
 class UInventoryComponent;
+class UInventoryScreenWidget;
 class ACreatureBase;
 class UFirstPersonArmComponent;
 struct FInputActionValue;
@@ -22,8 +23,17 @@ struct FInputActionValue;
 /** Delegate koji se broadcasta kada se promijeni odabrani item */
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnSelectedItemChanged, int32, NewIndex, EItemType, NewItemType);
 
-/** Delegate koji se broadcasta kada se otvori/zatvori inventory */
+/** Delegate koji se broadcasta kada se otvori/zatvori neki inventory UI ekran */
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnInventoryToggled, bool, bIsOpen);
+
+/** Koji je UI ekran trenutno otvoren (tocno jedan moze biti otvoren) */
+UENUM(BlueprintType)
+enum class EOpenScreen : uint8
+{
+	None,
+	Inventory,
+	CraftingTable
+};
 
 /**
  * A basic first person character (without visible arms)
@@ -118,17 +128,40 @@ public:
 	UPROPERTY(BlueprintAssignable, Category = "Inventory")
 	FOnSelectedItemChanged OnSelectedItemChanged;
 
-	/** Event koji se poziva kada se otvori/zatvori inventory */
+	/** Event koji se poziva kada se otvori/zatvori inventory UI (bilo koji ekran) */
 	UPROPERTY(BlueprintAssignable, Category = "UI")
 	FOnInventoryToggled OnInventoryToggled;
 
-	/** Je li inventory trenutno otvoren */
+	/** Je li neki UI ekran trenutno otvoren (sinkroniziran s CurrentOpenScreen, radi BP kompatibilnosti) */
 	UPROPERTY(BlueprintReadWrite, Category = "UI")
 	bool bIsInventoryOpen = false;
 
-	/** Toggle inventory prikaz (E tipka) */
+	/**
+	 * Klase ekrana - postavljaju se u BP_FirstPersonCharacter Class Defaults.
+	 * Ekrane kreira i vidljivoscu upravlja C++ (OpenScreen/CloseCurrentScreen);
+	 * BP vise ne radi CreateWidget za njih.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category = "UI")
+	TSubclassOf<UInventoryScreenWidget> InventoryScreenClass;
+
+	UPROPERTY(EditDefaultsOnly, Category = "UI")
+	TSubclassOf<UInventoryScreenWidget> CraftingTableScreenClass;
+
+	/** Trenutno otvoreni UI ekran */
+	UPROPERTY(BlueprintReadOnly, Category = "UI")
+	EOpenScreen CurrentOpenScreen = EOpenScreen::None;
+
+	/** Toggle inventory prikaz (E tipka): otvara inventar ili zatvara trenutno otvoreni ekran */
 	UFUNCTION(BlueprintCallable, Category = "UI")
 	void ToggleInventory();
+
+	/** Otvori zadani ekran (zatvara prethodni ako je neki otvoren) */
+	UFUNCTION(BlueprintCallable, Category = "UI")
+	void OpenScreen(EOpenScreen Screen);
+
+	/** Zatvori trenutno otvoreni ekran (vraca held item i crafting grid u inventar) */
+	UFUNCTION(BlueprintCallable, Category = "UI")
+	void CloseCurrentScreen();
 
 	/** Vraća InventoryComponent */
 	UFUNCTION(BlueprintCallable, Category = "Inventory")
@@ -190,6 +223,35 @@ protected:
 
 	/** Place block on looked-at face */
 	void PlaceBlock();
+
+	/** Pokusaj interakciju s fokusiranim blokom (desni klik). Vraca true ako je interakcija potrosila input. */
+	bool TryInteractWithFocusedBlock();
+
+	/** Zajednicki kursor/IMC/input-mode setup za otvaranje/zatvaranje ekrana */
+	void ApplyScreenInputMode(bool bUIMode);
+
+	/** Auto-close provjere dok je blok ekran otvoren (stol unisten / igrac predaleko) */
+	void TickOpenScreenSafety();
+
+	/** Grid pozicija stola nad kojim je crafting table ekran otvoren */
+	FIntVector OpenCraftingTablePos = FIntVector::ZeroValue;
+
+	/** Instance ekrana (kreirane u BeginPlay iz *ScreenClass, skrivene dok se ne otvore) */
+	UPROPERTY()
+	TObjectPtr<UInventoryScreenWidget> InventoryScreen;
+
+	UPROPERTY()
+	TObjectPtr<UInventoryScreenWidget> CraftingTableScreen;
+
+	/** Kreiraj i pripremi instancu ekrana (CreateWidget + AddToViewport + Init) */
+	UInventoryScreenWidget* CreateScreen(TSubclassOf<UInventoryScreenWidget> ScreenClass);
+
+	/** Widget trenutno otvorenog ekrana (nullptr ako nista nije otvoreno) */
+	UInventoryScreenWidget* GetScreenWidget(EOpenScreen Screen) const;
+
+	/** Udaljenost od stola nakon koje se blok ekran automatski zatvara */
+	UPROPERTY(EditAnywhere, Category = "Block Interaction")
+	float ScreenAutoCloseDistance = 500.0f;
 
 	/** Scroll inventory selection */
 	void ScrollInventory(const FInputActionValue& Value);

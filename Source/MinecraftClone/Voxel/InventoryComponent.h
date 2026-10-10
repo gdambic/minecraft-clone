@@ -46,11 +46,17 @@ public:
 	static constexpr int32 TotalSlots = 36;
 	static constexpr int32 HotbarStartIndex = 27;
 
-	/** Konstante za crafting slotove */
-	static constexpr int32 CraftingInputSize = 4;
-	static constexpr int32 CraftingInputStartIndex = 36;  // 36, 37, 38, 39
-	static constexpr int32 CraftingOutputIndex = 40;
-	static constexpr int32 TotalCraftingSlots = 5;  // 4 input + 1 output
+	/**
+	 * Konstante za crafting slotove. Storage je uvijek max 3x3; aktivna
+	 * velicina grida (2 = osobni inventar, 3 = crafting table) je runtime
+	 * stanje (ActiveCraftingGridSize). Aktivni grid je kompaktan row-major
+	 * po aktivnoj sirini (2x2 koristi array indekse 0-3, 3x3 indekse 0-8).
+	 */
+	static constexpr int32 MaxCraftingGridSize = 3;
+	static constexpr int32 MaxCraftingInputSize = 9;      // 3x3
+	static constexpr int32 CraftingInputStartIndex = 36;  // 36..44
+	static constexpr int32 CraftingOutputIndex = 45;
+	static constexpr int32 TotalCraftingSlots = 10;       // 9 input + 1 output
 
 	UInventoryComponent();
 
@@ -84,17 +90,33 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Inventory")
 	bool IsCraftingSlotIndex(int32 SlotIndex) const;
 
-	/** Provjeri je li slot index crafting input slot (36-39) */
+	/** Provjeri je li slot index AKTIVAN crafting input slot (ovisi o aktivnoj velicini grida) */
 	UFUNCTION(BlueprintPure, Category = "Inventory")
 	bool IsCraftingInputSlot(int32 SlotIndex) const;
 
-	/** Provjeri je li slot index crafting output slot (40) */
+	/** Provjeri je li slot index crafting output slot (45) */
 	UFUNCTION(BlueprintPure, Category = "Inventory")
 	bool IsCraftingOutputSlot(int32 SlotIndex) const;
 
 	/** Ažuriraj crafting output na temelju inputa (kopira prvi pronađeni item) */
 	UFUNCTION(BlueprintCallable, Category = "Inventory|Crafting")
 	void UpdateCraftingOutput();
+
+	/** Trenutno aktivna velicina crafting grida (2 ili 3) */
+	UFUNCTION(BlueprintPure, Category = "Inventory|Crafting")
+	int32 GetActiveCraftingGridSize() const { return ActiveCraftingGridSize; }
+
+	/** Broj aktivnih crafting input slotova (4 ili 9) */
+	UFUNCTION(BlueprintPure, Category = "Inventory|Crafting")
+	int32 GetActiveCraftingInputCount() const { return ActiveCraftingGridSize * ActiveCraftingGridSize; }
+
+	/** Postavi aktivnu velicinu grida (2 ili 3). Prije promjene vraca iteme iz grida u inventar. */
+	UFUNCTION(BlueprintCallable, Category = "Inventory|Crafting")
+	void SetActiveCraftingGridSize(int32 NewSize);
+
+	/** Vrati sve iteme iz crafting inputa u inventar (visak dropa kod igraca) i ocisti output. */
+	UFUNCTION(BlueprintCallable, Category = "Inventory|Crafting")
+	void ReturnCraftingInputToInventory();
 
 	/** Pronađi prvi prazan slot (vraća -1 ako nema) */
 	UFUNCTION(BlueprintCallable, Category = "Inventory")
@@ -106,9 +128,9 @@ public:
 
 	// ==================== Utility Functions ====================
 
-	/** Dodaj item u inventar (pronalazi slobodan slot ili stacka) */
+	/** Dodaj item u inventar (pronalazi slobodan slot ili stacka). Vraca visak koji nije stao (0 = sve stalo). */
 	UFUNCTION(BlueprintCallable, Category = "Inventory")
-	void AddItem(EItemType Type, int32 Amount = 1);
+	int32 AddItem(EItemType Type, int32 Amount = 1);
 
 	/** Makni item iz inventara, vraća koliko je stvarno maknuto */
 	UFUNCTION(BlueprintCallable, Category = "Inventory")
@@ -176,11 +198,15 @@ private:
 	UPROPERTY(VisibleAnywhere, Category = "Inventory")
 	TArray<FInventorySlot> Slots;
 
-	/** Array od 5 crafting slotova: 0-3 = input (2x2), 4 = output */
+	/** Array od 10 crafting slotova: 0-8 = input (max 3x3), 9 = output */
 	UPROPERTY(VisibleAnywhere, Category = "Inventory")
 	TArray<FInventorySlot> CraftingSlots;
 
-	/** Pretvori crafting slot index (36-40) u array index (0-4) */
+	/** Aktivna velicina crafting grida: 2 (osobni inventar) ili 3 (crafting table) */
+	UPROPERTY(VisibleAnywhere, Category = "Inventory")
+	int32 ActiveCraftingGridSize = 2;
+
+	/** Pretvori crafting slot index (36-45) u array index (0-9) */
 	int32 CraftingSlotToArrayIndex(int32 SlotIndex) const;
 
 	/** Item koji igrač trenutno drži (za UI drag & drop) */

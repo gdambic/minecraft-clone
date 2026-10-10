@@ -7,6 +7,18 @@
 #include "BlockDefinition.generated.h"
 
 /**
+ * Vrsta interakcije bloka na desni klik (JSON polje "interaction").
+ * None = blok nije interaktivan, desni klik postavlja blok iz ruke.
+ */
+UENUM(BlueprintType)
+enum class EBlockInteraction : uint8
+{
+	None,
+	CraftingTable
+	// Buduci interaktivni blokovi: Furnace, Chest...
+};
+
+/**
  * Definicija bloka - sadrži sve podatke potrebne za spawn i ponašanje bloka.
  * Registrira se u UBlockRegistry.
  */
@@ -54,6 +66,10 @@ struct MINECRAFTCLONE_API FBlockDefinition
 	/** Boja li se blok po biomu i kojim tintom (JSON "biomeTint": "grass"/"foliage") */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Block")
 	EBiomeTintType BiomeTint = EBiomeTintType::None;
+
+	/** Interakcija na desni klik (None = blok nije interaktivan) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Block")
+	EBlockInteraction Interaction = EBlockInteraction::None;
 
 	/** Je li definicija validna */
 	bool IsValid() const { return BlockType != EBlockType::Air; }
