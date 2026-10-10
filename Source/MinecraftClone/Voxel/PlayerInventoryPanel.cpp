@@ -85,12 +85,12 @@ UInventorySlotWidget* UPlayerInventoryPanel::CreateSlotWidget(int32 SlotIndex)
 	if (SlotWidget)
 	{
 		SlotWidget->SlotIndex = SlotIndex;
-		SlotWidget->OnSlotClicked.AddDynamic(this, &UPlayerInventoryPanel::HandleSlotClicked);
+		SlotWidget->OnSlotInteracted.AddDynamic(this, &UPlayerInventoryPanel::HandleSlotInteracted);
 	}
 	return SlotWidget;
 }
 
-void UPlayerInventoryPanel::HandleSlotClicked(int32 SlotIndex)
+void UPlayerInventoryPanel::HandleSlotInteracted(int32 SlotIndex, EInventoryClickType ClickType)
 {
-	OnSlotClicked.Broadcast(SlotIndex);
+	OnSlotInteracted.Broadcast(SlotIndex, ClickType);
 }

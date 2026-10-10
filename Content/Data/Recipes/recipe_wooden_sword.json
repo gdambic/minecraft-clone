@@ -2,12 +2,12 @@
     "id": "wooden_sword",
     "type": "shaped",
     "pattern": [
-        "P",
-        "P",
+        "L",
+        "L",
         "S"
     ],
     "key": {
-        "P": { "item": "OakPlanks" },
+        "L": { "item": "OakPlanks" },
         "S": { "item": "Stick" }
     },
     "result": { "item": "WoodenSword", "count": 1 },

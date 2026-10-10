@@ -57,7 +57,7 @@
     "itemType": "Stick",
     "displayName": "Stick",
     "material": "/Game/Blocks/Materials/MI_OakLog.MI_OakLog",
-    "display": { "type": "none" }
+    "display": { "type": "sprite", "texture": "Stick" }
   },
   {
     "itemType": "CraftingTable",

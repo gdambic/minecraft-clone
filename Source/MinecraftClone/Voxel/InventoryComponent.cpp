@@ -374,6 +374,40 @@ int32 UInventoryComponent::AddItem(EItemType Type, int32 Amount)
 	return RemainingAmount;
 }
 
+int32 UInventoryComponent::AddItemInRange(EItemType Type, int32 Amount, int32 RangeStart, int32 RangeEndExclusive)
+{
+	if (Type == EItemType::None || Amount <= 0)
+	{
+		return 0;
+	}
+
+	// Merge u prvi slot istog tipa u rasponu (stack nije limitiran pa stane sve)
+	for (int32 i = RangeStart; i < RangeEndExclusive; ++i)
+	{
+		if (Slots[i].ItemType == Type && Slots[i].Quantity > 0)
+		{
+			Slots[i].Quantity += Amount;
+			BroadcastSlotChanged(i);
+			return 0;
+		}
+	}
+
+	// Inace prvi prazan slot u rasponu
+	for (int32 i = RangeStart; i < RangeEndExclusive; ++i)
+	{
+		if (Slots[i].IsEmpty())
+		{
+			Slots[i].ItemType = Type;
+			Slots[i].Quantity = Amount;
+			BroadcastSlotChanged(i);
+			return 0;
+		}
+	}
+
+	// Nista nije stalo - nista nije ni mutirano
+	return Amount;
+}
+
 void UInventoryComponent::SetActiveCraftingGridSize(int32 NewSize)
 {
 	NewSize = FMath::Clamp(NewSize, 2, MaxCraftingGridSize);
@@ -551,6 +585,17 @@ bool UInventoryComponent::CanItemBePlaced(EItemType ItemType)
 	return false;
 }
 
+int32 UInventoryComponent::GetMaxStackSize(EItemType ItemType) const
+{
+	if (UBlockRegistry* Registry = UBlockRegistry::Get(GetOwner()))
+	{
+		return Registry->GetItemDefinitionCopy(ItemType).MaxStackSize;
+	}
+
+	// Fallback ako registry nije dostupan
+	return 64;
+}
+
 FItemData UInventoryComponent::GetItemData(EItemType ItemType, UDataTable* ItemDataTable)
 {
 	if (!ItemDataTable)
@@ -703,7 +748,39 @@ bool UInventoryComponent::PlaceItem(int32 SlotIndex)
 		TargetSlot = &Slots[SlotIndex];
 	}
 
-	// Ako slot nije prazan, ne možemo spustiti (za sada - swap dolazi kasnije)
+	// Zauzeti slot ISTOG tipa: nadopuni do max stacka, ostatak ostaje u ruci
+	if (!TargetSlot->IsEmpty() && TargetSlot->ItemType == HeldItem.ItemType)
+	{
+		const int32 Space = GetMaxStackSize(HeldItem.ItemType) - TargetSlot->Quantity;
+		if (Space <= 0)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("PlaceItem FAILED: Slot %d is already full"), SlotIndex);
+			return false;
+		}
+
+		const int32 Move = FMath::Min(Space, HeldItem.Quantity);
+		TargetSlot->Quantity += Move;
+		BroadcastSlotChanged(SlotIndex);
+
+		HeldItem.Quantity -= Move;
+		if (HeldItem.Quantity <= 0)
+		{
+			HeldItem.Clear();
+			HeldItemSlotIndex = -1;
+		}
+
+		UE_LOG(LogTemp, Warning, TEXT("PlaceItem SUCCESS: Merged %d items into slot %d, %d left in hand"),
+			Move, SlotIndex, HeldItem.Quantity);
+
+		if (IsCraftingInputSlot(SlotIndex))
+		{
+			UpdateCraftingOutput();
+		}
+
+		return true;
+	}
+
+	// Zauzeti slot DRUGOG tipa: ne možemo spustiti (za sada - swap dolazi kasnije)
 	if (!TargetSlot->IsEmpty())
 	{
 		UE_LOG(LogTemp, Warning, TEXT("PlaceItem FAILED: Slot %d is not empty"), SlotIndex);
@@ -729,6 +806,214 @@ bool UInventoryComponent::PlaceItem(int32 SlotIndex)
 	return true;
 }
 
+bool UInventoryComponent::PickUpHalf(int32 SlotIndex)
+{
+	// Ako već držimo item, ne možemo uzeti drugi
+	if (!HeldItem.IsEmpty())
+	{
+		return false;
+	}
+
+	if (!IsValidSlotIndex(SlotIndex))
+	{
+		return false;
+	}
+
+	// Output slot drzi tocno jedan rezultat recepta - desni klik = craftaj
+	// jednom, identicno punom pickupu (trosi sastojke i osvjezava output)
+	if (IsCraftingOutputSlot(SlotIndex))
+	{
+		return PickUpItem(SlotIndex);
+	}
+
+	FInventorySlot* TargetSlot = nullptr;
+	if (IsCraftingSlotIndex(SlotIndex))
+	{
+		TargetSlot = &CraftingSlots[CraftingSlotToArrayIndex(SlotIndex)];
+	}
+	else
+	{
+		TargetSlot = &Slots[SlotIndex];
+	}
+
+	if (TargetSlot->IsEmpty())
+	{
+		return false;
+	}
+
+	// Uzmi vecu polovicu (ceil), ostatak ostaje u slotu
+	const int32 Take = (TargetSlot->Quantity + 1) / 2;
+	HeldItem.ItemType = TargetSlot->ItemType;
+	HeldItem.Quantity = Take;
+	HeldItemSlotIndex = SlotIndex;
+
+	TargetSlot->Quantity -= Take;
+	if (TargetSlot->Quantity <= 0)
+	{
+		TargetSlot->Clear();
+	}
+	BroadcastSlotChanged(SlotIndex);
+
+	if (IsCraftingInputSlot(SlotIndex))
+	{
+		UpdateCraftingOutput();
+	}
+
+	return true;
+}
+
+bool UInventoryComponent::PlaceOne(int32 SlotIndex)
+{
+	// Ako ne držimo ništa, nema što spustiti
+	if (HeldItem.IsEmpty())
+	{
+		return false;
+	}
+
+	if (!IsValidSlotIndex(SlotIndex))
+	{
+		return false;
+	}
+
+	// Ne dozvoli stavljanje itema u output slot
+	if (IsCraftingOutputSlot(SlotIndex))
+	{
+		return false;
+	}
+
+	// Ne dozvoli stavljanje u neaktivni crafting slot
+	if (IsCraftingSlotIndex(SlotIndex) && !IsCraftingInputSlot(SlotIndex))
+	{
+		return false;
+	}
+
+	FInventorySlot* TargetSlot = nullptr;
+	if (IsCraftingSlotIndex(SlotIndex))
+	{
+		TargetSlot = &CraftingSlots[CraftingSlotToArrayIndex(SlotIndex)];
+	}
+	else
+	{
+		TargetSlot = &Slots[SlotIndex];
+	}
+
+	if (TargetSlot->IsEmpty())
+	{
+		TargetSlot->ItemType = HeldItem.ItemType;
+		TargetSlot->Quantity = 1;
+	}
+	else if (TargetSlot->ItemType == HeldItem.ItemType)
+	{
+		// Postuj max stack, isto kao merge u PlaceItem
+		if (TargetSlot->Quantity >= GetMaxStackSize(HeldItem.ItemType))
+		{
+			return false;
+		}
+		TargetSlot->Quantity += 1;
+	}
+	else
+	{
+		// Drugi tip: no-op (swap ne postoji ni za lijevi klik - "swap dolazi kasnije")
+		return false;
+	}
+
+	BroadcastSlotChanged(SlotIndex);
+
+	HeldItem.Quantity -= 1;
+	if (HeldItem.Quantity <= 0)
+	{
+		HeldItem.Clear();
+		HeldItemSlotIndex = -1;
+	}
+
+	if (IsCraftingInputSlot(SlotIndex))
+	{
+		UpdateCraftingOutput();
+	}
+
+	return true;
+}
+
+bool UInventoryComponent::QuickMove(int32 SlotIndex)
+{
+	// Quick-move radi samo praznom rukom
+	if (IsHoldingItem())
+	{
+		return false;
+	}
+
+	if (!IsValidSlotIndex(SlotIndex))
+	{
+		return false;
+	}
+
+	// Output slot: craftaj jednom direktno u inventar
+	if (IsCraftingOutputSlot(SlotIndex))
+	{
+		FInventorySlot* OutputSlot = &CraftingSlots[CraftingSlotToArrayIndex(SlotIndex)];
+		if (OutputSlot->IsEmpty())
+		{
+			return false;
+		}
+
+		// AddItem je atomaran (merge uzima sve, inace prazan slot ili nista) -
+		// ako nista nije stalo, ne trosi sastojke
+		if (AddItem(OutputSlot->ItemType, OutputSlot->Quantity) > 0)
+		{
+			return false;
+		}
+
+		OutputSlot->Clear();
+		BroadcastSlotChanged(SlotIndex);
+
+		ConsumeRecipeIngredients();
+		UpdateCraftingOutput();
+		return true;
+	}
+
+	// Crafting input: vrati u inventar (hotbar-first, postojeca AddItem konvencija)
+	if (IsCraftingSlotIndex(SlotIndex))
+	{
+		FInventorySlot* SourceSlot = &CraftingSlots[CraftingSlotToArrayIndex(SlotIndex)];
+		if (SourceSlot->IsEmpty())
+		{
+			return false;
+		}
+
+		if (AddItem(SourceSlot->ItemType, SourceSlot->Quantity) > 0)
+		{
+			return false;
+		}
+
+		SourceSlot->Clear();
+		BroadcastSlotChanged(SlotIndex);
+
+		UpdateCraftingOutput();
+		return true;
+	}
+
+	// Main inventory <-> hotbar
+	FInventorySlot* SourceSlot = &Slots[SlotIndex];
+	if (SourceSlot->IsEmpty())
+	{
+		return false;
+	}
+
+	const bool bFromMain = SlotIndex < HotbarStartIndex;
+	const int32 RangeStart = bFromMain ? HotbarStartIndex : 0;
+	const int32 RangeEnd = bFromMain ? TotalSlots : HotbarStartIndex;
+
+	if (AddItemInRange(SourceSlot->ItemType, SourceSlot->Quantity, RangeStart, RangeEnd) > 0)
+	{
+		// Target raspon pun drugim tipovima - item ostaje gdje je
+		return false;
+	}
+
+	SourceSlot->Clear();
+	BroadcastSlotChanged(SlotIndex);
+	return true;
+}
+
 void UInventoryComponent::ReturnHeldItem()
 {
 	// Ako ne držimo ništa, nema što vratiti
@@ -751,8 +1036,14 @@ void UInventoryComponent::ReturnHeldItem()
 			OriginalSlot = &Slots[HeldItemSlotIndex];
 		}
 
-		// Ako je originalni slot sada zauzet, swap
-		if (!OriginalSlot->IsEmpty())
+		// Ako je originalni slot istog tipa (npr. nakon PickUpHalf), spoji natrag
+		if (!OriginalSlot->IsEmpty() && OriginalSlot->ItemType == HeldItem.ItemType)
+		{
+			OriginalSlot->Quantity += HeldItem.Quantity;
+			BroadcastSlotChanged(HeldItemSlotIndex);
+		}
+		// Ako je originalni slot sada zauzet drugim tipom, swap
+		else if (!OriginalSlot->IsEmpty())
 		{
 			FInventorySlot TempSlot = *OriginalSlot;
 			*OriginalSlot = HeldItem;

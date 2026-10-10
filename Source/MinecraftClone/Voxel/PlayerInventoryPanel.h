@@ -2,15 +2,15 @@
 
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
+#include "InventorySlotWidget.h"   // EInventoryClickType
 #include "PlayerInventoryPanel.generated.h"
 
 class UUniformGridPanel;
 class UHorizontalBox;
-class UInventorySlotWidget;
 class UInventoryComponent;
 
 /** Delegate kojim panel prosljeduje klik na slot ekranu koji ga sadrzi */
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnPanelSlotClicked, int32, SlotIndex);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnPanelSlotInteracted, int32, SlotIndex, EInventoryClickType, ClickType);
 
 /**
  * Donji dio svakog inventory ekrana: 27 main slotova + 9 hotbar slotova.
@@ -39,7 +39,7 @@ public:
 
 	/** Klik na bilo koji slot panela - ekran odlucuje sto s njim (pickup/place) */
 	UPROPERTY(BlueprintAssignable, Category = "Panel")
-	FOnPanelSlotClicked OnSlotClicked;
+	FOnPanelSlotInteracted OnSlotInteracted;
 
 	/** Kreira sve slot widgete (poziva ekran pri inicijalizaciji) */
 	void CreateSlots();
@@ -57,5 +57,5 @@ private:
 	UInventorySlotWidget* CreateSlotWidget(int32 SlotIndex);
 
 	UFUNCTION()
-	void HandleSlotClicked(int32 SlotIndex);
+	void HandleSlotInteracted(int32 SlotIndex, EInventoryClickType ClickType);
 };

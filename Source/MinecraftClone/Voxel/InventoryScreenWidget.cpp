@@ -60,13 +60,13 @@ void UInventoryScreenWidget::InitializeScreen()
 	if (CraftingPanel)
 	{
 		CraftingPanel->CreateSlots();
-		CraftingPanel->OnSlotClicked.AddUniqueDynamic(this, &UInventoryScreenWidget::HandleSlotClicked);
+		CraftingPanel->OnSlotInteracted.AddUniqueDynamic(this, &UInventoryScreenWidget::HandleSlotInteracted);
 	}
 
 	if (InventoryPanel)
 	{
 		InventoryPanel->CreateSlots();
-		InventoryPanel->OnSlotClicked.AddUniqueDynamic(this, &UInventoryScreenWidget::HandleSlotClicked);
+		InventoryPanel->OnSlotInteracted.AddUniqueDynamic(this, &UInventoryScreenWidget::HandleSlotInteracted);
 	}
 
 	CreateCursorSlot();
@@ -86,20 +86,41 @@ void UInventoryScreenWidget::RefreshAll()
 	UpdateCursorSlot();
 }
 
-void UInventoryScreenWidget::HandleSlotClicked(int32 SlotIndex)
+void UInventoryScreenWidget::HandleSlotInteracted(int32 SlotIndex, EInventoryClickType ClickType)
 {
 	if (!InventoryComp)
 	{
 		return;
 	}
 
-	if (InventoryComp->IsHoldingItem())
+	switch (ClickType)
 	{
-		InventoryComp->PlaceItem(SlotIndex);
-	}
-	else
-	{
-		InventoryComp->PickUpItem(SlotIndex);
+	case EInventoryClickType::ShiftLeft:
+		InventoryComp->QuickMove(SlotIndex);
+		break;
+
+	case EInventoryClickType::Right:
+		if (InventoryComp->IsHoldingItem())
+		{
+			InventoryComp->PlaceOne(SlotIndex);
+		}
+		else
+		{
+			InventoryComp->PickUpHalf(SlotIndex);
+		}
+		break;
+
+	case EInventoryClickType::Left:
+	default:
+		if (InventoryComp->IsHoldingItem())
+		{
+			InventoryComp->PlaceItem(SlotIndex);
+		}
+		else
+		{
+			InventoryComp->PickUpItem(SlotIndex);
+		}
+		break;
 	}
 
 	RefreshAll();

@@ -24,10 +24,19 @@ void UInventorySlotWidget::NativeConstruct()
 
 FReply UInventorySlotWidget::NativeOnMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent)
 {
-	// Ako nema buttona, koristi direktni mouse input
-	if (!ClickButton && InMouseEvent.GetEffectingButton() == EKeys::LeftMouseButton)
+	// Shift mijenja znacenje samo za lijevi klik; shift+desni = obicni desni
+	if (InMouseEvent.GetEffectingButton() == EKeys::LeftMouseButton)
 	{
-		OnSlotClicked.Broadcast(SlotIndex);
+		const EInventoryClickType ClickType = InMouseEvent.IsShiftDown()
+			? EInventoryClickType::ShiftLeft
+			: EInventoryClickType::Left;
+		OnSlotInteracted.Broadcast(SlotIndex, ClickType);
+		return FReply::Handled();
+	}
+
+	if (InMouseEvent.GetEffectingButton() == EKeys::RightMouseButton)
+	{
+		OnSlotInteracted.Broadcast(SlotIndex, EInventoryClickType::Right);
 		return FReply::Handled();
 	}
 
@@ -36,7 +45,7 @@ FReply UInventorySlotWidget::NativeOnMouseButtonDown(const FGeometry& InGeometry
 
 void UInventorySlotWidget::OnClickButtonClicked()
 {
-	OnSlotClicked.Broadcast(SlotIndex);
+	OnSlotInteracted.Broadcast(SlotIndex, EInventoryClickType::Left);
 }
 
 void UInventorySlotWidget::SetSelected(bool bSelected)

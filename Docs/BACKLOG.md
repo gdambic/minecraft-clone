@@ -40,6 +40,22 @@ igračev chunk), ali mu je VELIČINA i dalje autorska iz levele (~28 km).
 `TileSizeUU` override u configu može maknuti (vratiti na default 1000) —
 manji tileovi znače finiju granulaciju rebuilda pri kopanju.
 
+## 1b. MaxStackSize se nigdje ne enforca
+
+`FItemDefinition::MaxStackSize = 64` postoji (`BlockDefinition.h`, čita se iz
+`Items.json`), ali ga nijedan kod ne primjenjuje — `AddItem`, `AddItemInRange`,
+`PlaceOne` i ostali rastu slot neograničeno (jedan slot može držati 10.000
+dirta). Fix: `GetMaxStackSize(EItemType)` helper na `UInventoryComponent`
+(preko `UBlockRegistry`) + clamp na SVIM mjestima odjednom (AddItem,
+AddItemInRange, PlaceOne, QuickMove, ReturnHeldItem merge), ne parcijalno.
+
+## 1c. Lijevi klik na zauzeti slot ne radi swap
+
+`PlaceItem` odbija ne-prazan slot ("swap dolazi kasnije",
+`InventoryComponent.cpp`). Minecraft ponašanje: lijevi klik s itemom u ruci na
+zauzeti slot istog tipa = merge, drugog tipa = swap ruka↔slot. Kad se uvede,
+uskladiti i `PlaceOne` (desni klik na drugi tip danas je namjerno no-op).
+
 ## 2. BTTask_FindWanderLocation masovno failanje
 
 **Problem:** `BTTask_FindWanderLocation: Could not find valid wander

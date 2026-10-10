@@ -12,8 +12,20 @@ class UBorder;
 class UButton;
 class UTexture2D;
 
+/** Vrsta klika na slot (desna tipka i shift nose drugacije akcije) */
+UENUM(BlueprintType)
+enum class EInventoryClickType : uint8
+{
+	Left,
+	Right,
+	ShiftLeft
+};
+
 /** Delegate za klik na slot */
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnSlotClicked, int32, SlotIndex);
+
+/** Delegate za klik na slot s informacijom o vrsti klika */
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnSlotInteracted, int32, SlotIndex, EInventoryClickType, ClickType);
 
 /**
  * C++ bazna klasa za inventory slot widget.
@@ -70,9 +82,13 @@ public:
 
 	// ==================== Events ====================
 
-	/** Event koji se broadcasta kada se klikne na slot */
+	/** ZASTARJELO: ostaje deklarirano zbog BP kompatibilnosti (WBP_InventorySlot graf), C++ ga vise ne broadcasta */
 	UPROPERTY(BlueprintAssignable, BlueprintCallable, Category = "Inventory Slot|Events")
 	FOnSlotClicked OnSlotClicked;
+
+	/** Event koji se broadcasta kada se klikne na slot (lijevi/desni/shift+lijevi) */
+	UPROPERTY(BlueprintAssignable, Category = "Inventory Slot|Events")
+	FOnSlotInteracted OnSlotInteracted;
 
 	// ==================== Glavne funkcije ====================
 

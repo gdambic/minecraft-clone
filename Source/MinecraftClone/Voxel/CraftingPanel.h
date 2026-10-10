@@ -2,7 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
-#include "PlayerInventoryPanel.h"   // FOnPanelSlotClicked
+#include "PlayerInventoryPanel.h"   // FOnPanelSlotInteracted
 #include "CraftingPanel.generated.h"
 
 class UUniformGridPanel;
@@ -41,7 +41,7 @@ public:
 
 	/** Klik na bilo koji slot panela - ekran odlucuje sto s njim (pickup/place) */
 	UPROPERTY(BlueprintAssignable, Category = "Panel")
-	FOnPanelSlotClicked OnSlotClicked;
+	FOnPanelSlotInteracted OnSlotInteracted;
 
 	/** Kreira sve slot widgete (poziva ekran pri inicijalizaciji) */
 	void CreateSlots();
@@ -59,5 +59,5 @@ private:
 	UInventorySlotWidget* CreateSlotWidget(int32 SlotIndex);
 
 	UFUNCTION()
-	void HandleSlotClicked(int32 SlotIndex);
+	void HandleSlotInteracted(int32 SlotIndex, EInventoryClickType ClickType);
 };

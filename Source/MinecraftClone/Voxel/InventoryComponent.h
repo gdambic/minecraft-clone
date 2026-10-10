@@ -156,6 +156,10 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Inventory")
 	static bool CanItemBePlaced(EItemType ItemType);
 
+	/** Maksimalna velicina stacka za item (iz Items.json preko BlockRegistry-ja; fallback 64) */
+	UFUNCTION(BlueprintPure, Category = "Inventory")
+	int32 GetMaxStackSize(EItemType ItemType) const;
+
 	/** Dohvati podatke o itemu iz Data Table */
 	UFUNCTION(BlueprintCallable, Category = "Inventory")
 	static FItemData GetItemData(EItemType ItemType, UDataTable* ItemDataTable);
@@ -173,6 +177,18 @@ public:
 	/** Spusti item iz "ruke" u slot. Vraća true ako uspješno. */
 	UFUNCTION(BlueprintCallable, Category = "Inventory|HeldItem")
 	bool PlaceItem(int32 SlotIndex);
+
+	/** Uzmi POLOVICU stacka (ceil) u "ruku"; ostatak ostaje u slotu. Desni klik praznom rukom. */
+	UFUNCTION(BlueprintCallable, Category = "Inventory|HeldItem")
+	bool PickUpHalf(int32 SlotIndex);
+
+	/** Spusti JEDAN item iz "ruke" u slot (prazan ili istog tipa); ostatak ostaje u ruci. Desni klik punom rukom. */
+	UFUNCTION(BlueprintCallable, Category = "Inventory|HeldItem")
+	bool PlaceOne(int32 SlotIndex);
+
+	/** Quick-move (shift+klik): main<->hotbar; crafting input/output ide u inventar. */
+	UFUNCTION(BlueprintCallable, Category = "Inventory")
+	bool QuickMove(int32 SlotIndex);
 
 	/** Dohvati item koji je trenutno u "ruci" */
 	UFUNCTION(BlueprintPure, Category = "Inventory|HeldItem")
@@ -222,6 +238,12 @@ private:
 
 	/** Emitira OnSlotChanged delegate */
 	void BroadcastSlotChanged(int32 SlotIndex);
+
+	/**
+	 * Dodaj item samo u raspon slotova [RangeStart, RangeEndExclusive):
+	 * merge u prvi slot istog tipa, inace prvi prazan. Vraca visak (0 ili Amount - atomarno).
+	 */
+	int32 AddItemInRange(EItemType Type, int32 Amount, int32 RangeStart, int32 RangeEndExclusive);
 
 	/** Dohvati crafting grid kao array EItemType vrijednosti */
 	TArray<EItemType> GetCraftingGridAsArray() const;

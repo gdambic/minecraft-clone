@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
+#include "InventorySlotWidget.h"   // EInventoryClickType
 #include "InventoryScreenWidget.generated.h"
 
 class UCanvasPanel;
@@ -70,9 +71,9 @@ protected:
 	virtual void NativeConstruct() override;
 	virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
 
-	/** Pickup/place na klik slota, pa refresh - zajednicko svim ekranima */
+	/** Pickup/place/quick-move na klik slota, pa refresh - zajednicko svim ekranima */
 	UFUNCTION()
-	void HandleSlotClicked(int32 SlotIndex);
+	void HandleSlotInteracted(int32 SlotIndex, EInventoryClickType ClickType);
 
 	/** Ažurira prikaz cursor slota (vidljivost + sadrzaj held itema) */
 	void UpdateCursorSlot();

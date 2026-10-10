@@ -78,12 +78,12 @@ UInventorySlotWidget* UCraftingPanel::CreateSlotWidget(int32 SlotIndex)
 	if (SlotWidget)
 	{
 		SlotWidget->SlotIndex = SlotIndex;
-		SlotWidget->OnSlotClicked.AddDynamic(this, &UCraftingPanel::HandleSlotClicked);
+		SlotWidget->OnSlotInteracted.AddDynamic(this, &UCraftingPanel::HandleSlotInteracted);
 	}
 	return SlotWidget;
 }
 
-void UCraftingPanel::HandleSlotClicked(int32 SlotIndex)
+void UCraftingPanel::HandleSlotInteracted(int32 SlotIndex, EInventoryClickType ClickType)
 {
-	OnSlotClicked.Broadcast(SlotIndex);
+	OnSlotInteracted.Broadcast(SlotIndex, ClickType);
 }
