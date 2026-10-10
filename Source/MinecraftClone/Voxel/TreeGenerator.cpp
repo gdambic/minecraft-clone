@@ -104,59 +104,6 @@ void FTreeGenerator::GenerateCanopy(AVoxelWorld* World, FIntVector CenterPositio
 	}
 }
 
-void FTreeGenerator::GenerateRandomTrees(AVoxelWorld* World, int32 TreeCount, int32 WorldSizeX, int32 WorldSizeY)
-{
-	if (!World)
-	{
-		UE_LOG(LogTemp, Error, TEXT("TreeGenerator: World is null!"));
-		return;
-	}
-
-	UE_LOG(LogTemp, Log, TEXT("TreeGenerator: Starting generation. TreeCount=%d, WorldSize=%dx%d"),
-		TreeCount, WorldSizeX, WorldSizeY);
-
-	int32 PlacedTrees = 0;
-	int32 FailedAttempts = 0;
-	int32 NoGroundCount = 0;
-	int32 CantPlaceCount = 0;
-	int32 MaxAttempts = TreeCount * 10;
-
-	for (int32 Attempt = 0; Attempt < MaxAttempts && PlacedTrees < TreeCount; Attempt++)
-	{
-		// Random pozicija (drži se dalje od rubova)
-		int32 RandX = FMath::RandRange(3, WorldSizeX - 4);
-		int32 RandY = FMath::RandRange(3, WorldSizeY - 4);
-		const int32 GroundZ = World->GetTerrainHeightAt(RandX, RandY);
-		FIntVector TreeBase(RandX, RandY, GroundZ + 1);
-
-		// Provjeri ima li tla ispod (u podacima - radi i za zakopane blokove)
-		if (World->GetBlockTypeAt(FIntVector(RandX, RandY, GroundZ)) == EBlockType::Air)
-		{
-			NoGroundCount++;
-			continue;
-		}
-
-		// Random tip stabla (50/50)
-		ETreeType TreeType = FMath::RandBool() ? ETreeType::Oak : ETreeType::Birch;
-
-		// Pokušaj generirati stablo
-		int32 TrunkHeight = (TreeType == ETreeType::Oak) ? FMath::RandRange(4, 6) : FMath::RandRange(5, 7);
-		if (CanPlaceTreeAt(World, TreeBase, TrunkHeight))
-		{
-			GenerateTree(World, TreeBase, TreeType);
-			PlacedTrees++;
-			UE_LOG(LogTemp, Log, TEXT("TreeGenerator: Placed tree at (%d, %d, %d)"), RandX, RandY, GroundZ + 1);
-		}
-		else
-		{
-			CantPlaceCount++;
-		}
-	}
-
-	UE_LOG(LogTemp, Log, TEXT("TreeGenerator: Finished. Placed=%d, NoGround=%d, CantPlace=%d"),
-		PlacedTrees, NoGroundCount, CantPlaceCount);
-}
-
 bool FTreeGenerator::CanPlaceTreeAt(AVoxelWorld* World, FIntVector Position, int32 TrunkHeight)
 {
 	if (!World)

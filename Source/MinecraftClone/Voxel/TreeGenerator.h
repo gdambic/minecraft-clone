@@ -19,11 +19,12 @@ enum class ETreeType : uint8
 class MINECRAFTCLONE_API FTreeGenerator
 {
 public:
-	/** Generiraj stablo na zadanoj grid poziciji */
+	/**
+	 * Generiraj stablo na zadanoj grid poziciji - runtime put (npr. rast
+	 * saplinga). Stabla u generaciji svijeta idu kroz FChunkGenerator
+	 * (deterministicki po chunku, s prelijevanjem preko granica).
+	 */
 	static void GenerateTree(AVoxelWorld* World, FIntVector BasePosition, ETreeType TreeType);
-
-	/** Generiraj više stabala na random pozicijama (visina tla po stupcu ide preko World->GetTerrainHeightAt) */
-	static void GenerateRandomTrees(AVoxelWorld* World, int32 TreeCount, int32 WorldSizeX, int32 WorldSizeY);
 
 private:
 	/** Generiraj hrast (4-6 blokova deblo) */

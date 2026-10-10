@@ -1,16 +1,19 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Containers/Queue.h"
 #include "GameFramework/Actor.h"
 #include "BlockType.h"
 #include "BlockDefinition.h"
-#include "TreeGenerator.h"
+#include "VoxelChunk.h"
+#include "ChunkGenerator.h"
 #include "VoxelWorld.generated.h"
 
 class ABlock;
 class AZombie;
 class AMobBase;
 class UInstancedStaticMeshComponent;
+class ANavMeshBoundsVolume;
 struct FHitResult;
 
 /** Jedan unos u spawn listi pasivnih mobova: koja klasa i koliko komada. */
@@ -29,33 +32,11 @@ struct FMobSpawnEntry
 };
 
 /**
- * Instance set za jedan tip bloka: ISM komponenta + dvosmjerni bookkeeping
- * grid pozicija <-> indeks instance. Komponenta radi RemoveAtSwap pri uklanjanju
- * (SetRemoveSwap) pa se indeksi mijenjaju - NIKAD ih ne cuvati izvan ove
- * strukture, uvijek ici kroz GridToInstance u trenutku koristenja.
+ * Voxel svijet organiziran u chunkove (Docs/PLAN_Chunks.md).
+ * Teren = ISM instance po chunku; ABlock actor postoji samo za fokusirani blok.
+ * Izvor istine je Blocks array pojedinog chunka - jedini javni put do njega
+ * je GetBlockTypeAt / SetBlockType / PlaceBlockAt / DestroyBlockAt.
  */
-USTRUCT()
-struct FBlockInstanceSet
-{
-	GENERATED_BODY()
-
-	UPROPERTY()
-	UInstancedStaticMeshComponent* Component = nullptr;
-
-	/**
-	 * Biome tint tipa bloka (iz registry definicije, cache da se ne trazi po
-	 * instanci). != None znaci da komponenta ima 3 custom data floata (RGB)
-	 * koje Add putevi moraju popuniti tintom bioma pozicije.
-	 */
-	EBiomeTintType BiomeTint = EBiomeTintType::None;
-
-	/** Grid pozicija -> indeks instance u komponenti */
-	TMap<FIntVector, int32> GridToInstance;
-
-	/** Indeks instance -> grid pozicija (paralelan s nizom instanci u komponenti) */
-	TArray<FIntVector> InstanceToGrid;
-};
-
 UCLASS()
 class MINECRAFTCLONE_API AVoxelWorld : public AActor
 {
@@ -64,23 +45,38 @@ class MINECRAFTCLONE_API AVoxelWorld : public AActor
 public:
 	AVoxelWorld();
 
-	/** Z nivo površine (Grass). Ispod je Stone. */
+	/** Z nivo oko kojeg se njise povrsina (Grass). Ispod je Stone. Default 0:
+	 *  teren -HeightAmplitude..+HeightAmplitude, kopanje do WorldMinZ (-24). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "World")
 	int32 SurfaceLevel;
-
-	// Dimenzije svijeta
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "World")
-	int32 WorldSizeX;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "World")
-	int32 WorldSizeY;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "World")
-	int32 WorldSizeZ;
 
 	// Veličina jednog bloka u UE units
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "World")
 	float BlockSize;
+
+	// === STREAMING (plan 3.2/3.3) ===
+
+	/** Radijus (u chunkovima, Chebyshev) unutar kojeg chunkovi imaju vizuale. Podaci idu prsten sire, unload dva. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "World|Streaming", meta = (ClampMin = "2", ClampMax = "16"))
+	int32 VisualRadius;
+
+	/** Vremenski budzet (ms) izgradnje vizuala chunkova po streaming ticku - sprjecava stucanje pri hodanju. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "World|Streaming", meta = (ClampMin = "1.0"))
+	float ChunkApplyBudgetMs;
+
+	/** Period streaming provjere u sekundama. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "World|Streaming", meta = (ClampMin = "0.05"))
+	float StreamingIntervalSeconds;
+
+	/** Radijus sinkrone generacije oko spawna - vizuali gotovi PRIJE prvog framea (igrac ne smije propasti). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "World|Streaming", meta = (ClampMin = "1", ClampMax = "4"))
+	int32 BootstrapRadius;
+
+	/** Chunkovi s podacima - prsten sire od vizuala da je exposure na rubu vizualnog ringa uvijek tocan. */
+	int32 GetDataRadius() const { return VisualRadius + 1; }
+
+	/** Histereza: unload tek dva prstena iza vizuala da setnja po granici chunka ne treperi load/unload. */
+	int32 GetUnloadRadius() const { return VisualRadius + 2; }
 
 	// === TERRAIN (noise) ===
 
@@ -109,9 +105,13 @@ public:
 
 	// === TREES ===
 
-	/** Broj stabala za generirati */
+	/** Broj pokusaja sadnje stabla po chunku (deterministicki iz chunk seeda). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "World|Trees")
-	int32 TreeCount;
+	int32 TreeAttemptsPerChunk;
+
+	/** Vjerojatnost (0-1) da pojedini pokusaj zaista posadi stablo. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "World|Trees", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	float TreeChancePerChunk;
 
 	// === ENEMIES ===
 
@@ -165,7 +165,7 @@ public:
 	 */
 	void DestroyBlockAt(FIntVector Pos);
 
-	/** Tip bloka iz mape podataka; Air ako nema unosa. Radi i za zakopane blokove bez actora. */
+	/** Tip bloka iz podataka chunka; Air ako chunk nije ucitan ili je celija prazna. */
 	UFUNCTION(BlueprintPure, Category = "World")
 	EBlockType GetBlockTypeAt(FIntVector GridPosition) const;
 
@@ -193,7 +193,7 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "World")
 	FVector GridToWorld(int32 X, int32 Y, int32 Z);
 
-	/** Postavi novi blok na zadanu grid poziciju (kao instancu). Vraca false ako je pozicija zauzeta. */
+	/** Postavi novi blok na zadanu grid poziciju (kao instancu). Vraca false ako je pozicija zauzeta ili chunk nije ucitan. */
 	UFUNCTION(BlueprintCallable, Category = "World")
 	bool PlaceBlockAt(FIntVector GridPosition, EBlockType Type);
 
@@ -205,18 +205,124 @@ protected:
 	virtual void BeginPlay() override;
 
 private:
-	/** Izvor istine: tip bloka po poziciji. NEMA unosa = Air. */
-	TMap<FIntVector, EBlockType> BlockData;
+	// === CHUNKS (izvor istine) ===
+
+	/**
+	 * Svi ucitani chunkovi. TUniquePtr da FVoxelChunk* ostane stabilan kroz
+	 * rehash mape (bookkeeping i petlje smiju drzati pointer unutar framea).
+	 * ISM komponente unutar chunka od GC-a cuva OwnedComponents actora.
+	 */
+	TMap<FIntPoint, TUniquePtr<FVoxelChunk>> Chunks;
+
+	/**
+	 * "Samo memorija" perzistencija (plan 3.1): unload IZMIJENJENOG chunka
+	 * spremi njegov Blocks array ovdje; reload ga vraca umjesto regeneracije.
+	 * Neizmijenjeni chunkovi se bacaju u cijelosti (formula ih vraca identicne).
+	 */
+	TMap<FIntPoint, TArray<EBlockType>> RetainedModifiedChunks;
+
+	/** Hit komponenta -> (chunk, tip) za ResolveHitToGrid. Unosi zive tocno koliko i komponente. */
+	TMap<const UPrimitiveComponent*, TPair<FIntPoint, EBlockType>> ComponentToChunk;
 
 	/** Promovirani actori - u praksi najvise 1 (blok koji igrac gleda). */
 	UPROPERTY()
 	TMap<FIntVector, ABlock*> Blocks;
 
-	/** ISM komponente i bookkeeping po tipu bloka - vizual svih neizlozenih blokova. */
-	UPROPERTY()
-	TMap<EBlockType, FBlockInstanceSet> InstanceSets;
+	FVoxelChunk* FindChunk(const FIntPoint& Coord);
+	const FVoxelChunk* FindChunk(const FIntPoint& Coord) const;
 
+	/** Upisi tip u podatke chunka (bez vizuala). Vraca false ako chunk nije ucitan ili je Z izvan svijeta. */
+	bool SetBlockData(const FIntVector& GridPos, EBlockType Type, bool bMarkModified);
+
+	// === GENERACIJA ===
+
+	/** Bootstrap: sinkrono generira spawn podrucje, spawna mobove i pokrece streaming timer. */
 	void GenerateWorld();
+
+	/** Snapshot parametara generacije - kopira se po vrijednosti u (buduci) worker task. */
+	FChunkGenParams MakeChunkGenParams() const;
+
+	/** Izgradi ISM instance za sve izlozene blokove chunka (podaci moraju postojati, i susjedni). */
+	void ApplyChunkVisuals(FVoxelChunk& Chunk);
+
+	// === STREAMING ===
+
+	/** Periodicka petlja (plan 3.3): unload dalekih, despawn mobova, load podataka, apply vizuala s budzetom. */
+	void UpdateStreaming();
+
+	/** SINKRONO ucitaj podatke chunka: vrati sacuvane izmijenjene (pobjeduju!) ili generiraj iz seeda. Za bootstrap i retained. */
+	FVoxelChunk& LoadChunkData(const FIntPoint& Coord);
+
+	/** ASYNC: kreiraj chunk u stanju Generating i posalji generaciju na worker thread (plan 3.4). */
+	void RequestChunkDataAsync(const FIntPoint& Coord);
+
+	/** Preuzmi gotove worker rezultate (pocetak streaming ticka). Zastarjeli (unload pa novi zahtjev) se bacaju. */
+	void DrainCompletedChunkData();
+
+	/** Imaju li sva 4 bocna susjeda podatke - uvjet za vizuale (exposure na rubu treba prave podatke, ne Air). */
+	bool AreNeighborsDataReady(const FIntPoint& Coord) const;
+
+	/** Unisti vizuale i promovirane actore chunka; izmijenjene podatke spremi u RetainedModifiedChunks. */
+	void UnloadChunk(const FIntPoint& Coord);
+
+	/** Despawnaj mobove ciji je chunk izvan unload radijusa (MC-ov 128-blok princip preko chunkova). */
+	void DespawnFarCreatures(const FIntPoint& PlayerChunk);
+
+	/** Pomakni NavMeshBoundsVolume na igracev chunk - navmesh prostor putuje s igracem (plan 3.7). */
+	void UpdateNavBoundsVolume(const FIntPoint& PlayerChunk);
+
+	/** World pozicija -> grid koordinata bloka (floor). */
+	FIntVector WorldToGrid(const FVector& WorldPos) const;
+
+	/** Snapshot parametara generacije - gradi se JEDNOM nakon seed offseta (GenerateWorld). */
+	FChunkGenParams CachedGenParams;
+
+	FTimerHandle StreamingTimerHandle;
+
+	/** Centar spawn podrucja (chunk igracevog starta) - oko njega se spawnaju mobovi. */
+	FIntPoint SpawnCenterChunk = FIntPoint::ZeroValue;
+
+	/** Zadnji igracev chunk - nav volumen i dio posla rade samo na promjeni. */
+	FIntPoint LastPlayerChunk = FIntPoint::ZeroValue;
+	bool bHasLastPlayerChunk = false;
+
+	/** Nav volumen iz levele (nadje se jednom, mobility se digne na Movable da ga streaming smije micati). */
+	TWeakObjectPtr<ANavMeshBoundsVolume> NavBoundsVolume;
+	bool bNavBoundsVolumeSearched = false;
+
+	// === SOAK VALIDACIJA (aktivna samo uz -VoxelSoakTest na command lineu) ===
+
+	/** Automatski test: teleportira igraca u hopovima pa natrag i provjerava determinizam regeneracije. */
+	bool bSoakTest = false;
+	FTimerHandle SoakTimerHandle;
+	FTimerHandle SoakSnapTimerHandle;
+	int32 SoakHop = 0;
+
+	/** Pozicija bloka iskopanog na pocetku soak testa - na kraju mora ostati Air (retained put). */
+	FIntVector SoakDigPos = FIntVector::ZeroValue;
+
+	/** CRC podataka svakog generiranog nemodificiranog chunka - reload MORA dati isti (determinizam). */
+	TMap<FIntPoint, uint32> SoakChunkHashes;
+	int32 SoakRehashOk = 0;
+	int32 SoakRehashFail = 0;
+
+	/** Usporedi/zapamti CRC podataka chunka (no-op bez soak moda ili za izmijenjene chunkove). */
+	void SoakVerifyChunkData(const FVoxelChunk& Chunk);
+
+	/** Jedan hop: teleport igraca (3 istocno pa povratak), na kraju [SOAK] sazetak. */
+	void SoakTestHop();
+
+	/** 1 s nakon hopa: vrati igraca na povrsinu (teren se async generirao ispod njega dok je padao). */
+	void SoakSnapPlayerToGround();
+
+	/**
+	 * Red gotovih worker rezultata (MPSC: workeri pisu, game thread cita).
+	 * TSharedPtr da task u letu ostane valjan i ako actor umre prije njega.
+	 */
+	TSharedPtr<TQueue<FCompletedChunkData, EQueueMode::Mpsc>, ESPMode::ThreadSafe> CompletedChunkQueue;
+
+	/** Brojac async zahtjeva - za odbacivanje zastarjelih rezultata. */
+	uint64 NextGenRequestId = 1;
 
 	/**
 	 * Recastov default AgentMaxStepHeight (35uu) je manji od BlockSize (100uu),
@@ -241,22 +347,27 @@ private:
 	 */
 	FLinearColor GetBiomeTintAt(FIntVector Pos, EBiomeTintType TintType) const;
 
-	/** Po jedan blok svake registrirane definicije uz rub Y=0, na visini terena+1. */
-	void PlaceShowcaseBlocks(class UBlockRegistry* Registry);
-
-	/** Ima li blok barem jednu izloženu (vidljivu) stranu. Dno svijeta (Z<0) se tretira kao čvrsto. */
+	/** Ima li blok barem jednu izloženu (vidljivu) stranu. Dno svijeta (Z<WorldMinZ) se tretira kao čvrsto. */
 	bool IsBlockExposed(FIntVector Pos) const;
 
-	/** Dodaj instancu za poziciju (no-op ako vec postoji ili tip nema ISM). */
+	// === ISM INSTANCE (vizuali) ===
+
+	/**
+	 * Dohvati/kreiraj instance set tipa u chunku (lazy: ISM komponenta nastaje
+	 * kad chunk prvi put dobije blok tog tipa). nullptr ako tip nema mesh.
+	 */
+	FChunkInstanceSet* EnsureChunkInstanceSet(FVoxelChunk& Chunk, EBlockType Type);
+
+	/** Dodaj instancu za poziciju (no-op ako vec postoji, chunk nije ucitan ili tip nema mesh). */
 	void AddBlockInstance(FIntVector Pos, EBlockType Type);
 
-	/** Batch dodavanje instanci jednog tipa (jedan AddInstances poziv) - za generaciju. */
-	void AddBlockInstancesBatch(EBlockType Type, const TArray<FIntVector>& Positions);
+	/** Batch dodavanje instanci jednog tipa u jedan chunk (jedan AddInstances poziv) - za generaciju. */
+	void AddChunkInstancesBatch(FVoxelChunk& Chunk, EBlockType Type, const TArray<FIntVector>& Positions);
 
 	/** Ukloni instancu za poziciju (no-op ako ne postoji). Odrzava swap bookkeeping. */
 	void RemoveBlockInstance(FIntVector Pos);
 
-	/** Osiguraj vizual (instancu) za blok iz BlockData ako nema ni instance ni actora. */
+	/** Osiguraj vizual (instancu) za blok iz podataka ako nema ni instance ni actora. */
 	void EnsureBlockVisual(FIntVector Pos);
 
 	// === [PERF] DIJAGNOSTIKA ===
@@ -266,8 +377,8 @@ private:
 	 * Poziva se PRIJE generiranja terena da izolira fiksni trošak (sinkroni load
 	 * Megascans materijala) od skalirajućeg (spawn po bloku).
 	 * Rezultate sprema u BlockAssetCache pa se TryLoad NE poziva po bloku.
-	 * Uz to kreira ISM komponentu po tipu bloka (InstanceSets).
-	 * Idempotentno (bAssetCacheReady). Vidi Docs/PLAN_InstancedStaticMesh.md.
+	 * Idempotentno (bAssetCacheReady). ISM komponente se NE kreiraju ovdje
+	 * nego lazy po chunku (EnsureChunkInstanceSet).
 	 */
 	void BuildBlockAssetCache();
 
@@ -280,9 +391,6 @@ private:
 	/** Cache razrijesenih asseta po tipu bloka - puni ga BuildBlockAssetCache() */
 	UPROPERTY()
 	TMap<EBlockType, FBlockAssets> BlockAssetCache;
-
-	// === TREES ===
-	void GenerateTrees();
 
 	// === ENEMIES ===
 	void SpawnEnemies();

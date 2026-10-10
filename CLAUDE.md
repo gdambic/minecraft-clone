@@ -56,6 +56,12 @@ se samo sporo inicijalizira.
 Ograničenja: nema vizualne provjere (highlight, animacije) ni input
 interakcije — to ostaje ručni test u editoru.
 
+Dodatni argument `-VoxelSoakTest` pokreće automatski streaming test: teleport
+hopovi (uklj. negativne koordinate) + CRC provjera determinizma regeneracije +
+retained-modified provjera. Markeri u logu: `[SOAK]` (`GOTOVO: rehash OK=N,
+FAIL=0` i `RETAINED OK` = prolaz). Za ručni test streaminga u editoru:
+konzolna komanda `voxel.tp <gridX> <gridY>`.
+
 ## Architecture
 
 ### Coordinate System
@@ -66,7 +72,9 @@ interakcije — to ostaje ručni test u editoru.
 
 | Class | Purpose |
 |-------|---------|
-| `AVoxelWorld` | World manager, grid storage (`TMap<FIntVector, ABlock*>`), generation |
+| `AVoxelWorld` | World manager: chunk streaming (beskonačan svijet), per-chunk ISM vizuali, async generacija |
+| `FVoxelChunk` / `VoxelGrid` | Chunk 16×16×48 (flat array, Air=0) + koordinatni helperi (`VoxelChunk.h`) |
+| `FChunkGenerator` | Čista, thread-safe generacija podataka chunka (teren+stabla+showcase, `ChunkGenerator.h`) |
 | `ABlock` | Individual voxel actor with mesh, destruction system, drop spawning |
 | `AItemDrop` | Physics-enabled dropped items with auto-pickup |
 | `UInventoryComponent` | Slot-based player inventory (36 slots: 27 main + 9 hotbar) |
@@ -116,7 +124,11 @@ Configured in `MinecraftClone.Build.cs`:
 ## Key APIs
 
 ```cpp
-// VoxelWorld (teren = ISM instance; ABlock actor postoji samo za fokusirani blok)
+// VoxelWorld (beskonačan svijet: chunkovi 16×16×48 streamaju se oko igrača,
+// generacija na worker threadu; teren = ISM instance PO CHUNKU; ABlock actor
+// postoji samo za fokusirani blok; izmjene prežive unload u RAM-u, ne restart.
+// Streaming properties: VisualRadius (6), ChunkApplyBudgetMs, BootstrapRadius.
+// Vidi Docs/PLAN_Chunks.md.)
 EBlockType GetBlockTypeAt(FIntVector GridPosition);   // tip na poziciji (izvor istine)
 ABlock* GetBlock(int32 X, int32 Y, int32 Z);          // SAMO promovirani (fokusirani) blok
 void SetBlockType(int32 X, int32 Y, int32 Z, EBlockType Type);
@@ -149,6 +161,7 @@ Detailed docs in Croatian available in `Docs/`:
 - `PLAN_Performance.md` - Rendering/performance analysis
 - `PLAN_MeleeCombat.md` - Melee combat system
 - `PLAN_Biomes.md` - Biomi i biome tint za Grass/lišće (Biomes.json + PerInstanceCustomData)
+- `PLAN_Chunks.md` - Chunk sustav i beskonačan svijet (streaming oko igrača, async generacija)
 - `PLAN_FirstPersonHand.md` - First-person hand/viewmodel system
 - `PLAN_HoldingDisplay.md` - Prikaz odabranog itema u ruci (sprite, implementirano)
 - `PLAN_ItemExtrusion.md` - 3D ekstrudirani item mesh iz 16x16 teksture (Minecraft stil, implementirano)

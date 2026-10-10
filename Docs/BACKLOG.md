@@ -2,6 +2,22 @@
 
 Popis poznatih dugova i poboljšanja koja nisu hitna, ali ih treba odraditi.
 
+## 0. Per-chunk mob spawn (beskonačan svijet)
+
+**Problem:** Mobovi se spawnaju samo jednom, oko igračevog starta
+(PLAN_Chunks.md 3.6). Odlaskom izvan unload radijusa se despawnaju — istraženi
+svijet je zato trajno prazan.
+
+**Posao:** spawn pravila po chunku pri prvom učitavanju (deterministički iz
+chunk seeda, salt različit od stabala), cap po području, respawn ciklus.
+Vidi Minecraftov model: spawn unutar 128 blokova od igrača.
+
+## 0b. ItemDrop nije vezan uz chunkove
+
+Ako se chunk unloada ispod ItemDropa (igrač pobjegne odmah nakon kopanja),
+drop propada kroz svijet dok ga KillZ ne počisti. Kozmetički problem —
+po potrebi vezati dropove uz chunk (despawn pri unloadu, kao mobovi).
+
 ## 1. NavMeshBoundsVolume u leveli je divovski
 
 **Problem:** NavMeshBoundsVolume u `Lvl_ThirdPerson` je višestruko veći od
@@ -14,15 +30,15 @@ svijeta ostaju bez navmesha (log: `Navmesh bounds are too large!`).
 pa cijeli svijet stane u limit. Vidi
 [PLAN_InstancedStaticMesh.md](PLAN_InstancedStaticMesh.md), sekcija 5.2.
 
-**Pravi fix (editor):** U leveli smanjiti NavMeshBoundsVolume na veličinu
-svijeta + margina (za 100×100 svijet: ~12.000 × 12.000 × ~1.500 UU, centriran
-na teren — BP_VoxelWorld je na ~(-460, -1110), teren ide do ~(9540, 8890),
-površina na Z≈400). Nakon toga se `TileSizeUU` override u configu može maknuti
-(vratiti na default 1000) — manji tileovi znače finiju granulaciju rebuilda
-pri kopanju/postavljanju blokova.
+**Novo stanje (chunk streaming, 2026-09-27):** volumen sada PRATI igrača
+(`AVoxelWorld::UpdateNavBoundsVolume` ga svaki prelazak chunka centrira na
+igračev chunk), ali mu je VELIČINA i dalje autorska iz levele (~28 km).
 
-**Napomena:** ako svijet naraste (npr. 300×300 = 30.000 UU), volumen treba
-pratiti veličinu svijeta, a tile size po potrebi opet povećati.
+**Pravi fix (editor):** smanjiti volumen na streaming područje: stranica
+~`2 * UnloadRadius * 16 * 100` UU (uz default VisualRadius=6 → unload 8 →
+~25.600 UU), visina ~5.000 UU (svijet je visok 4.800). Nakon toga se
+`TileSizeUU` override u configu može maknuti (vratiti na default 1000) —
+manji tileovi znače finiju granulaciju rebuilda pri kopanju.
 
 ## 2. BTTask_FindWanderLocation masovno failanje
 

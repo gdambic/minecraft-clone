@@ -1,4 +1,5 @@
 #include "TerrainGenerator.h"
+#include "VoxelChunk.h"
 
 int32 FTerrainGenerator::GetColumnHeight(int32 X, int32 Y, float NoiseOffsetX, float NoiseOffsetY,
 	float NoiseScale, int32 Octaves, int32 SurfaceLevel, int32 HeightAmplitude)
@@ -25,6 +26,7 @@ int32 FTerrainGenerator::GetColumnHeight(int32 X, int32 Y, float NoiseOffsetX, f
 	const float Normalized = MaxAmplitude > 0.f ? Total / MaxAmplitude : 0.f;
 	const int32 Height = SurfaceLevel + FMath::RoundToInt(Normalized * HeightAmplitude);
 
-	// Donja granica da teren nikad ne ide ispod Z=1 (Z=0 mora ostati cvrsto dno)
-	return FMath::Max(Height, 1);
+	// Donja granica da povrsina nikad ne padne na samo dno svijeta
+	// (WorldMinZ mora ostati cvrst sloj ispod najdubljeg terena)
+	return FMath::Max(Height, VoxelGrid::WorldMinZ + 1);
 }
