@@ -120,6 +120,15 @@ void UBlockRegistry::LoadBlocksFromJson()
 				Index, *StaticEnum<EBlockType>()->GetNameStringByValue((int64)Def.BlockType));
 		}
 
+		// JsonObjectToUStruct trazi polje imena "bRequiresTool" (authored name
+		// bool propertyja); JSON koristi citljiviji "requiresTool" pa ga
+		// ucitavamo rucno.
+		bool bRequiresTool = false;
+		if ((*EntryObject)->TryGetBoolField(TEXT("requiresTool"), bRequiresTool))
+		{
+			Def.bRequiresTool = bRequiresTool;
+		}
+
 		if (Def.Mesh.IsNull())
 		{
 			Def.Mesh = FSoftObjectPath(GDefaultBlockMeshPath);

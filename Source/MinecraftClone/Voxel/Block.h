@@ -5,6 +5,7 @@
 #include "BlockType.h"
 #include "ItemType.h"
 #include "BlockDefinition.h"
+#include "ToolData.h"
 #include "Block.generated.h"
 
 class AItemDrop;
@@ -18,6 +19,13 @@ class MINECRAFTCLONE_API ABlock : public AActor
 public:
 	/** Veličina bloka u UE jedinicama */
 	static constexpr float BlockSize = 100.0f;
+
+	/**
+	 * Koliko dulje traje kopanje bloka koji zahtijeva alat kad igrač nema
+	 * pravi alat. Minecraft bazno vrijeme je hardness × 1.5 s pravim alatom
+	 * i hardness × 5 bez njega - odnos tih faktora.
+	 */
+	static constexpr float WrongToolTimePenalty = 5.0f / 1.5f;
 
 	ABlock();
 
@@ -50,9 +58,17 @@ public:
 
 	// === DESTRUCTION ===
 
-	/** Vrijeme potrebno za uništenje bloka (sekunde) - postavlja se u BP_Block */
+	/** Vrijeme potrebno za uništenje bloka golom rukom (sekunde) - iz registryja */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Block|Destruction")
 	float TimeToDestroy;
+
+	/** Klasa alata koja ubrzava kopanje (None = nijedan alat ne pomaže) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Block|Destruction")
+	EToolClass ToolClass;
+
+	/** Zahtijeva li blok pravi alat da bi ostavio drop */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Block|Destruction")
+	bool bRequiresTool;
 
 	// === DROP ===
 
@@ -75,9 +91,13 @@ public:
 	void InitializeFromRegistry(EBlockType Type, const FBlockDefinition& BlockDefinition,
 		UStaticMesh* Mesh, UMaterialInterface* Material, UMaterialInterface* InHighlightMaterial);
 
-	/** Dodaj progress uništavanju, vraća true ako je blok uništen */
+	/**
+	 * Dodaj progress uništavanju, vraća true ako je blok uništen.
+	 * HeldItem je item u ruci kopača - pravi alat ubrzava kopanje, a na
+	 * bloku s bRequiresTool njegov nedostatak usporava i gasi drop.
+	 */
 	UFUNCTION(BlueprintCallable, Category = "Block")
-	bool AddDestroyProgress(float DeltaTime);
+	bool AddDestroyProgress(float DeltaTime, EItemType HeldItem = EItemType::None);
 
 	/** Resetiraj progress uništavanja na 0 */
 	UFUNCTION(BlueprintCallable, Category = "Block")

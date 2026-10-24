@@ -185,6 +185,9 @@ protected:
 	/** Je li igrač trenutno drži attack tipku */
 	bool bIsAttacking = false;
 
+	/** Item kojim se kopalo u prošlom ticku - promjena resetira destroy progres */
+	EItemType MiningItem = EItemType::None;
+
 	// === MELEE COMBAT ===
 
 	/** Range for melee attacks (3 blocks = 300 UU) */
@@ -270,7 +273,7 @@ protected:
 	 * VoxelWorld::BeginPlay pa u characterovom BeginPlay još ne postoji,
 	 * a drop treba tlo na koje će pasti.
 	 */
-	void SpawnStartingSwordDrop();
+	void SpawnStartingItemDrops();
 
 protected:
 	/** Called from Input Actions for movement input */

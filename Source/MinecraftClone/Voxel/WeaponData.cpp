@@ -18,6 +18,8 @@ const TMap<EItemType, FWeaponData>& UWeaponDataLibrary::GetWeaponRegistry()
 		Registry.Add(EItemType::StoneSword,   FWeaponData(5.0f, 1.6f, 1.2f, true));
 		Registry.Add(EItemType::IronSword,    FWeaponData(6.0f, 1.6f, 1.2f, true));
 		Registry.Add(EItemType::DiamondSword, FWeaponData(7.0f, 1.6f, 1.2f, true));
+
+		Registry.Add(EItemType::WoodenAxe, FWeaponData(7.0f, 0.8f, 1.2f, true));
 	}
 
 	return Registry;

@@ -28,6 +28,8 @@ ABlock::ABlock()
 
 	// Default destruction time
 	TimeToDestroy = 1.5f;
+	ToolClass = EToolClass::None;
+	bRequiresTool = false;
 
 	// Default drop
 	DropItemType = EItemType::None;
@@ -88,14 +90,23 @@ void ABlock::UpdateVisibility()
 	}
 }
 
-bool ABlock::AddDestroyProgress(float DeltaTime)
+bool ABlock::AddDestroyProgress(float DeltaTime, EItemType HeldItem)
 {
 	if (TimeToDestroy <= 0.0f)
 	{
 		return false;
 	}
 
-	DestroyProgress += DeltaTime / TimeToDestroy;
+	// Minecraft model: pravi alat kopa brze za svoj mining speed, a blok koji
+	// alat zahtijeva bez njega traje dulje i ne ostavlja drop (canHarvest).
+	const bool bCorrectTool = UToolDataLibrary::IsCorrectTool(HeldItem, ToolClass);
+	const bool bCanHarvest = bCorrectTool || !bRequiresTool;
+	const float MiningSpeed = bCorrectTool
+		? UToolDataLibrary::GetToolData(HeldItem).MiningSpeed
+		: 1.0f;
+	const float EffectiveTime = TimeToDestroy * (bCanHarvest ? 1.0f : WrongToolTimePenalty);
+
+	DestroyProgress += (DeltaTime * MiningSpeed) / EffectiveTime;
 
 	// Dohvati trenutni integrity
 	int32 CurrentIntegrity = GetIntegrityPercent();
@@ -109,8 +120,9 @@ bool ABlock::AddDestroyProgress(float DeltaTime)
 	// Provjeri je li uništen
 	if (DestroyProgress >= 1.0f)
 	{
-		// Spawnaj drop prije uklanjanja (ako prođe šansu)
-		if (DropItemType != EItemType::None && FMath::FRand() < DropChance)
+		// Spawnaj drop prije uklanjanja (ako prođe šansu i ako je blok
+		// kopan alatom koji ga može požnjeti)
+		if (bCanHarvest && DropItemType != EItemType::None && FMath::FRand() < DropChance)
 		{
 			// Centriraj drop u središte bloka (origin je na kutu)
 			const float HalfBlock = BlockSize / 2.0f;
@@ -168,6 +180,8 @@ void ABlock::InitializeFromRegistry(EBlockType Type, const FBlockDefinition& Blo
 
 	// Postavi gameplay vrijednosti
 	TimeToDestroy = BlockDefinition.TimeToDestroy;
+	ToolClass = BlockDefinition.ToolClass;
+	bRequiresTool = BlockDefinition.bRequiresTool;
 	DropItemType = BlockDefinition.DropItemType;
 	DropChance = BlockDefinition.DropChance;
 

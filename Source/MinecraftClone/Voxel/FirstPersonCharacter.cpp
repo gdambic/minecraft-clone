@@ -183,7 +183,7 @@ void AFirstPersonCharacter::BeginPlay()
 	// doci NAKON characterovog BeginPlay - trace u ovom trenutku nema sto pogoditi.
 	FTimerHandle SwordDropTimer;
 	GetWorldTimerManager().SetTimer(SwordDropTimer, this,
-		&AFirstPersonCharacter::SpawnStartingSwordDrop, 0.2f, false);
+		&AFirstPersonCharacter::SpawnStartingItemDrops, 0.2f, false);
 
 	// Initialize first person arm with current held item
 	if (FirstPersonArmComponent && InventoryComponent)
@@ -232,7 +232,7 @@ UInventoryScreenWidget* AFirstPersonCharacter::GetScreenWidget(EOpenScreen Scree
 	}
 }
 
-void AFirstPersonCharacter::SpawnStartingSwordDrop()
+void AFirstPersonCharacter::SpawnStartingItemDrops()
 {
 	// 2 bloka desno od igraca - 1 blok (100 UU) bi bio unutar auto-pickup
 	// radiusa (150 UU) pa bi se mac pokupio odmah pri spawnu. Drop sam
@@ -243,6 +243,8 @@ void AFirstPersonCharacter::SpawnStartingSwordDrop()
 		*GetActorLocation().ToCompactString(), *SpawnLocation.ToCompactString());
 
 	AItemDrop::SpawnItemDrop(this, EItemType::WoodenSword, SpawnLocation);
+	AItemDrop::SpawnItemDrop(this, EItemType::WoodenAxe, GetActorLocation() + GetActorRightVector() * 300.0f);
+	AItemDrop::SpawnItemDrop(this, EItemType::WoodenPickaxe, GetActorLocation() + GetActorRightVector() * 400.0f);
 }
 
 void AFirstPersonCharacter::Tick(float DeltaTime)
@@ -254,8 +256,16 @@ void AFirstPersonCharacter::Tick(float DeltaTime)
 	// Destruction logic (IsValid: blok je mogao nestati izvana, npr. leaf decay)
 	if (bIsAttacking && IsValid(CurrentlyLookedAtBlock))
 	{
-		bool bDestroyed = CurrentlyLookedAtBlock->AddDestroyProgress(DeltaTime);
-		if (bDestroyed)
+		// Brzina kopanja ovisi o itemu u ruci; promjena alata tijekom
+		// kopanja resetira progres (isto kao u Minecraftu).
+		const EItemType HeldItem = GetSelectedItemType();
+		if (HeldItem != MiningItem)
+		{
+			MiningItem = HeldItem;
+			CurrentlyLookedAtBlock->ResetDestroyProgress();
+		}
+
+		if (CurrentlyLookedAtBlock->AddDestroyProgress(DeltaTime, HeldItem))
 		{
 			CurrentlyLookedAtBlock = nullptr;
 		}

@@ -7,6 +7,6 @@ BLOK:
 EXTRUDANI ITEM (Mač, Stick, ...)
 1. Dodaš u Enum EItemType, rebuild.
 2. Dodaš T_Item_Stick.png u Content/Items/Textures/
-3. Tools -> Generate Items Sprites
+3. Tools -> pa OBA alata (jedan za blok, drugi za item)
 4. U Content/Data/Items.json promijeni Stick zapis sa "display": { "type": "none" } na:
 "display": { "type": "sprite", "texture": "Stick" }

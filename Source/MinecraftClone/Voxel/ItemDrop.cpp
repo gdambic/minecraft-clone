@@ -103,13 +103,28 @@ void AItemDrop::Tick(float DeltaTime)
 		ObjectQueryParams.AddObjectTypesToQuery(ECC_WorldStatic);
 		ObjectQueryParams.AddObjectTypesToQuery(ECC_WorldDynamic);
 
-		bool bHit = GetWorld()->LineTraceSingleByObjectType(
-			HitResult,
+		// Pickup sfere drugih dropova su WorldDynamic pa ih ovaj trace vraca kao
+		// pogodak - drop blizi od PickupRadius zaustavio bi pad u zraku. Zato
+		// trazimo prvi pogodak koji nije drugi item drop.
+		TArray<FHitResult> Hits;
+		GetWorld()->LineTraceMultiByObjectType(
+			Hits,
 			CurrentLocation,
 			CurrentLocation - FVector(0.0f, 0.0f, FallDistance + 20.0f), // Trace dalje od pada
 			ObjectQueryParams,
 			QueryParams
 		);
+
+		bool bHit = false;
+		for (const FHitResult& Candidate : Hits)
+		{
+			if (!Candidate.GetActor() || !Candidate.GetActor()->IsA<AItemDrop>())
+			{
+				HitResult = Candidate;
+				bHit = true;
+				break;
+			}
+		}
 
 		if (bHit)
 		{

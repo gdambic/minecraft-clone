@@ -28,5 +28,9 @@ enum class EItemType : uint8
 	IronSword,     // Željezni mač
 	DiamondSword,  // Dijamantni mač
 
+	WoodenAxe,
+
+	WoodenPickaxe,
+
 	Porkchop       // Svinjetina (od svinje)
 };

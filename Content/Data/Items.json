@@ -76,6 +76,16 @@
     "display": { "type": "sprite", "texture": "WoodenSword" }
   },
   {
+    "itemType": "WoodenAxe",
+    "displayName": "Wooden Axe",
+    "display": { "type": "sprite", "texture": "WoodenAxe" }
+  },
+  {
+    "itemType": "WoodenPickaxe",
+    "displayName": "Wooden Pickaxe",
+    "display": { "type": "sprite", "texture": "WoodenPickaxe" }
+  },
+  {
     "itemType": "StoneSword",
     "displayName": "Stone Sword",
     "display": { "type": "none" }

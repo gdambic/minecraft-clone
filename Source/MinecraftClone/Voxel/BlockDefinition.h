@@ -4,6 +4,7 @@
 #include "BlockType.h"
 #include "ItemType.h"
 #include "BiomeDefinition.h"
+#include "ToolData.h"
 #include "BlockDefinition.generated.h"
 
 /**
@@ -43,9 +44,24 @@ struct MINECRAFTCLONE_API FBlockDefinition
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Block", meta = (ClampMin = "0.0", ClampMax = "1.0"))
 	float DropChance = 1.0f;
 
-	/** Vrijeme potrebno za uništenje bloka (sekunde) */
+	/** Vrijeme potrebno za uništenje bloka golom rukom (sekunde) */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Block")
 	float TimeToDestroy = 1.5f;
+
+	/**
+	 * Klasa alata koja ubrzava kopanje ovog bloka (JSON "toolClass":
+	 * "axe"/"pickaxe"/"shovel"). None = nijedan alat ne pomaže.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Block")
+	EToolClass ToolClass = EToolClass::None;
+
+	/**
+	 * Zahtijeva li blok pravi alat za drop (Minecraft "canHarvest", JSON
+	 * "requiresTool"). Bez njega kopanje traje 5/1.5 puta dulje i blok se
+	 * razbije bez dropa.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Block")
+	bool bRequiresTool = false;
 
 	/** Ime bloka za prikaz */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Block")
