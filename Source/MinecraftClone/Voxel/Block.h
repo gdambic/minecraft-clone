@@ -44,18 +44,6 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Block")
 	void SetGridPosition(FIntVector NewPosition);
 
-	/** Highlight materijal - postavlja se u BP_Block */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Block|Highlight")
-	UMaterialInterface* HighlightMaterial;
-
-	/** Uključi/isključi highlight na bloku */
-	UFUNCTION(BlueprintCallable, Category = "Block")
-	void SetHighlighted(bool bHighlight);
-
-	/** Je li blok trenutno uključen */
-	UFUNCTION(BlueprintPure, Category = "Block")
-	bool IsHighlighted() const { return bIsHighlighted; }
-
 	// === DESTRUCTION ===
 
 	/** Vrijeme potrebno za uništenje bloka golom rukom (sekunde) - iz registryja */
@@ -89,7 +77,7 @@ public:
 	 */
 	UFUNCTION(BlueprintCallable, Category = "Block")
 	void InitializeFromRegistry(EBlockType Type, const FBlockDefinition& BlockDefinition,
-		UStaticMesh* Mesh, UMaterialInterface* Material, UMaterialInterface* InHighlightMaterial);
+		UStaticMesh* Mesh, UMaterialInterface* Material);
 
 	/**
 	 * Dodaj progress uništavanju, vraća true ako je blok uništen.
@@ -112,11 +100,6 @@ protected:
 
 private:
 	void UpdateVisibility();
-
-	UPROPERTY()
-	UMaterialInterface* OriginalMaterial;
-
-	bool bIsHighlighted = false;
 
 	// Destruction state
 	float DestroyProgress = 0.0f;

@@ -75,10 +75,6 @@ struct MINECRAFTCLONE_API FBlockDefinition
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Block")
 	FSoftObjectPath Material;
 
-	/** Putanja do highlight materijala (opcionalno) */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Block")
-	FSoftObjectPath HighlightMaterial;
-
 	/** Boja li se blok po biomu i kojim tintom (JSON "biomeTint": "grass"/"foliage") */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Block")
 	EBiomeTintType BiomeTint = EBiomeTintType::None;
@@ -108,9 +104,6 @@ struct MINECRAFTCLONE_API FBlockAssets
 
 	UPROPERTY()
 	UMaterialInterface* Material = nullptr;
-
-	UPROPERTY()
-	UMaterialInterface* HighlightMaterial = nullptr;
 };
 
 /**

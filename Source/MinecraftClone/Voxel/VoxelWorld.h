@@ -150,8 +150,16 @@ public:
 	bool ResolveHitToGrid(const FHitResult& Hit, FIntVector& OutPos, EBlockType& OutType) const;
 
 	/**
-	 * Ukloni instancu i spawnaj ABlock actor koji preuzima highlight, progress
-	 * kopanja i drop. Vraca postojeci actor ako je pozicija vec promovirana.
+	 * Kutija za obrub bloka, u lokalnom prostoru bloka (ishodiste = pozicija
+	 * koju vrati GridToWorld). Dolazi iz bounds samog mesha, pa obrub prati
+	 * vizual bez pretpostavke o pivotu; ako tip nema mesh, vraca punu kocku.
+	 * Kad dodu ploce i stepenice, oblik ide odavde.
+	 */
+	FBox GetBlockOutlineBox(EBlockType Type);
+
+	/**
+	 * Ukloni instancu i spawnaj ABlock actor koji preuzima progress kopanja i
+	 * drop. Vraca postojeci actor ako je pozicija vec promovirana.
 	 * Invarijanta: za jednu poziciju postoji ILI instanca ILI actor, nikad oboje.
 	 */
 	ABlock* PromoteToActor(FIntVector Pos);

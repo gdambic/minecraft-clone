@@ -39,14 +39,6 @@ ABlock::ABlock()
 void ABlock::BeginPlay()
 {
 	Super::BeginPlay();
-
-	// Spremi originalni materijal za highlight swap
-	if (MeshComponent)
-	{
-		OriginalMaterial = MeshComponent->GetMaterial(0);
-	}
-
-	//UpdateVisibility();
 }
 
 void ABlock::SetBlockType(EBlockType NewType)
@@ -58,25 +50,6 @@ void ABlock::SetBlockType(EBlockType NewType)
 void ABlock::SetGridPosition(FIntVector NewPosition)
 {
 	GridPosition = NewPosition;
-}
-
-void ABlock::SetHighlighted(bool bHighlight)
-{
-	if (!MeshComponent || bIsHighlighted == bHighlight)
-	{
-		return;
-	}
-
-	bIsHighlighted = bHighlight;
-
-	if (bHighlight && HighlightMaterial)
-	{
-		MeshComponent->SetMaterial(0, HighlightMaterial);
-	}
-	else if (!bHighlight && OriginalMaterial)
-	{
-		MeshComponent->SetMaterial(0, OriginalMaterial);
-	}
 }
 
 void ABlock::UpdateVisibility()
@@ -174,7 +147,7 @@ int32 ABlock::GetIntegrityPercent() const
 }
 
 void ABlock::InitializeFromRegistry(EBlockType Type, const FBlockDefinition& BlockDefinition,
-	UStaticMesh* Mesh, UMaterialInterface* Material, UMaterialInterface* InHighlightMaterial)
+	UStaticMesh* Mesh, UMaterialInterface* Material)
 {
 	BlockType = Type;
 
@@ -198,14 +171,6 @@ void ABlock::InitializeFromRegistry(EBlockType Type, const FBlockDefinition& Blo
 	if (Material && MeshComponent)
 	{
 		MeshComponent->SetMaterial(0, Material);
-		// Spremi kao OriginalMaterial za highlight swap
-		OriginalMaterial = Material;
-	}
-
-	// Postavi highlight materijal
-	if (InHighlightMaterial)
-	{
-		HighlightMaterial = InHighlightMaterial;
 	}
 
 	UpdateVisibility();

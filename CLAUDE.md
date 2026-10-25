@@ -143,6 +143,14 @@ bool ResolveHitToGrid(const FHitResult& Hit, FIntVector& OutPos, EBlockType& Out
 ABlock* PromoteToActor(FIntVector Pos);               // instanca -> actor (fokus)
 void DemoteToInstance(FIntVector Pos);                // actor -> instanca (fokus otisao)
 void DestroyBlockAt(FIntVector Pos);                  // unisti + drop, bez actora
+FBox GetBlockOutlineBox(EBlockType Type);             // oblik obruba (mesh bounds)
+
+// Obrub fokusiranog bloka (Minecraft zicani okvir; Docs/PLAN_BlockOutline.md).
+// UBlockOutlineComponent zivi na characteru s apsolutnim transformom i crta 12
+// bridova kao screen-space translucentne linije kroz vlastiti scene proxy -
+// bez materijala i bez asseta. Stimanje u igri: voxel.outline.px (2.5),
+// voxel.outline.alpha (0.4), voxel.outline.inflate (0.3), voxel.outline.depthbias.
+void UBlockOutlineComponent::SetOutlineBox(const FBox& LocalBox);
 
 // Knockback (vanilla formula, jacina u blokovima/tick; Docs/PLAN_Knockback.md)
 static bool UCombatLibrary::ApplyKnockback(ACharacter* Victim, FVector HorizontalDir,
@@ -174,6 +182,7 @@ Detailed docs in Croatian available in `Docs/`:
 - `PLAN_Knockback.md` - Knockback pri melee udarcu (vanilla formula, sprint-hit, per-mob otpor)
 - `PLAN_Biomes.md` - Biomi i biome tint za Grass/lišće (Biomes.json + PerInstanceCustomData)
 - `PLAN_Chunks.md` - Chunk sustav i beskonačan svijet (streaming oko igrača, async generacija)
+- `PLAN_BlockOutline.md` - Minecraft obrub fokusiranog bloka (screen-space linije u vlastitom scene proxyju)
 - `PLAN_FirstPersonHand.md` - First-person hand/viewmodel system
 - `PLAN_HoldingDisplay.md` - Prikaz odabranog itema u ruci (sprite, implementirano)
 - `PLAN_ItemExtrusion.md` - 3D ekstrudirani item mesh iz 16x16 teksture (Minecraft stil, implementirano)

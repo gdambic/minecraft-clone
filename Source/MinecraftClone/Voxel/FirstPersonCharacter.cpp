@@ -9,6 +9,7 @@
 #include "Kismet/GameplayStatics.h"
 #include "MinecraftClone.h"
 #include "Block.h"
+#include "BlockOutlineComponent.h"
 #include "BlockRegistry.h"
 #include "VoxelWorld.h"
 #include "InventoryComponent.h"
@@ -68,6 +69,14 @@ AFirstPersonCharacter::AFirstPersonCharacter()
 
 	HeldSpriteMeshComponent = CreateDefaultSubobject<UProceduralMeshComponent>(TEXT("FPHeldSpriteMesh"));
 	HeldSpriteMeshComponent->SetupAttachment(ArmMeshComponent);
+
+	// Obrub stoji na bloku u svijetu, pa mu transform ne smije nasljedivati
+	// igracev - attachment je tu samo zbog zivotnog ciklusa komponente.
+	BlockOutlineComponent = CreateDefaultSubobject<UBlockOutlineComponent>(TEXT("BlockOutline"));
+	BlockOutlineComponent->SetupAttachment(GetCapsuleComponent());
+	BlockOutlineComponent->SetUsingAbsoluteLocation(true);
+	BlockOutlineComponent->SetUsingAbsoluteRotation(true);
+	BlockOutlineComponent->SetUsingAbsoluteScale(true);
 }
 
 void AFirstPersonCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
@@ -316,6 +325,9 @@ void AFirstPersonCharacter::Tick(float DeltaTime)
 		if (CurrentlyLookedAtBlock->AddDestroyProgress(DeltaTime, HeldItem))
 		{
 			CurrentlyLookedAtBlock = nullptr;
+
+			// Blok je nestao pod obrubom - ugasi ga do sljedeceg raycasta
+			HideBlockOutline();
 		}
 	}
 }
@@ -337,23 +349,31 @@ void AFirstPersonCharacter::UpdateBlockLookAt()
 	bool bHit = GetWorld()->LineTraceSingleByChannel(HitResult, Start, End, ECC_Visibility, QueryParams);
 
 	ABlock* HitBlock = nullptr;
+	bool bHasTarget = false;
 	if (bHit)
 	{
 		CurrentHitNormal = HitResult.ImpactNormal;
 
 		// Svijet su ISM instance + najvise jedan promovirani ABlock (fokus).
 		// Hit se prevede u grid poziciju, a fokusirani blok se promovira u
-		// actor koji preuzima highlight i kopanje.
+		// actor koji preuzima kopanje.
 		FIntVector HitGridPos;
 		EBlockType HitType;
 		if (VoxelWorld && VoxelWorld->ResolveHitToGrid(HitResult, HitGridPos, HitType))
 		{
+			bHasTarget = true;
+			ShowBlockOutline(HitGridPos, HitType);
 			HitBlock = VoxelWorld->PromoteToActor(HitGridPos);
 		}
 	}
 	else
 	{
 		CurrentHitNormal = FVector::ZeroVector;
+	}
+
+	if (!bHasTarget)
+	{
+		HideBlockOutline();
 	}
 
 	// Ako gledamo u novi blok
@@ -367,14 +387,35 @@ void AFirstPersonCharacter::UpdateBlockLookAt()
 			VoxelWorld->DemoteToInstance(CurrentlyLookedAtBlock->GridPosition);
 		}
 
-		// Highlight novi blok
-		if (HitBlock)
-		{
-			HitBlock->SetHighlighted(true);
-		}
-
 		CurrentlyLookedAtBlock = HitBlock;
 	}
+}
+
+const FIntVector AFirstPersonCharacter::OutlineHiddenPos(MIN_int32, MIN_int32, MIN_int32);
+
+void AFirstPersonCharacter::ShowBlockOutline(FIntVector GridPos, EBlockType Type)
+{
+	if (!BlockOutlineComponent || !VoxelWorld || GridPos == OutlineGridPos)
+	{
+		return;
+	}
+
+	OutlineGridPos = GridPos;
+	BlockOutlineComponent->SetOutlineBox(VoxelWorld->GetBlockOutlineBox(Type));
+	BlockOutlineComponent->SetWorldLocation(
+		VoxelWorld->GridToWorld(GridPos.X, GridPos.Y, GridPos.Z));
+	BlockOutlineComponent->SetVisibility(true);
+}
+
+void AFirstPersonCharacter::HideBlockOutline()
+{
+	if (!BlockOutlineComponent || OutlineGridPos == OutlineHiddenPos)
+	{
+		return;
+	}
+
+	OutlineGridPos = OutlineHiddenPos;
+	BlockOutlineComponent->SetVisibility(false);
 }
 
 void AFirstPersonCharacter::StartAttack()

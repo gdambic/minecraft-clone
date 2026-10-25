@@ -14,7 +14,6 @@ namespace
 {
 	// Zajednicki defaulti - JSON ih navodi samo kad odstupa
 	const TCHAR* GDefaultBlockMeshPath = TEXT("/Engine/BasicShapes/Cube.Cube");
-	const TCHAR* GDefaultHighlightPath = TEXT("/Game/Blueprints/Materials/M_BlockHighlight.M_BlockHighlight");
 
 	/** Ucitaj Content/Data/<FileName> i deserijaliziraj kao JSON array. */
 	bool LoadJsonArrayFromContentData(const FString& FileName, TArray<TSharedPtr<FJsonValue>>& OutEntries)
@@ -133,11 +132,6 @@ void UBlockRegistry::LoadBlocksFromJson()
 		{
 			Def.Mesh = FSoftObjectPath(GDefaultBlockMeshPath);
 		}
-		if (Def.HighlightMaterial.IsNull())
-		{
-			Def.HighlightMaterial = FSoftObjectPath(GDefaultHighlightPath);
-		}
-
 		RegisterBlock(Def);
 	}
 }
@@ -243,7 +237,6 @@ void UBlockRegistry::RegisterFallbackBlocks()
 		Def.BlockType = Type;
 		Def.DisplayName = FText::FromString(TypeName);
 		Def.Mesh = FSoftObjectPath(GDefaultBlockMeshPath);
-		Def.HighlightMaterial = FSoftObjectPath(GDefaultHighlightPath);
 		RegisterBlock(Def);
 	}
 }

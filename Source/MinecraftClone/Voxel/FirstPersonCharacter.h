@@ -18,6 +18,7 @@ class UInventoryComponent;
 class UInventoryScreenWidget;
 class ACreatureBase;
 class UFirstPersonArmComponent;
+class UBlockOutlineComponent;
 struct FInputActionValue;
 
 /** Delegate koji se broadcasta kada se promijeni odabrani item */
@@ -69,6 +70,13 @@ class MINECRAFTCLONE_API AFirstPersonCharacter : public ACharacter
 	/** Ekstrudirani sprite itema (mac, alat...) - proceduralni mesh iz teksture */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components", meta = (AllowPrivateAccess = "true"))
 	UProceduralMeshComponent* HeldSpriteMeshComponent;
+
+	/**
+	 * Obrub bloka u koji igrac gleda. Ima apsolutni transform - stoji na bloku
+	 * u svijetu, ne vuce se za igracem.
+	 */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components", meta = (AllowPrivateAccess = "true"))
+	UBlockOutlineComponent* BlockOutlineComponent;
 
 protected:
 	/** Jump Input Action */
@@ -234,6 +242,20 @@ protected:
 
 	/** Raycast za detekciju bloka */
 	void UpdateBlockLookAt();
+
+	/**
+	 * Grid pozicija na kojoj stoji obrub. Vodi se po poziciji, a ne po ABlock
+	 * pointeru, pa obrub ne ovisi o tome je li promocija u actor uspjela.
+	 * Sentinel OutlineHiddenPos znaci da je obrub ugasen.
+	 */
+	static const FIntVector OutlineHiddenPos;
+	FIntVector OutlineGridPos = OutlineHiddenPos;
+
+	/** Premjesti obrub na blok i upali ga; no-op ako je vec tamo. */
+	void ShowBlockOutline(FIntVector GridPos, EBlockType Type);
+
+	/** Ugasi obrub (pogled ne drzi nijedan blok). */
+	void HideBlockOutline();
 
 	/** Attack input handlers */
 	void StartAttack();

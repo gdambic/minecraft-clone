@@ -843,6 +843,26 @@ bool AVoxelWorld::IsBlockExposed(FIntVector Pos) const
 	return false;
 }
 
+FBox AVoxelWorld::GetBlockOutlineBox(EBlockType Type)
+{
+	// Mesh je izvor istine o tome gdje blok vizualno pocinje i gdje zavrsava:
+	// i ISM instanca i promovirani actor stoje na GridToWorld(Pos), pa su
+	// bounds mesha u lokalnom prostoru upravo kutija koju treba obrubiti.
+	BuildBlockAssetCache();
+	if (const FBlockAssets* Assets = BlockAssetCache.Find(Type))
+	{
+		if (Assets->Mesh)
+		{
+			// Izmjereno za /Engine/BasicShapes/Cube: min (-50,-50,-50),
+			// max (50,50,50) - kocka je centrirana na pivotu.
+			return Assets->Mesh->GetBoundingBox();
+		}
+	}
+
+	const float Half = BlockSize * 0.5f;
+	return FBox(FVector(-Half), FVector(Half));
+}
+
 ABlock* AVoxelWorld::PromoteToActor(FIntVector Pos)
 {
 	if (ABlock* Existing = Blocks.FindRef(Pos))
@@ -900,8 +920,7 @@ ABlock* AVoxelWorld::PromoteToActor(FIntVector Pos)
 		}
 
 		NewBlock->SetGridPosition(Pos);
-		NewBlock->InitializeFromRegistry(Type, *BlockDefinition,
-			BlockAssets.Mesh, Material, BlockAssets.HighlightMaterial);
+		NewBlock->InitializeFromRegistry(Type, *BlockDefinition, BlockAssets.Mesh, Material);
 		Blocks.Add(Pos, NewBlock);
 	}
 
@@ -1397,13 +1416,12 @@ void AVoxelWorld::BuildBlockAssetCache()
 		FBlockAssets Assets;
 		Assets.Mesh = Cast<UStaticMesh>(Def.Mesh.TryLoad());
 		Assets.Material = Cast<UMaterialInterface>(Def.Material.TryLoad());
-		Assets.HighlightMaterial = Cast<UMaterialInterface>(Def.HighlightMaterial.TryLoad());
 		BlockAssetCache.Add(Def.BlockType, Assets);
 
 		// Statistika za [PERF] log
-		const FSoftObjectPath* Paths[3] = { &Def.Mesh, &Def.Material, &Def.HighlightMaterial };
-		const UObject* Loaded[3] = { Assets.Mesh, Assets.Material, Assets.HighlightMaterial };
-		for (int32 i = 0; i < 3; i++)
+		const FSoftObjectPath* Paths[2] = { &Def.Mesh, &Def.Material };
+		const UObject* Loaded[2] = { Assets.Mesh, Assets.Material };
+		for (int32 i = 0; i < 2; i++)
 		{
 			if (Paths[i]->IsNull())
 			{
@@ -1439,7 +1457,6 @@ const FBlockAssets& AVoxelWorld::GetBlockAssets(EBlockType Type, const FBlockDef
 	FBlockAssets Assets;
 	Assets.Mesh = Cast<UStaticMesh>(BlockDefinition.Mesh.TryLoad());
 	Assets.Material = Cast<UMaterialInterface>(BlockDefinition.Material.TryLoad());
-	Assets.HighlightMaterial = Cast<UMaterialInterface>(BlockDefinition.HighlightMaterial.TryLoad());
 	return BlockAssetCache.Add(Type, Assets);
 }
 
