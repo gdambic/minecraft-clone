@@ -103,6 +103,13 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
 	UInputAction* ToggleInventoryAction;
 
+	/**
+	 * Sprint Input Action (Shift). Nije obavezan: ako nije postavljen, C++ veze
+	 * Shift direktno (legacy BindKey) da sprint radi i bez novog IA/IMC asseta.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
+	UInputAction* SprintAction;
+
 public:
 	AFirstPersonCharacter();
 
@@ -194,16 +201,24 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "Combat")
 	float MeleeRange = 300.0f;
 
-	/** Base knockback force applied to hit targets */
-	UPROPERTY(EditDefaultsOnly, Category = "Combat")
-	float AttackKnockback = 400.0f;
-
-	/** Vertical knockback component */
-	UPROPERTY(EditDefaultsOnly, Category = "Combat")
-	float KnockbackVertical = 150.0f;
-
 	/** Time of last attack for cooldown tracking */
 	float LastAttackTime = 0.0f;
+
+	// === SPRINT ===
+
+	/** Mnozitelj brzine hoda tijekom sprinta (vanilla 1.3x) */
+	UPROPERTY(EditDefaultsOnly, Category = "Movement")
+	float SprintSpeedMultiplier = 1.3f;
+
+	/** Trci li igrac (uvjet za sprint-hit knockback) */
+	UPROPERTY(BlueprintReadOnly, Category = "Movement")
+	bool bIsSprinting = false;
+
+	/** MaxWalkSpeed prije sprinta - vraca se na njega pri prekidu */
+	float BaseWalkSpeed = 0.0f;
+
+	void StartSprint();
+	void StopSprint();
 
 	/** Perform raycast to find creature in melee range */
 	ACreatureBase* MeleeTrace() const;

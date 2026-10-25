@@ -62,6 +62,11 @@ retained-modified provjera. Markeri u logu: `[SOAK]` (`GOTOVO: rehash OK=N,
 FAIL=0` i `RETAINED OK` = prolaz). Za ručni test streaminga u editoru:
 konzolna komanda `voxel.tp <gridX> <gridY>`.
 
+Knockback se mjeri komandom `voxel.kbtest [jacina...]` (default `0.4 0.9`
+blokova/tick): odbaci stvorenje najbliže igraču i u log ispiše `[KB]` linije s
+jačinom, brzinom i dometom pri doskoku. U headless runu (`-ExecCmds="voxel.kbtest"`)
+proces se nakon testova sam ugasi da se log flusha.
+
 ## Architecture
 
 ### Coordinate System
@@ -139,6 +144,13 @@ ABlock* PromoteToActor(FIntVector Pos);               // instanca -> actor (foku
 void DemoteToInstance(FIntVector Pos);                // actor -> instanca (fokus otisao)
 void DestroyBlockAt(FIntVector Pos);                  // unisti + drop, bez actora
 
+// Knockback (vanilla formula, jacina u blokovima/tick; Docs/PLAN_Knockback.md)
+static bool UCombatLibrary::ApplyKnockback(ACharacter* Victim, FVector HorizontalDir,
+                                           float StrengthBlocksPerTick, float KnockbackResistance);
+void ACreatureBase::ReceiveKnockback(FVector HorizontalDir, float StrengthBlocksPerTick);
+bool ACreatureBase::CanBeHurt() const;   // prozor nepovredivosti 0.5 s
+// Per-mob: KnockbackResistance (0..1), AttackKnockback, HurtImmunityTime
+
 // InventoryComponent - Slot API
 FInventorySlot GetSlot(int32 SlotIndex);
 void SetSlot(int32 SlotIndex, EItemType Type, int32 Quantity);
@@ -159,7 +171,7 @@ Detailed docs in Croatian available in `Docs/`:
 - `BACKLOG.md` - Poznati dugovi i odgođena poboljšanja
 - `PLAN_BlockRegistry.md` - Data-driven block registry design
 - `PLAN_Performance.md` - Rendering/performance analysis
-- `PLAN_MeleeCombat.md` - Melee combat system
+- `PLAN_Knockback.md` - Knockback pri melee udarcu (vanilla formula, sprint-hit, per-mob otpor)
 - `PLAN_Biomes.md` - Biomi i biome tint za Grass/lišće (Biomes.json + PerInstanceCustomData)
 - `PLAN_Chunks.md` - Chunk sustav i beskonačan svijet (streaming oko igrača, async generacija)
 - `PLAN_FirstPersonHand.md` - First-person hand/viewmodel system

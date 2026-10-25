@@ -18,6 +18,8 @@
 #include "CreatureBase.h"
 #include "MobBase.h"
 #include "WeaponData.h"
+#include "CombatLibrary.h"
+#include "InputCoreTypes.h"
 #include "FirstPersonArmComponent.h"
 #include "ItemDrop.h"
 
@@ -102,6 +104,20 @@ void AFirstPersonCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInp
 		{
 			EnhancedInputComponent->BindAction(ToggleInventoryAction, ETriggerEvent::Started, this, &AFirstPersonCharacter::ToggleInventory);
 		}
+
+		// Sprint (uvjet za sprint-hit knockback)
+		if (SprintAction)
+		{
+			EnhancedInputComponent->BindAction(SprintAction, ETriggerEvent::Started, this, &AFirstPersonCharacter::StartSprint);
+			EnhancedInputComponent->BindAction(SprintAction, ETriggerEvent::Completed, this, &AFirstPersonCharacter::StopSprint);
+		}
+		else
+		{
+			// Bez IA_Sprint asseta: Shift se vezuje legacy putem, pa sprint radi
+			// odmah. Kad asset postoji i postavi se u BP, ova grana se ne izvodi.
+			PlayerInputComponent->BindKey(EKeys::LeftShift, IE_Pressed, this, &AFirstPersonCharacter::StartSprint);
+			PlayerInputComponent->BindKey(EKeys::LeftShift, IE_Released, this, &AFirstPersonCharacter::StopSprint);
+		}
 	}
 	else
 	{
@@ -137,6 +153,38 @@ void AFirstPersonCharacter::DoMove(float Right, float Forward)
 		AddMovementInput(GetActorRightVector(), Right);
 		AddMovementInput(GetActorForwardVector(), Forward);
 	}
+}
+
+void AFirstPersonCharacter::StartSprint()
+{
+	if (bIsSprinting)
+	{
+		return;
+	}
+
+	UCharacterMovementComponent* MoveComp = GetCharacterMovement();
+	if (!MoveComp)
+	{
+		return;
+	}
+
+	BaseWalkSpeed = MoveComp->MaxWalkSpeed;
+	MoveComp->MaxWalkSpeed = BaseWalkSpeed * SprintSpeedMultiplier;
+	bIsSprinting = true;
+}
+
+void AFirstPersonCharacter::StopSprint()
+{
+	if (!bIsSprinting)
+	{
+		return;
+	}
+
+	if (UCharacterMovementComponent* MoveComp = GetCharacterMovement())
+	{
+		MoveComp->MaxWalkSpeed = BaseWalkSpeed;
+	}
+	bIsSprinting = false;
 }
 
 void AFirstPersonCharacter::DoJumpStart()
@@ -739,6 +787,16 @@ void AFirstPersonCharacter::PerformMeleeAttack()
 		return;
 	}
 
+	// Update attack time (i promasaj i pogodak resetiraju cooldown)
+	LastAttackTime = CurrentTime;
+
+	// Vanilla: pogodak unutar prozora nepovredivosti (0.5 s) ne radi nista -
+	// ni stetu ni knockback
+	if (!Target->CanBeHurt())
+	{
+		return;
+	}
+
 	// Calculate damage multiplier based on cooldown progress
 	const float CooldownProgress = FMath::Clamp(TimeSinceAttack / Cooldown, 0.0f, 1.0f);
 	const float DamageMultiplier = CalculateDamageMultiplier(CooldownProgress);
@@ -746,11 +804,8 @@ void AFirstPersonCharacter::PerformMeleeAttack()
 	// Calculate final damage
 	const float FinalDamage = Weapon.Damage * DamageMultiplier;
 
-	// Update attack time
-	LastAttackTime = CurrentTime;
-
 	// Apply damage
-	Target->TakeDamage(FinalDamage);
+	const bool bKilled = Target->TakeDamage(FinalDamage);
 
 	// Play hit sound on successful hit
 	if (FirstPersonArmComponent)
@@ -758,15 +813,41 @@ void AFirstPersonCharacter::PerformMeleeAttack()
 		FirstPersonArmComponent->PlayHitSound();
 	}
 
-	// Calculate knockback
-	FVector KnockbackDir = (Target->GetActorLocation() - GetActorLocation()).GetSafeNormal();
-	float FinalKnockback = AttackKnockback * Weapon.KnockbackMultiplier;
-	FVector KnockbackForce = KnockbackDir * FinalKnockback + FVector(0.0f, 0.0f, KnockbackVertical);
+	// Knockback: osnovnih 0.4 bloka/tick + 0.5 za sprint-hit (vanilla zahtijeva
+	// napunjen cooldown >= 84.8%). Mnozitelj oruzja je 1.0 po vanilli.
+	const bool bSprintHit = bIsSprinting
+		&& CooldownProgress >= UCombatLibrary::SprintAttackChargeThreshold;
 
-	// Apply knockback
-	if (ACharacter* TargetCharacter = Cast<ACharacter>(Target))
+	float KnockbackStrength = UCombatLibrary::BaseKnockbackStrength;
+	if (bSprintHit)
 	{
-		TargetCharacter->LaunchCharacter(KnockbackForce, true, true);
+		KnockbackStrength += UCombatLibrary::SprintKnockbackBonus;
+	}
+	KnockbackStrength *= Weapon.KnockbackMultiplier;
+
+	// Smjer je yaw pogleda (vanilla sprint-knockback smjer), a ne razlika
+	// pozicija - inace odbacivanje skrene kad je mob postrance u kapsuli
+	FVector KnockbackDir = GetControlRotation().Vector();
+	KnockbackDir.Z = 0.0f;
+	if (!KnockbackDir.Normalize())
+	{
+		KnockbackDir = UCombatLibrary::HorizontalDirection(this, Target);
+	}
+
+	if (!bKilled)
+	{
+		Target->ReceiveKnockback(KnockbackDir, KnockbackStrength);
+	}
+
+	// Vanilla: sprint-hit napadacu pojede zalet i prekine sprint
+	if (bSprintHit)
+	{
+		if (UCharacterMovementComponent* MoveComp = GetCharacterMovement())
+		{
+			MoveComp->Velocity.X *= UCombatLibrary::SprintAttackSelfSlowdown;
+			MoveComp->Velocity.Y *= UCombatLibrary::SprintAttackSelfSlowdown;
+		}
+		StopSprint();
 	}
 
 	// Notify passive mobs to trigger flee behavior
@@ -775,9 +856,12 @@ void AFirstPersonCharacter::PerformMeleeAttack()
 		Mob->OnDamageTaken(this);
 	}
 
-	UE_LOG(LogMinecraftClone, Log, TEXT("Melee hit %s for %.1f damage (weapon: %s, multiplier: %.2f)"),
+	UE_LOG(LogMinecraftClone, Log,
+		TEXT("Melee hit %s for %.1f damage (weapon: %s, multiplier: %.2f, knockback: %.2f b/t%s)"),
 		*Target->GetName(),
 		FinalDamage,
 		Weapon.bIsWeapon ? TEXT("Sword") : TEXT("Fist"),
-		DamageMultiplier);
+		DamageMultiplier,
+		KnockbackStrength,
+		bSprintHit ? TEXT(", sprint") : TEXT(""));
 }
