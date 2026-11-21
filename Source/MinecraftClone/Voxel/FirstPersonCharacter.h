@@ -19,6 +19,7 @@ class UInventoryScreenWidget;
 class ACreatureBase;
 class UFirstPersonArmComponent;
 class UBlockOutlineComponent;
+class UBlockMiningComponent;
 struct FInputActionValue;
 
 /** Delegate koji se broadcasta kada se promijeni odabrani item */
@@ -77,6 +78,10 @@ class MINECRAFTCLONE_API AFirstPersonCharacter : public ACharacter
 	 */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components", meta = (AllowPrivateAccess = "true"))
 	UBlockOutlineComponent* BlockOutlineComponent;
+
+	/** Kopanje bloka u koji igrac gleda: progres, alat, zvuk i pukotine */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components", meta = (AllowPrivateAccess = "true"))
+	UBlockMiningComponent* MiningComponent;
 
 protected:
 	/** Jump Input Action */
@@ -197,11 +202,6 @@ protected:
 	UPROPERTY(BlueprintReadOnly, Category = "Block Interaction")
 	AVoxelWorld* VoxelWorld;
 
-	/** Je li igrač trenutno drži attack tipku */
-	bool bIsAttacking = false;
-
-	/** Item kojim se kopalo u prošlom ticku - promjena resetira destroy progres */
-	EItemType MiningItem = EItemType::None;
 
 	// === MELEE COMBAT ===
 

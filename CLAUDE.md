@@ -62,6 +62,11 @@ retained-modified provjera. Markeri u logu: `[SOAK]` (`GOTOVO: rehash OK=N,
 FAIL=0` i `RETAINED OK` = prolaz). Za ručni test streaminga u editoru:
 konzolna komanda `voxel.tp <gridX> <gridY>`.
 
+Kopanje i pukotine mjeri `voxel.cracktest [item...]` (default `None
+WoodenPickaxe`): kopa blok ispod igrača simuliranim frameovima i za svaku fazu
+ispiše `[CRACK] blok=... faza=N`, a na kraju `[CRACK] lom t=... (ocekivano ...)`.
+U headless runu se proces nakon testova sam ugasi.
+
 Knockback se mjeri komandom `voxel.kbtest [jacina...]` (default `0.4 0.9`
 blokova/tick): odbaci stvorenje najbliže igraču i u log ispiše `[KB]` linije s
 jačinom, brzinom i dometom pri doskoku. U headless runu (`-ExecCmds="voxel.kbtest"`)
@@ -115,6 +120,7 @@ Source/MinecraftClone/
 
 - `Content/Data/Blocks.json`, `Items.json` - definicije blokova/itema; učitava ih `UBlockRegistry` (enum vrijednost bez JSON unosa dobije fallback: siva kocka + Error u logu)
 - `Content/Data/Recipes/` - crafting recepti (JSON, file-per-recipe)
+- `Content/Data/BlockSounds.json` - sampleovi po sound grupi; assetovi u `Content/Audio/Blocks/` (uvozi ih `Scripts/import_block_sounds.py`)
 - `Content/Blueprints/Blocks/` - Block blueprints (BP_Dirt, BP_Stone, etc.)
 - `Content/Input/Actions/` - Enhanced Input actions
 - `Content/FirstPerson/Blueprints/` - Character and controller BPs
@@ -142,7 +148,7 @@ FVector GridToWorld(int32 X, int32 Y, int32 Z);
 bool ResolveHitToGrid(const FHitResult& Hit, FIntVector& OutPos, EBlockType& OutType);
 ABlock* PromoteToActor(FIntVector Pos);               // instanca -> actor (fokus)
 void DemoteToInstance(FIntVector Pos);                // actor -> instanca (fokus otisao)
-void DestroyBlockAt(FIntVector Pos);                  // unisti + drop, bez actora
+void DestroyBlockAt(FIntVector Pos);                  // unisti + drop, bez actora (vidi bDropItems dolje)
 FBox GetBlockOutlineBox(EBlockType Type);             // oblik obruba (mesh bounds)
 
 // Obrub fokusiranog bloka (Minecraft zicani okvir; Docs/PLAN_BlockOutline.md).
@@ -151,6 +157,27 @@ FBox GetBlockOutlineBox(EBlockType Type);             // oblik obruba (mesh boun
 // bez materijala i bez asseta. Stimanje u igri: voxel.outline.px (2.5),
 // voxel.outline.alpha (0.4), voxel.outline.inflate (0.3), voxel.outline.depthbias.
 void UBlockOutlineComponent::SetOutlineBox(const FBox& LocalBox);
+
+// Zvukovi blokova (sound grupa po materijalu; Docs/PLAN_BlockSounds.md).
+// Blok u Blocks.json navodi "soundGroup", BlockSounds.json mapira grupu na
+// sampleove u Content/Audio/Blocks. Zvuk NE ovisi o alatu - alat mijenja samo
+// broj ponavljanja prije loma. Hit svira ABlock::AddDestroyProgress svakih
+// 0.2 s, break AVoxelWorld::NotifyBlockDestroyed, place PlaceBlockAt.
+static void UBlockSoundLibrary::PlayBlockSound(const UObject* Ctx, EBlockType Type,
+                                               EBlockSoundEvent Event, const FVector& Location);
+static float UBlockSoundLibrary::GetHitSoundInterval();   // voxel.sound.hitinterval
+USoundBase* UBlockRegistry::GetRandomBlockSound(EBlockType Type, EBlockSoundEvent Event);
+// Stimanje: voxel.sound.hitvolume/breakvolume/placevolume, *pitch,
+// voxel.sound.pitchjitter, voxel.sound.hitfadeout, voxel.sound.maxperframe.
+// Provjera: voxel.sndtest.
+
+// Kopanje i pukotine (Docs/PLAN_BlockDamage.md). UBlockMiningComponent na
+// characteru odlucuje (progres, alat, zvuk udarca, lom kroz DestroyBlockAt);
+// UBlockCrackComponent na svijetu crta pukotinu kao malo vecu kocku s
+// M_BlockCrack. Asseti: Tools > MinecraftClone > Import Block Cracks.
+// Stimanje: voxel.crack.opacity, voxel.crack.inflate, voxel.crack.stage N.
+void AVoxelWorld::SetBlockCrack(uint32 BreakerId, FIntVector Pos, int32 Stage);  // -1 brise
+void AVoxelWorld::DestroyBlockAt(FIntVector Pos, bool bDropItems = true);
 
 // Knockback (vanilla formula, jacina u blokovima/tick; Docs/PLAN_Knockback.md)
 static bool UCombatLibrary::ApplyKnockback(ACharacter* Victim, FVector HorizontalDir,
@@ -183,6 +210,8 @@ Detailed docs in Croatian available in `Docs/`:
 - `PLAN_Biomes.md` - Biomi i biome tint za Grass/lišće (Biomes.json + PerInstanceCustomData)
 - `PLAN_Chunks.md` - Chunk sustav i beskonačan svijet (streaming oko igrača, async generacija)
 - `PLAN_BlockOutline.md` - Minecraft obrub fokusiranog bloka (screen-space linije u vlastitom scene proxyju)
+- `PLAN_BlockSounds.md` - Zvukovi kopanja i lomljenja blokova (sound grupe po materijalu, plan)
+- `PLAN_BlockDamage.md` - Pukotine pri kopanju (destroy_stage 0-9 iz Minecraft jara, kopanje odvojeno od prikaza, implementirano)
 - `PLAN_FirstPersonHand.md` - First-person hand/viewmodel system
 - `PLAN_HoldingDisplay.md` - Prikaz odabranog itema u ruci (sprite, implementirano)
 - `PLAN_ItemExtrusion.md` - 3D ekstrudirani item mesh iz 16x16 teksture (Minecraft stil, implementirano)

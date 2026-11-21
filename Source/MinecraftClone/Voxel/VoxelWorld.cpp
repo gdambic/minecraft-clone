@@ -8,6 +8,8 @@
 #include "Zombie.h"
 #include "MobBase.h"
 #include "BlockRegistry.h"
+#include "BlockSoundLibrary.h"
+#include "BlockCrackComponent.h"
 #include "AI/NavigationSystemBase.h"
 #include "NavigationSystem.h"
 #include "NavMesh/RecastNavMesh.h"
@@ -84,6 +86,8 @@ AVoxelWorld::AVoxelWorld()
 	TreeChancePerChunk = 0.25f;
 
 	CompletedChunkQueue = MakeShared<TQueue<FCompletedChunkData, EQueueMode::Mpsc>, ESPMode::ThreadSafe>();
+
+	CrackComponent = CreateDefaultSubobject<UBlockCrackComponent>(TEXT("BlockCracks"));
 }
 
 void AVoxelWorld::BeginPlay()
@@ -545,6 +549,11 @@ void AVoxelWorld::UnloadChunk(const FIntPoint& Coord)
 			}
 			It.RemoveCurrent();
 		}
+	}
+
+	if (CrackComponent)
+	{
+		CrackComponent->ClearCracksInChunk(Coord);
 	}
 
 	// ISM komponente + ComponentToChunk unosi zive tocno koliko i chunk
@@ -1178,7 +1187,7 @@ bool AVoxelWorld::ResolveHitToGrid(const FHitResult& Hit, FIntVector& OutPos, EB
 	return true;
 }
 
-void AVoxelWorld::DestroyBlockAt(FIntVector Pos)
+void AVoxelWorld::DestroyBlockAt(FIntVector Pos, bool bDropItems)
 {
 	const EBlockType Type = GetBlockTypeAt(Pos);
 	if (Type == EBlockType::Air)
@@ -1186,10 +1195,10 @@ void AVoxelWorld::DestroyBlockAt(FIntVector Pos)
 		return;
 	}
 
-	// Drop sansa iz registry definicije (isto ponasanje kao ABlock::AddDestroyProgress)
+	// Drop sansa iz registry definicije
 	UBlockRegistry* Registry = UBlockRegistry::Get(this);
 	const FBlockDefinition* Def = Registry ? Registry->GetBlockDefinition(Type) : nullptr;
-	if (Def && Def->DropItemType != EItemType::None && FMath::FRand() < Def->DropChance)
+	if (bDropItems && Def && Def->DropItemType != EItemType::None && FMath::FRand() < Def->DropChance)
 	{
 		const float HalfBlock = BlockSize * 0.5f;
 		const FVector DropLocation = GridToWorld(Pos.X, Pos.Y, Pos.Z)
@@ -1200,9 +1209,30 @@ void AVoxelWorld::DestroyBlockAt(FIntVector Pos)
 	NotifyBlockDestroyed(Pos, Type);
 }
 
+void AVoxelWorld::SetBlockCrack(uint32 BreakerId, FIntVector Pos, int32 Stage)
+{
+	if (CrackComponent)
+	{
+		CrackComponent->SetCrack(BreakerId, Pos, GridToWorld(Pos.X, Pos.Y, Pos.Z), Stage);
+	}
+}
+
 void AVoxelWorld::NotifyBlockDestroyed(FIntVector GridPosition, EBlockType DestroyedType)
 {
+	// Jedina tocka kroz koju prolazi svako unistenje (kopanje, DestroyBlockAt,
+	// leaf decay), a chunk unload ne ide kroz nju - zato zvuk loma stoji ovdje.
+	const float HalfBlock = BlockSize * 0.5f;
+	UBlockSoundLibrary::PlayBlockSound(this, DestroyedType, EBlockSoundEvent::Break,
+		GridToWorld(GridPosition.X, GridPosition.Y, GridPosition.Z)
+			+ FVector(HalfBlock, HalfBlock, HalfBlock));
+
 	SetBlockData(GridPosition, EBlockType::Air, /*bMarkModified=*/true);
+
+	// Pukotina ne smije ostati u zraku, ni kad blok srusi netko drugi
+	if (CrackComponent)
+	{
+		CrackComponent->ClearCracksAt(GridPosition);
+	}
 
 	// Vizual je bio ili instanca (npr. leaf decay) ili promovirani actor (kopanje)
 	RemoveBlockInstance(GridPosition);
@@ -1356,6 +1386,12 @@ bool AVoxelWorld::PlaceBlockAt(FIntVector GridPosition, EBlockType Type)
 
 	// Postavljeni blok je po definiciji izlozen - odmah dodaj instancu
 	AddBlockInstance(GridPosition, Type);
+
+	const float HalfBlock = BlockSize * 0.5f;
+	UBlockSoundLibrary::PlayBlockSound(this, Type, EBlockSoundEvent::Place,
+		GridToWorld(GridPosition.X, GridPosition.Y, GridPosition.Z)
+			+ FVector(HalfBlock, HalfBlock, HalfBlock));
+
 	return true;
 }
 

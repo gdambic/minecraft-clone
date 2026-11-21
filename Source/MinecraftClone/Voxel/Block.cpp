@@ -1,7 +1,6 @@
 #include "Block.h"
 #include "Components/StaticMeshComponent.h"
 #include "Engine/Engine.h"
-#include "ItemDrop.h"
 #include "VoxelWorld.h"
 #include "Engine/StaticMesh.h"
 #include "Materials/MaterialInterface.h"
@@ -25,15 +24,6 @@ ABlock::ABlock()
 	// Default vrijednosti - mogu se override-ati kroz InitializeFromRegistry()
 	BlockType = EBlockType::Air;
 	GridPosition = FIntVector(0, 0, 0);
-
-	// Default destruction time
-	TimeToDestroy = 1.5f;
-	ToolClass = EToolClass::None;
-	bRequiresTool = false;
-
-	// Default drop
-	DropItemType = EItemType::None;
-	DropChance = 1.0f;
 }
 
 void ABlock::BeginPlay()
@@ -63,100 +53,11 @@ void ABlock::UpdateVisibility()
 	}
 }
 
-bool ABlock::AddDestroyProgress(float DeltaTime, EItemType HeldItem)
-{
-	if (TimeToDestroy <= 0.0f)
-	{
-		return false;
-	}
-
-	// Minecraft model: pravi alat kopa brze za svoj mining speed, a blok koji
-	// alat zahtijeva bez njega traje dulje i ne ostavlja drop (canHarvest).
-	const bool bCorrectTool = UToolDataLibrary::IsCorrectTool(HeldItem, ToolClass);
-	const bool bCanHarvest = bCorrectTool || !bRequiresTool;
-	const float MiningSpeed = bCorrectTool
-		? UToolDataLibrary::GetToolData(HeldItem).MiningSpeed
-		: 1.0f;
-	const float EffectiveTime = TimeToDestroy * (bCanHarvest ? 1.0f : WrongToolTimePenalty);
-
-	DestroyProgress += (DeltaTime * MiningSpeed) / EffectiveTime;
-
-	// Dohvati trenutni integrity
-	int32 CurrentIntegrity = GetIntegrityPercent();
-
-	// Ažuriraj LastReportedStep kad se integrity promijeni
-	if (CurrentIntegrity != LastReportedStep)
-	{
-		LastReportedStep = CurrentIntegrity;
-	}
-
-	// Provjeri je li uništen
-	if (DestroyProgress >= 1.0f)
-	{
-		// Spawnaj drop prije uklanjanja (ako prođe šansu i ako je blok
-		// kopan alatom koji ga može požnjeti)
-		if (bCanHarvest && DropItemType != EItemType::None && FMath::FRand() < DropChance)
-		{
-			// Centriraj drop u središte bloka (origin je na kutu)
-			const float HalfBlock = BlockSize / 2.0f;
-			FVector SpawnLocation = GetActorLocation() + FVector(HalfBlock, HalfBlock, HalfBlock);
-			AItemDrop::SpawnItemDrop(this, DropItemType, SpawnLocation);
-		}
-
-		// Svijet uklanja podatke i ovaj actor, lazy-spawna izlozene susjede
-		// i pokrece leaf decay. Owner je postavljen pri spawnu u AVoxelWorld.
-		if (AVoxelWorld* VoxelWorld = Cast<AVoxelWorld>(GetOwner()))
-		{
-			VoxelWorld->NotifyBlockDestroyed(GridPosition, BlockType);
-		}
-		else
-		{
-			Destroy();
-		}
-		return true;
-	}
-
-	return false;
-}
-
-void ABlock::ResetDestroyProgress()
-{
-	if (DestroyProgress > 0.0f)
-	{
-		DestroyProgress = 0.0f;
-		LastReportedStep = 100;
-	}
-}
-
-int32 ABlock::GetIntegrityPercent() const
-{
-	// 3 koraka: 100% -> 67% -> 33% -> 0%
-	if (DestroyProgress < 0.33f)
-	{
-		return 100;
-	}
-	else if (DestroyProgress < 0.67f)
-	{
-		return 67;
-	}
-	else if (DestroyProgress < 1.0f)
-	{
-		return 33;
-	}
-	return 0;
-}
-
 void ABlock::InitializeFromRegistry(EBlockType Type, const FBlockDefinition& BlockDefinition,
 	UStaticMesh* Mesh, UMaterialInterface* Material)
 {
+	// Kopanje i drop cita UBlockMiningComponent izravno iz registryja
 	BlockType = Type;
-
-	// Postavi gameplay vrijednosti
-	TimeToDestroy = BlockDefinition.TimeToDestroy;
-	ToolClass = BlockDefinition.ToolClass;
-	bRequiresTool = BlockDefinition.bRequiresTool;
-	DropItemType = BlockDefinition.DropItemType;
-	DropChance = BlockDefinition.DropChance;
 
 	// Postavi mesh
 	if (Mesh && MeshComponent)

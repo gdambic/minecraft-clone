@@ -8,6 +8,8 @@
 
 class UTexture2D;
 class UMaterialInterface;
+class USoundBase;
+class USoundAttenuation;
 
 /**
  * Centralni registar svih blokova i itema u igri.
@@ -102,6 +104,25 @@ public:
 	 */
 	const FItemExtrudedMeshData* GetItemExtrudedMesh(EItemType ItemType);
 
+	// === Block sound API ===
+
+	/**
+	 * Nasumicni sample za dogadaj (hit/break/place) na bloku. Grupa dolazi iz
+	 * definicije bloka; blok bez grupe ili grupa koja fali u BlockSounds.json
+	 * padaju na Stone uz Error u logu (jednom po tipu bloka) - zvuk nikad ne
+	 * nestane. Vraca nullptr samo ako ni Stone grupa nema sampleova.
+	 * Assetovi se ucitavaju lijeno i kesiraju. Samo C++.
+	 */
+	USoundBase* GetRandomBlockSound(EBlockType BlockType, EBlockSoundEvent Event);
+
+	/** Grupa bloka nakon fallbacka (nikad None ako BlockSounds.json postoji) */
+	UFUNCTION(BlueprintPure, Category = "BlockRegistry")
+	EBlockSoundGroup GetBlockSoundGroup(EBlockType BlockType) const;
+
+	/** Attenuation za zvukove blokova (/Game/Audio/SA_BlockSounds); nullptr ako asset ne postoji */
+	UFUNCTION(BlueprintPure, Category = "BlockRegistry")
+	USoundAttenuation* GetBlockSoundAttenuation();
+
 	// === Biome API ===
 
 	/**
@@ -143,6 +164,13 @@ protected:
 	/** Učitaj definicije iz Content/Data/Blocks.json odnosno Items.json */
 	void LoadBlocksFromJson();
 	void LoadItemsFromJson();
+
+	/**
+	 * Učitaj sampleove zvukova po grupi iz Content/Data/BlockSounds.json.
+	 * Datoteka koja fali ostavlja mapu praznom - blokovi tada nemaju zvuk, ali
+	 * igra radi (svaki poziv samo vrati nullptr).
+	 */
+	void LoadBlockSoundsFromJson();
 
 	/**
 	 * Učitaj biome iz Content/Data/Biomes.json. Ako datoteka fali ili je
@@ -195,4 +223,20 @@ private:
 
 	/** Cache ekstrudiranih mesheva - nullptr pamti i neuspjeh/ne-sprite item */
 	TMap<EItemType, TSharedPtr<FItemExtrudedMeshData>> ItemExtrudedMeshCache;
+
+	/** Sampleovi po sound grupi (BlockSounds.json) */
+	UPROPERTY()
+	TMap<EBlockSoundGroup, FBlockSoundSet> BlockSoundSets;
+
+	/** Cache ucitanih zvukova po putanji (upisani nullptr pamti i neuspjeh) */
+	UPROPERTY()
+	TMap<FName, TObjectPtr<USoundBase>> BlockSoundCache;
+
+	/** Cache attenuation asseta (bool pamti i neuspjeli load) */
+	UPROPERTY()
+	TObjectPtr<USoundAttenuation> BlockSoundAttenuation;
+	bool bBlockSoundAttenuationLoaded = false;
+
+	/** Blokovi za koje je fallback sound grupe vec prijavljen (log jednom) */
+	TSet<EBlockType> ReportedSoundFallbacks;
 };

@@ -6,6 +6,7 @@
     "dropChance": 1.0,
     "timeToDestroy": 1.5,
     "toolClass": "shovel",
+    "soundGroup": "Gravel",
     "displayName": "Dirt",
     "material": "/Game/Blocks/Materials/MI_Dirt.MI_Dirt"
   },
@@ -16,6 +17,7 @@
     "dropChance": 1.0,
     "timeToDestroy": 3.0,
     "toolClass": "pickaxe",
+    "soundGroup": "Stone",
     "displayName": "Andesite",
     "material": "/Game/Blocks/Materials/MI_Andesite.MI_Andesite"
   },
@@ -26,6 +28,7 @@
     "dropChance": 1.0,
     "timeToDestroy": 3.0,
     "toolClass": "pickaxe",
+    "soundGroup": "Basalt",
     "displayName": "Basalt",
     "material": "/Game/Blocks/Materials/MI_Basalt.MI_Basalt"
   },
@@ -36,6 +39,7 @@
     "dropChance": 1.0,
     "timeToDestroy": 3.0,
     "toolClass": "pickaxe",
+    "soundGroup": "Stone",
     "displayName": "Limestone",
     "material": "/Game/Blocks/Materials/MI_Limestone.MI_Limestone"
   },
@@ -46,6 +50,7 @@
     "dropChance": 1.0,
     "timeToDestroy": 3.0,
     "toolClass": "pickaxe",
+    "soundGroup": "Stone",
     "displayName": "Stone",
     "material": "/Game/Blocks/Materials/MI_Stone.MI_Stone"
   },
@@ -56,6 +61,7 @@
     "dropChance": 1.0,
     "timeToDestroy": 1.5,
     "toolClass": "shovel",
+    "soundGroup": "Grass",
     "displayName": "Grass",
     "biomeTint": "grass",
     "material": "/Game/Blocks/Materials/MI_Grass.MI_Grass"
@@ -67,6 +73,7 @@
     "dropChance": 1.0,
     "timeToDestroy": 2.0,
     "toolClass": "axe",
+    "soundGroup": "Wood",
     "displayName": "Oak Log",
     "material": "/Game/Blocks/Materials/MI_OakLog.MI_OakLog"
   },
@@ -77,6 +84,7 @@
     "dropChance": 1.0,
     "timeToDestroy": 2.0,
     "toolClass": "axe",
+    "soundGroup": "Wood",
     "displayName": "Birch Log",
     "material": "/Game/Blocks/Materials/MI_BirchLog.MI_BirchLog"
   },
@@ -88,7 +96,8 @@
     "timeToDestroy": 0.5,
     "displayName": "Oak Leaves",
     "masked": true,
-    "material": "/Game/Blocks/Materials/MI_OakLeaves.MI_OakLeaves"
+    "material": "/Game/Blocks/Materials/MI_OakLeaves.MI_OakLeaves",
+    "soundGroup": "Grass"
   },
   {
     "blockType": "BirchLeaves",
@@ -98,7 +107,8 @@
     "timeToDestroy": 0.5,
     "displayName": "Birch Leaves",
     "masked": true,
-    "material": "/Game/Blocks/Materials/MI_BirchLeaves.MI_BirchLeaves"
+    "material": "/Game/Blocks/Materials/MI_BirchLeaves.MI_BirchLeaves",
+    "soundGroup": "Grass"
   },
   {
     "blockType": "OakPlanks",
@@ -107,6 +117,7 @@
     "dropChance": 1.0,
     "timeToDestroy": 2.0,
     "toolClass": "axe",
+    "soundGroup": "Wood",
     "displayName": "Oak Planks",
     "material": "/Game/Blocks/Materials/MI_OakPlanks.MI_OakPlanks"
   },
@@ -117,6 +128,7 @@
     "dropChance": 1.0,
     "timeToDestroy": 2.0,
     "toolClass": "axe",
+    "soundGroup": "Wood",
     "displayName": "Birch Planks",
     "material": "/Game/Blocks/Materials/MI_BirchPlanks.MI_BirchPlanks"
   },
@@ -127,6 +139,7 @@
     "dropChance": 1.0,
     "timeToDestroy": 2.5,
     "toolClass": "axe",
+    "soundGroup": "Wood",
     "displayName": "Crafting Table",
     "material": "/Game/Blocks/Materials/MI_CraftingTable.MI_CraftingTable",
     "interaction": "CraftingTable"

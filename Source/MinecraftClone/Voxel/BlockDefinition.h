@@ -5,6 +5,7 @@
 #include "ItemType.h"
 #include "BiomeDefinition.h"
 #include "ToolData.h"
+#include "BlockSoundTypes.h"
 #include "BlockDefinition.generated.h"
 
 /**
@@ -62,6 +63,13 @@ struct MINECRAFTCLONE_API FBlockDefinition
 	 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Block")
 	bool bRequiresTool = false;
+
+	/**
+	 * Sound grupa bloka (JSON "soundGroup": "stone"/"wood"/"gravel"/"grass"/
+	 * "basalt"). None = blok nema vlastite zvukove i dobiva Stone fallback.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Block")
+	EBlockSoundGroup SoundGroup = EBlockSoundGroup::None;
 
 	/** Ime bloka za prikaz */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Block")

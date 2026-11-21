@@ -1,0 +1,117 @@
+[
+  {
+    "group": "Stone",
+    "hit": [
+      "/Game/Audio/Blocks/Stone/Hit_1",
+      "/Game/Audio/Blocks/Stone/Hit_2",
+      "/Game/Audio/Blocks/Stone/Hit_3",
+      "/Game/Audio/Blocks/Stone/Hit_4",
+      "/Game/Audio/Blocks/Stone/Hit_5",
+      "/Game/Audio/Blocks/Stone/Hit_6"
+    ],
+    "break": [
+      "/Game/Audio/Blocks/Stone/Break_1",
+      "/Game/Audio/Blocks/Stone/Break_2",
+      "/Game/Audio/Blocks/Stone/Break_3",
+      "/Game/Audio/Blocks/Stone/Break_4"
+    ],
+    "place": [
+      "/Game/Audio/Blocks/Stone/Break_1",
+      "/Game/Audio/Blocks/Stone/Break_2",
+      "/Game/Audio/Blocks/Stone/Break_3",
+      "/Game/Audio/Blocks/Stone/Break_4"
+    ]
+  },
+  {
+    "group": "Wood",
+    "hit": [
+      "/Game/Audio/Blocks/Wood/Hit_1",
+      "/Game/Audio/Blocks/Wood/Hit_2",
+      "/Game/Audio/Blocks/Wood/Hit_3",
+      "/Game/Audio/Blocks/Wood/Hit_4",
+      "/Game/Audio/Blocks/Wood/Hit_5",
+      "/Game/Audio/Blocks/Wood/Hit_6"
+    ],
+    "break": [
+      "/Game/Audio/Blocks/Wood/Break_1",
+      "/Game/Audio/Blocks/Wood/Break_2",
+      "/Game/Audio/Blocks/Wood/Break_3",
+      "/Game/Audio/Blocks/Wood/Break_4"
+    ],
+    "place": [
+      "/Game/Audio/Blocks/Wood/Break_1",
+      "/Game/Audio/Blocks/Wood/Break_2",
+      "/Game/Audio/Blocks/Wood/Break_3",
+      "/Game/Audio/Blocks/Wood/Break_4"
+    ]
+  },
+  {
+    "group": "Gravel",
+    "hit": [
+      "/Game/Audio/Blocks/Gravel/Hit_1",
+      "/Game/Audio/Blocks/Gravel/Hit_2",
+      "/Game/Audio/Blocks/Gravel/Hit_3",
+      "/Game/Audio/Blocks/Gravel/Hit_4"
+    ],
+    "break": [
+      "/Game/Audio/Blocks/Gravel/Break_1",
+      "/Game/Audio/Blocks/Gravel/Break_2",
+      "/Game/Audio/Blocks/Gravel/Break_3",
+      "/Game/Audio/Blocks/Gravel/Break_4"
+    ],
+    "place": [
+      "/Game/Audio/Blocks/Gravel/Break_1",
+      "/Game/Audio/Blocks/Gravel/Break_2",
+      "/Game/Audio/Blocks/Gravel/Break_3",
+      "/Game/Audio/Blocks/Gravel/Break_4"
+    ]
+  },
+  {
+    "group": "Grass",
+    "hit": [
+      "/Game/Audio/Blocks/Grass/Hit_1",
+      "/Game/Audio/Blocks/Grass/Hit_2",
+      "/Game/Audio/Blocks/Grass/Hit_3",
+      "/Game/Audio/Blocks/Grass/Hit_4",
+      "/Game/Audio/Blocks/Grass/Hit_5",
+      "/Game/Audio/Blocks/Grass/Hit_6"
+    ],
+    "break": [
+      "/Game/Audio/Blocks/Grass/Break_1",
+      "/Game/Audio/Blocks/Grass/Break_2",
+      "/Game/Audio/Blocks/Grass/Break_3",
+      "/Game/Audio/Blocks/Grass/Break_4"
+    ],
+    "place": [
+      "/Game/Audio/Blocks/Grass/Break_1",
+      "/Game/Audio/Blocks/Grass/Break_2",
+      "/Game/Audio/Blocks/Grass/Break_3",
+      "/Game/Audio/Blocks/Grass/Break_4"
+    ]
+  },
+  {
+    "group": "Basalt",
+    "hit": [
+      "/Game/Audio/Blocks/Basalt/Hit_1",
+      "/Game/Audio/Blocks/Basalt/Hit_2",
+      "/Game/Audio/Blocks/Basalt/Hit_3",
+      "/Game/Audio/Blocks/Basalt/Hit_4",
+      "/Game/Audio/Blocks/Basalt/Hit_5",
+      "/Game/Audio/Blocks/Basalt/Hit_6"
+    ],
+    "break": [
+      "/Game/Audio/Blocks/Basalt/Break_1",
+      "/Game/Audio/Blocks/Basalt/Break_2",
+      "/Game/Audio/Blocks/Basalt/Break_3",
+      "/Game/Audio/Blocks/Basalt/Break_4",
+      "/Game/Audio/Blocks/Basalt/Break_5"
+    ],
+    "place": [
+      "/Game/Audio/Blocks/Basalt/Break_1",
+      "/Game/Audio/Blocks/Basalt/Break_2",
+      "/Game/Audio/Blocks/Basalt/Break_3",
+      "/Game/Audio/Blocks/Basalt/Break_4",
+      "/Game/Audio/Blocks/Basalt/Break_5"
+    ]
+  }
+]

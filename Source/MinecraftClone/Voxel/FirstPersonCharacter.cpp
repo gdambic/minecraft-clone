@@ -10,6 +10,7 @@
 #include "MinecraftClone.h"
 #include "Block.h"
 #include "BlockOutlineComponent.h"
+#include "BlockMiningComponent.h"
 #include "BlockRegistry.h"
 #include "VoxelWorld.h"
 #include "InventoryComponent.h"
@@ -77,6 +78,8 @@ AFirstPersonCharacter::AFirstPersonCharacter()
 	BlockOutlineComponent->SetUsingAbsoluteLocation(true);
 	BlockOutlineComponent->SetUsingAbsoluteRotation(true);
 	BlockOutlineComponent->SetUsingAbsoluteScale(true);
+
+	MiningComponent = CreateDefaultSubobject<UBlockMiningComponent>(TEXT("BlockMining"));
 }
 
 void AFirstPersonCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
@@ -214,6 +217,10 @@ void AFirstPersonCharacter::BeginPlay()
 	{
 		UE_LOG(LogMinecraftClone, Warning, TEXT("FirstPersonCharacter: VoxelWorld not found in scene!"));
 	}
+	if (MiningComponent)
+	{
+		MiningComponent->SetVoxelWorld(VoxelWorld);
+	}
 
 	// Prati promjene sadržaja slotova - ruka se mora osvježiti i kad se
 	// odabrani slot isprazni/napuni bez promjene indeksa
@@ -310,25 +317,15 @@ void AFirstPersonCharacter::Tick(float DeltaTime)
 	UpdateBlockLookAt();
 	TickOpenScreenSafety();
 
-	// Destruction logic (IsValid: blok je mogao nestati izvana, npr. leaf decay)
-	if (bIsAttacking && IsValid(CurrentlyLookedAtBlock))
+	// Kopanje: komponenta zna cilj (UpdateBlockLookAt) i drzi li se tipka
+	// (StartAttack/StopAttack); promjena itema u ruci resetira progres.
+	if (MiningComponent && MiningComponent->TickMining(DeltaTime, GetSelectedItemType()))
 	{
-		// Brzina kopanja ovisi o itemu u ruci; promjena alata tijekom
-		// kopanja resetira progres (isto kao u Minecraftu).
-		const EItemType HeldItem = GetSelectedItemType();
-		if (HeldItem != MiningItem)
-		{
-			MiningItem = HeldItem;
-			CurrentlyLookedAtBlock->ResetDestroyProgress();
-		}
+		// Promovirani actor je unisten zajedno s blokom
+		CurrentlyLookedAtBlock = nullptr;
 
-		if (CurrentlyLookedAtBlock->AddDestroyProgress(DeltaTime, HeldItem))
-		{
-			CurrentlyLookedAtBlock = nullptr;
-
-			// Blok je nestao pod obrubom - ugasi ga do sljedeceg raycasta
-			HideBlockOutline();
-		}
+		// Blok je nestao pod obrubom - ugasi ga do sljedeceg raycasta
+		HideBlockOutline();
 	}
 }
 
@@ -363,6 +360,10 @@ void AFirstPersonCharacter::UpdateBlockLookAt()
 		{
 			bHasTarget = true;
 			ShowBlockOutline(HitGridPos, HitType);
+			if (MiningComponent)
+			{
+				MiningComponent->SetTarget(HitGridPos);
+			}
 			HitBlock = VoxelWorld->PromoteToActor(HitGridPos);
 		}
 	}
@@ -374,14 +375,17 @@ void AFirstPersonCharacter::UpdateBlockLookAt()
 	if (!bHasTarget)
 	{
 		HideBlockOutline();
+		if (MiningComponent)
+		{
+			MiningComponent->ClearTarget();
+		}
 	}
 
 	// Ako gledamo u novi blok
 	if (HitBlock != CurrentlyLookedAtBlock)
 	{
-		// Stari fokus natrag u instancu (destroy actora ujedno gubi destroy
-		// progress - isto ponasanje kao dosadasnji ResetDestroyProgress).
-		// IsValid: actor je mogao nestati izvana (npr. leaf decay).
+		// Stari fokus natrag u instancu (progres kopanja je vec resetirao
+		// SetTarget). IsValid: actor je mogao nestati izvana (npr. leaf decay).
 		if (IsValid(CurrentlyLookedAtBlock) && VoxelWorld)
 		{
 			VoxelWorld->DemoteToInstance(CurrentlyLookedAtBlock->GridPosition);
@@ -434,18 +438,19 @@ void AFirstPersonCharacter::StartAttack()
 		return;
 	}
 
-	// PRIORITY 2: Block destruction (existing logic)
-	bIsAttacking = true;
+	// PRIORITY 2: Block destruction
+	if (MiningComponent)
+	{
+		MiningComponent->StartMining();
+	}
 }
 
 void AFirstPersonCharacter::StopAttack()
 {
-	bIsAttacking = false;
-
-	// Resetiraj progress ako pustimo tipku
-	if (IsValid(CurrentlyLookedAtBlock))
+	// Pustena tipka resetira progres i brise pukotinu
+	if (MiningComponent)
 	{
-		CurrentlyLookedAtBlock->ResetDestroyProgress();
+		MiningComponent->StopMining();
 	}
 }
 

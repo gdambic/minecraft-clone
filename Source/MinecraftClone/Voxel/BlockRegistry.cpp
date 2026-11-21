@@ -1,6 +1,8 @@
 #include "BlockRegistry.h"
 #include "Engine/GameInstance.h"
 #include "Engine/Texture2D.h"
+#include "Sound/SoundBase.h"
+#include "Sound/SoundAttenuation.h"
 #include "Materials/MaterialInterface.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Kismet/GameplayStatics.h"
@@ -14,6 +16,45 @@ namespace
 {
 	// Zajednicki defaulti - JSON ih navodi samo kad odstupa
 	const TCHAR* GDefaultBlockMeshPath = TEXT("/Engine/BasicShapes/Cube.Cube");
+
+	/** Attenuation za zvukove blokova (radi ga Scripts/import_block_sounds.py) */
+	const TCHAR* GBlockSoundAttenuationPath = TEXT("/Game/Audio/SA_BlockSounds.SA_BlockSounds");
+
+	/**
+	 * JSON pise citljivu putanju paketa ("/Game/Audio/Blocks/Stone/Hit_1"), a
+	 * FSoftObjectPath treba i ime objekta - dopisi ga ako fali.
+	 */
+	FSoftObjectPath MakeAssetPath(const FString& PackagePath)
+	{
+		if (PackagePath.Contains(TEXT(".")))
+		{
+			return FSoftObjectPath(PackagePath);
+		}
+
+		FString AssetName;
+		PackagePath.Split(TEXT("/"), nullptr, &AssetName, ESearchCase::CaseSensitive, ESearchDir::FromEnd);
+		return FSoftObjectPath(FString::Printf(TEXT("%s.%s"), *PackagePath, *AssetName));
+	}
+
+	/** Procitaj polje s listom putanja do zvukova iz jednog unosa BlockSounds.json */
+	void ReadSoundPaths(const TSharedPtr<FJsonObject>& Entry, const TCHAR* Field,
+		TArray<FSoftObjectPath>& OutPaths)
+	{
+		const TArray<TSharedPtr<FJsonValue>>* Values = nullptr;
+		if (!Entry->TryGetArrayField(Field, Values))
+		{
+			return;
+		}
+
+		for (const TSharedPtr<FJsonValue>& Value : *Values)
+		{
+			FString PackagePath;
+			if (Value.IsValid() && Value->TryGetString(PackagePath) && !PackagePath.IsEmpty())
+			{
+				OutPaths.Add(MakeAssetPath(PackagePath));
+			}
+		}
+	}
 
 	/** Ucitaj Content/Data/<FileName> i deserijaliziraj kao JSON array. */
 	bool LoadJsonArrayFromContentData(const FString& FileName, TArray<TSharedPtr<FJsonValue>>& OutEntries)
@@ -45,13 +86,14 @@ void UBlockRegistry::Initialize(FSubsystemCollectionBase& Collection)
 	LoadBlocksFromJson();
 	LoadItemsFromJson();
 	LoadBiomesFromJson();
+	LoadBlockSoundsFromJson();
 
 	// Fallback nakon oba loadera - rupa u JSON-u ne smije znaciti rupu u igri
 	RegisterFallbackBlocks();
 	RegisterFallbackItems();
 
-	UE_LOG(LogTemp, Log, TEXT("BlockRegistry: Initialized with %d blocks, %d items and %d biomes"),
-		BlockDefinitions.Num(), ItemDefinitions.Num(), BiomeDefinitions.Num());
+	UE_LOG(LogTemp, Log, TEXT("BlockRegistry: Initialized with %d blocks, %d items, %d biomes and %d sound grupa"),
+		BlockDefinitions.Num(), ItemDefinitions.Num(), BiomeDefinitions.Num(), BlockSoundSets.Num());
 }
 
 void UBlockRegistry::RegisterBlock(const FBlockDefinition& Definition)
@@ -175,6 +217,116 @@ void UBlockRegistry::LoadItemsFromJson()
 
 		RegisterItem(Def);
 	}
+}
+
+void UBlockRegistry::LoadBlockSoundsFromJson()
+{
+	TArray<TSharedPtr<FJsonValue>> Entries;
+	if (!LoadJsonArrayFromContentData(TEXT("BlockSounds.json"), Entries))
+	{
+		UE_LOG(LogTemp, Error, TEXT("BlockRegistry: bez BlockSounds.json blokovi nemaju zvuk"));
+		return;
+	}
+
+	const UEnum* GroupEnum = StaticEnum<EBlockSoundGroup>();
+
+	for (int32 Index = 0; Index < Entries.Num(); ++Index)
+	{
+		const TSharedPtr<FJsonObject>* EntryObject = nullptr;
+		if (!Entries[Index].IsValid() || !Entries[Index]->TryGetObject(EntryObject))
+		{
+			UE_LOG(LogTemp, Error, TEXT("BlockRegistry: BlockSounds.json unos #%d se ne moze parsirati - preskacem"), Index);
+			continue;
+		}
+
+		FString GroupName;
+		const int64 GroupValue = (*EntryObject)->TryGetStringField(TEXT("group"), GroupName)
+			? GroupEnum->GetValueByNameString(GroupName)
+			: INDEX_NONE;
+
+		if (GroupValue == INDEX_NONE || (EBlockSoundGroup)GroupValue == EBlockSoundGroup::None)
+		{
+			UE_LOG(LogTemp, Error, TEXT("BlockRegistry: BlockSounds.json unos #%d ima nepoznatu grupu '%s' - preskacem"),
+				Index, *GroupName);
+			continue;
+		}
+
+		FBlockSoundSet Set;
+		ReadSoundPaths(*EntryObject, TEXT("hit"), Set.HitSounds);
+		ReadSoundPaths(*EntryObject, TEXT("break"), Set.BreakSounds);
+		ReadSoundPaths(*EntryObject, TEXT("place"), Set.PlaceSounds);
+
+		BlockSoundSets.Add((EBlockSoundGroup)GroupValue, Set);
+	}
+}
+
+EBlockSoundGroup UBlockRegistry::GetBlockSoundGroup(EBlockType BlockType) const
+{
+	const FBlockDefinition* Def = GetBlockDefinition(BlockType);
+	const EBlockSoundGroup Group = Def ? Def->SoundGroup : EBlockSoundGroup::None;
+
+	// Blok bez grupe (ili s grupom koje nema u JSON-u) zvuci kao kamen -
+	// radije kriv zvuk nego tisina, ista logika kao sivi fallback blok.
+	return BlockSoundSets.Contains(Group) ? Group : EBlockSoundGroup::Stone;
+}
+
+USoundBase* UBlockRegistry::GetRandomBlockSound(EBlockType BlockType, EBlockSoundEvent Event)
+{
+	const EBlockSoundGroup Group = GetBlockSoundGroup(BlockType);
+
+	const FBlockDefinition* Def = GetBlockDefinition(BlockType);
+	if ((!Def || Def->SoundGroup != Group) && !ReportedSoundFallbacks.Contains(BlockType))
+	{
+		ReportedSoundFallbacks.Add(BlockType);
+		UE_LOG(LogTemp, Error, TEXT("BlockRegistry: blok '%s' nema sound grupu - koristim Stone"),
+			*StaticEnum<EBlockType>()->GetNameStringByValue((int64)BlockType));
+	}
+
+	const FBlockSoundSet* Set = BlockSoundSets.Find(Group);
+	if (!Set)
+	{
+		return nullptr;
+	}
+
+	const TArray<FSoftObjectPath>& Paths = Set->GetSounds(Event);
+	if (Paths.Num() == 0)
+	{
+		return nullptr;
+	}
+
+	const FSoftObjectPath& Path = Paths[FMath::RandRange(0, Paths.Num() - 1)];
+	const FName CacheKey(*Path.ToString());
+	if (const TObjectPtr<USoundBase>* Cached = BlockSoundCache.Find(CacheKey))
+	{
+		return *Cached;
+	}
+
+	USoundBase* Sound = Cast<USoundBase>(Path.TryLoad());
+	if (!Sound)
+	{
+		UE_LOG(LogTemp, Error, TEXT("BlockRegistry: zvuk ne postoji na %s"), *Path.ToString());
+	}
+
+	BlockSoundCache.Add(CacheKey, Sound);
+	return Sound;
+}
+
+USoundAttenuation* UBlockRegistry::GetBlockSoundAttenuation()
+{
+	if (!bBlockSoundAttenuationLoaded)
+	{
+		bBlockSoundAttenuationLoaded = true;
+		BlockSoundAttenuation = Cast<USoundAttenuation>(
+			FSoftObjectPath(GBlockSoundAttenuationPath).TryLoad());
+
+		if (!BlockSoundAttenuation)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("BlockRegistry: nema %s - zvukovi blokova bit ce bez prostornog pada"),
+				GBlockSoundAttenuationPath);
+		}
+	}
+
+	return BlockSoundAttenuation;
 }
 
 void UBlockRegistry::LoadBiomesFromJson()

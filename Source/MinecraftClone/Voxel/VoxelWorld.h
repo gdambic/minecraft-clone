@@ -14,6 +14,7 @@ class AZombie;
 class AMobBase;
 class UInstancedStaticMeshComponent;
 class ANavMeshBoundsVolume;
+class UBlockCrackComponent;
 struct FHitResult;
 
 /** Jedan unos u spawn listi pasivnih mobova: koja klasa i koliko komada. */
@@ -158,8 +159,8 @@ public:
 	FBox GetBlockOutlineBox(EBlockType Type);
 
 	/**
-	 * Ukloni instancu i spawnaj ABlock actor koji preuzima progress kopanja i
-	 * drop. Vraca postojeci actor ako je pozicija vec promovirana.
+	 * Ukloni instancu i spawnaj ABlock actor za fokusirani blok. Vraca
+	 * postojeci actor ako je pozicija vec promovirana.
 	 * Invarijanta: za jednu poziciju postoji ILI instanca ILI actor, nikad oboje.
 	 */
 	ABlock* PromoteToActor(FIntVector Pos);
@@ -169,9 +170,16 @@ public:
 
 	/**
 	 * Unisti blok na poziciji s drop sansom iz registry definicije - bez
-	 * promoviranja u actor. Koristi leaf decay.
+	 * promoviranja u actor. Koriste ga kopanje i leaf decay. bDropItems=false
+	 * je lom bez dropa (kopanje bez alata koji blok zahtijeva).
 	 */
-	void DestroyBlockAt(FIntVector Pos);
+	void DestroyBlockAt(FIntVector Pos, bool bDropItems = true);
+
+	/**
+	 * Pukotina kopaca na bloku: Stage 0..9, -1 je brise. BreakerId razlikuje
+	 * kopace (svaki ima najvise jednu pukotinu). Docs/PLAN_BlockDamage.md.
+	 */
+	void SetBlockCrack(uint32 BreakerId, FIntVector Pos, int32 Stage);
 
 	/** Tip bloka iz podataka chunka; Air ako chunk nije ucitan ili je celija prazna. */
 	UFUNCTION(BlueprintPure, Category = "World")
@@ -190,7 +198,7 @@ public:
 	FBiomeDefinition GetBiomeAt(int32 X, int32 Y) const;
 
 	/**
-	 * Poziva ABlock nakon što je uništen (drop je već spawnan).
+	 * Poziva DestroyBlockAt nakon što je drop već spawnan.
 	 * Uklanja podatke i actor, lazy-spawna izložene susjede i pokreće leaf decay.
 	 */
 	void NotifyBlockDestroyed(FIntVector GridPosition, EBlockType DestroyedType);
@@ -235,6 +243,10 @@ private:
 	/** Promovirani actori - u praksi najvise 1 (blok koji igrac gleda). */
 	UPROPERTY()
 	TMap<FIntVector, ABlock*> Blocks;
+
+	/** Crta pukotine blokova koji se kopaju */
+	UPROPERTY()
+	TObjectPtr<UBlockCrackComponent> CrackComponent;
 
 	FVoxelChunk* FindChunk(const FIntPoint& Coord);
 	const FVoxelChunk* FindChunk(const FIntPoint& Coord) const;
