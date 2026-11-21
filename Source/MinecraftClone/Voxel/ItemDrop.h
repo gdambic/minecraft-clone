@@ -8,6 +8,7 @@
 class USphereComponent;
 class UProceduralMeshComponent;
 class UBlockRegistry;
+class ACharacter;
 
 UCLASS()
 class MINECRAFTCLONE_API AItemDrop : public AActor
@@ -43,9 +44,17 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "ItemDrop")
 	float RotationSpeed;
 
-	/** Radius za automatski pickup */
+	/** Vrijeme od nastanka do mogucnosti pickupa (vanilla: 10 tickova za drop iz bloka) */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "ItemDrop")
-	float PickupRadius;
+	float PickupDelay;
+
+	/** Pickup zona = hitbox igraca prosiren ovoliko vodoravno (vanilla: 1 blok) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "ItemDrop")
+	float PickupReachHorizontal;
+
+	/** Pickup zona = hitbox igraca prosiren ovoliko gore i dolje (vanilla: 0.5 bloka) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "ItemDrop")
+	float PickupReachVertical;
 
 	/** Brzina padanja (UE jedinica/sekunda) */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "ItemDrop")
@@ -65,16 +74,22 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "ItemDrop", meta = (WorldContext = "WorldContextObject"))
 	static AItemDrop* SpawnItemDrop(const UObject* WorldContextObject, EItemType Type, FVector Location);
 
-protected:
-	virtual void BeginPlay() override;
-
-	UFUNCTION()
-	void OnOverlapBegin(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor,
-		UPrimitiveComponent* OtherComp, int32 OtherBodyIndex,
-		bool bFromSweep, const FHitResult& SweepResult);
-
 private:
+	/** Je li igrac u pickup zoni i ima li mjesta u inventaru - ako da, krene let */
+	void TryPickup();
+
+	/** Pomakni drop prema igracu; vraca true kad je let gotov */
+	bool TickPickupFlight(float DeltaTime);
+
 	float CurrentLifetime;
+
+	/** Pola visine vidljivog mesha - drop lezi toliko (+ razmak) iznad tla */
+	float HalfVisualHeight = 12.5f;
+
+	/** Igrac koji je pokupio drop; drop leti prema njemu i nestaje */
+	TWeakObjectPtr<ACharacter> PickupTarget;
+	FVector PickupStartLocation = FVector::ZeroVector;
+	float PickupFlightTime = 0.0f;
 
 	/** Je li mesh flat sprite quad (display type "sprite") umjesto mini kocke */
 	bool bIsSpriteDrop = false;

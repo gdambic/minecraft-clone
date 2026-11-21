@@ -221,10 +221,9 @@ void UBlockMiningComponent::PlayHitSound(float DeltaTime)
 		Previous->FadeOut(UBlockSoundLibrary::GetHitSoundFadeOut(), 0.0f);
 	}
 
-	const float HalfBlock = VoxelWorld->BlockSize * 0.5f;
 	HitSoundComponent = UBlockSoundLibrary::PlayBlockSound(this, VoxelWorld->GetBlockTypeAt(TargetPos),
 		EBlockSoundEvent::Hit,
-		VoxelWorld->GridToWorld(TargetPos.X, TargetPos.Y, TargetPos.Z) + FVector(HalfBlock));
+		VoxelWorld->GridToWorld(TargetPos.X, TargetPos.Y, TargetPos.Z));
 }
 
 // ==================== Dijagnostika: voxel.cracktest ====================

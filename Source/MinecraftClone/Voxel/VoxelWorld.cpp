@@ -1200,9 +1200,13 @@ void AVoxelWorld::DestroyBlockAt(FIntVector Pos, bool bDropItems)
 	const FBlockDefinition* Def = Registry ? Registry->GetBlockDefinition(Type) : nullptr;
 	if (bDropItems && Def && Def->DropItemType != EItemType::None && FMath::FRand() < Def->DropChance)
 	{
-		const float HalfBlock = BlockSize * 0.5f;
+		// GridToWorld je srediste bloka (kocka centrirana na pivotu). Kao u
+		// Minecraftu (Block.popResource) drop dobije pomak do ±0.25 bloka po osi.
+		const float Jitter = BlockSize * 0.25f;
 		const FVector DropLocation = GridToWorld(Pos.X, Pos.Y, Pos.Z)
-			+ FVector(HalfBlock, HalfBlock, HalfBlock);
+			+ FVector(FMath::FRandRange(-Jitter, Jitter),
+			          FMath::FRandRange(-Jitter, Jitter),
+			          FMath::FRandRange(-Jitter, Jitter));
 		AItemDrop::SpawnItemDrop(this, Def->DropItemType, DropLocation);
 	}
 
@@ -1221,10 +1225,8 @@ void AVoxelWorld::NotifyBlockDestroyed(FIntVector GridPosition, EBlockType Destr
 {
 	// Jedina tocka kroz koju prolazi svako unistenje (kopanje, DestroyBlockAt,
 	// leaf decay), a chunk unload ne ide kroz nju - zato zvuk loma stoji ovdje.
-	const float HalfBlock = BlockSize * 0.5f;
 	UBlockSoundLibrary::PlayBlockSound(this, DestroyedType, EBlockSoundEvent::Break,
-		GridToWorld(GridPosition.X, GridPosition.Y, GridPosition.Z)
-			+ FVector(HalfBlock, HalfBlock, HalfBlock));
+		GridToWorld(GridPosition.X, GridPosition.Y, GridPosition.Z));
 
 	SetBlockData(GridPosition, EBlockType::Air, /*bMarkModified=*/true);
 
@@ -1387,10 +1389,8 @@ bool AVoxelWorld::PlaceBlockAt(FIntVector GridPosition, EBlockType Type)
 	// Postavljeni blok je po definiciji izlozen - odmah dodaj instancu
 	AddBlockInstance(GridPosition, Type);
 
-	const float HalfBlock = BlockSize * 0.5f;
 	UBlockSoundLibrary::PlayBlockSound(this, Type, EBlockSoundEvent::Place,
-		GridToWorld(GridPosition.X, GridPosition.Y, GridPosition.Z)
-			+ FVector(HalfBlock, HalfBlock, HalfBlock));
+		GridToWorld(GridPosition.X, GridPosition.Y, GridPosition.Z));
 
 	return true;
 }

@@ -67,6 +67,10 @@ WoodenPickaxe`): kopa blok ispod igrača simuliranim frameovima i za svaku fazu
 ispiše `[CRACK] blok=... faza=N`, a na kraju `[CRACK] lom t=... (ocekivano ...)`.
 U headless runu se proces nakon testova sam ugasi.
 
+Pickup dropa mjeri `voxel.pickuptest`: spawna drop u pickup zoni igraca i jedan
+izvan nje; `[PICKUP] ... pokupljen nakon 0.50 s` i `let gotov nakon 0.150 s` =
+prolaz (dalji drop se ne smije pokupiti). Proces se nakon testa sam ugasi.
+
 Knockback se mjeri komandom `voxel.kbtest [jacina...]` (default `0.4 0.9`
 blokova/tick): odbaci stvorenje najbliže igraču i u log ispiše `[KB]` linije s
 jačinom, brzinom i dometom pri doskoku. U headless runu (`-ExecCmds="voxel.kbtest"`)
