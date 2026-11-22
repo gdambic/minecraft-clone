@@ -186,6 +186,18 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Inventory|HeldItem")
 	bool PlaceOne(int32 SlotIndex);
 
+	/** Spusti do Amount itema iz "ruke" u slot (prazan ili istog tipa, postuje max stack). Drag-split u UI-ju. */
+	UFUNCTION(BlueprintCallable, Category = "Inventory|HeldItem")
+	bool PlaceAmount(int32 SlotIndex, int32 Amount);
+
+	/**
+	 * Dvostruki klik s itemom u ruci: skupi u ruku sve iteme istog tipa do max stacka.
+	 * Prvo nepuni stackovi, pa puni; redom crafting grid, main, hotbar; output se preskace.
+	 * Vraca broj skupljenih itema.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Inventory|HeldItem")
+	int32 CollectAll();
+
 	/** Quick-move (shift+klik): main<->hotbar; crafting input/output ide u inventar. */
 	UFUNCTION(BlueprintCallable, Category = "Inventory")
 	bool QuickMove(int32 SlotIndex);
@@ -238,6 +250,13 @@ private:
 
 	/** Emitira OnSlotChanged delegate */
 	void BroadcastSlotChanged(int32 SlotIndex);
+
+	/**
+	 * Klik na output (lijevi ili desni): craftaj jednom u "ruku". Prazna ruka
+	 * uzima rezultat; ruka s istim itemom ga nadopunjuje ako stane u max stack.
+	 * Inace nista (Minecraft ponasanje).
+	 */
+	bool TakeCraftingOutput();
 
 	/**
 	 * Dodaj item samo u raspon slotova [RangeStart, RangeEndExclusive):

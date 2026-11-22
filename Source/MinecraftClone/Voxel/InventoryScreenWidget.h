@@ -89,4 +89,45 @@ private:
 
 	void ResolveInventoryComponent();
 	void CreateCursorSlot();
+
+	// ==================== Drag-split (Minecraft povlacenje s itemom u ruci) ====================
+	// Pritisak s itemom u ruci ne djeluje odmah: slotovi preko kojih mis prijede
+	// skupljaju se dok se tipka ne otpusti. Desna = po 1 u svaki, lijeva = stack
+	// ravnomjerno podijeljen. Samo jedan slot = obican klik na njega.
+
+	bool bDragActive = false;
+	bool bDragRight = false;
+	int32 DragPressSlot = -1;
+	TArray<int32> DragSlots;
+
+	/** Slot moze primiti drag: aktivan, nije output, prazan ili isti tip koji nije pun */
+	bool CanDragInto(int32 SlotIndex) const;
+
+	/** Koliko svaki drag slot dobiva (paralelno s DragSlots) i koliko ostaje u ruci */
+	void ComputeDragAmounts(TArray<int32>& OutAmounts, int32& OutRemaining) const;
+
+	/** Prikaz rasporeda u slotovima i cursor slotu dok tipka jos nije otpustena */
+	void ApplyDragPreview();
+
+	/** Tipka otpustena: rasporedi iteme (ili obican klik ako je slot samo jedan) */
+	void FinishDrag();
+
+	UInventorySlotWidget* FindSlotWidget(int32 SlotIndex) const;
+
+	// ==================== Dvostruki klik (Minecraft prag 250 ms, mjeri se ovdje) ====================
+
+	/** Najveci razmak dva lijeva klika na isti slot koji se broji kao dvostruki klik */
+	static constexpr double DoubleClickSeconds = 0.25;
+
+	double LastLeftClickTime = 0.0;
+	int32 LastLeftClickSlot = -1;
+
+	/** Tip itema zadnjeg shift+klika - shift+dvostruki klik premjesta sve takve */
+	EItemType LastQuickMovedType = EItemType::None;
+
+	/** Lijevi pritisak: je li ovo drugi klik dvostrukog klika (i zapamti ovaj) */
+	bool RegisterLeftClick(int32 SlotIndex);
+
+	/** Shift+dvostruki klik: quick-move svaki slot s LastQuickMovedType u istom dijelu inventara */
+	void QuickMoveAllOfType(int32 ClickedSlot);
 };

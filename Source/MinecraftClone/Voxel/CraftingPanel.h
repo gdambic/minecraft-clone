@@ -49,6 +49,9 @@ public:
 	/** Osvjezi prikaz svih slotova iz inventara */
 	void Refresh(const UInventoryComponent* InventoryComp);
 
+	/** Slot widget s danim inventory indexom (nullptr ako nije u ovom panelu) */
+	UInventorySlotWidget* FindSlotWidget(int32 SlotIndex) const;
+
 private:
 	UPROPERTY()
 	TArray<TObjectPtr<UInventorySlotWidget>> InputSlotWidgets;

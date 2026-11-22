@@ -79,6 +79,21 @@ void UPlayerInventoryPanel::Refresh(const UInventoryComponent* InventoryComp)
 	}
 }
 
+UInventorySlotWidget* UPlayerInventoryPanel::FindSlotWidget(int32 SlotIndex) const
+{
+	for (const TArray<TObjectPtr<UInventorySlotWidget>>* Widgets : { &MainSlotWidgets, &HotbarSlotWidgets })
+	{
+		for (UInventorySlotWidget* SlotWidget : *Widgets)
+		{
+			if (SlotWidget && SlotWidget->SlotIndex == SlotIndex)
+			{
+				return SlotWidget;
+			}
+		}
+	}
+	return nullptr;
+}
+
 UInventorySlotWidget* UPlayerInventoryPanel::CreateSlotWidget(int32 SlotIndex)
 {
 	UInventorySlotWidget* SlotWidget = CreateWidget<UInventorySlotWidget>(GetOwningPlayer(), SlotWidgetClass);

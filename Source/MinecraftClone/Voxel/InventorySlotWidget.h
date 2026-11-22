@@ -18,7 +18,9 @@ enum class EInventoryClickType : uint8
 {
 	Left,
 	Right,
-	ShiftLeft
+	ShiftLeft,
+	/** Mis je usao u slot (ekran ga koristi samo dok traje drag-split) */
+	DragEnter
 };
 
 /** Delegate za klik na slot */
@@ -73,6 +75,10 @@ public:
 	/** Boja pozadine kada je slot prazan */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Inventory Slot|Style")
 	FLinearColor EmptySlotColor = FLinearColor(0.1f, 0.1f, 0.1f, 0.8f);
+
+	/** Bez pozadine slota (cursor slot koji prati mis prikazuje samo item) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Inventory Slot|Style")
+	bool bTransparentBackground = false;
 
 	// ==================== Slot identifikacija ====================
 
@@ -147,6 +153,9 @@ public:
 protected:
 	virtual void NativeConstruct() override;
 	virtual FReply NativeOnMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
+	/** Slate brzi drugi klik salje kao double-click - tretira se kao obican klik */
+	virtual FReply NativeOnMouseButtonDoubleClick(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
+	virtual void NativeOnMouseEnter(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
 
 private:
 	/** Handler za klik na button */

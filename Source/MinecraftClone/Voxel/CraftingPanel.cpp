@@ -72,6 +72,22 @@ void UCraftingPanel::Refresh(const UInventoryComponent* InventoryComp)
 	}
 }
 
+UInventorySlotWidget* UCraftingPanel::FindSlotWidget(int32 SlotIndex) const
+{
+	if (OutputSlotWidget && OutputSlotWidget->SlotIndex == SlotIndex)
+	{
+		return OutputSlotWidget;
+	}
+	for (UInventorySlotWidget* SlotWidget : InputSlotWidgets)
+	{
+		if (SlotWidget && SlotWidget->SlotIndex == SlotIndex)
+		{
+			return SlotWidget;
+		}
+	}
+	return nullptr;
+}
+
 UInventorySlotWidget* UCraftingPanel::CreateSlotWidget(int32 SlotIndex)
 {
 	UInventorySlotWidget* SlotWidget = CreateWidget<UInventorySlotWidget>(GetOwningPlayer(), SlotWidgetClass);

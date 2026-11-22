@@ -43,6 +43,19 @@ FReply UInventorySlotWidget::NativeOnMouseButtonDown(const FGeometry& InGeometry
 	return Super::NativeOnMouseButtonDown(InGeometry, InMouseEvent);
 }
 
+FReply UInventorySlotWidget::NativeOnMouseButtonDoubleClick(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent)
+{
+	return NativeOnMouseButtonDown(InGeometry, InMouseEvent);
+}
+
+void UInventorySlotWidget::NativeOnMouseEnter(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent)
+{
+	Super::NativeOnMouseEnter(InGeometry, InMouseEvent);
+
+	// Ekran ignorira ako drag-split nije u tijeku
+	OnSlotInteracted.Broadcast(SlotIndex, EInventoryClickType::DragEnter);
+}
+
 void UInventorySlotWidget::OnClickButtonClicked()
 {
 	OnSlotInteracted.Broadcast(SlotIndex, EInventoryClickType::Left);
@@ -54,7 +67,14 @@ void UInventorySlotWidget::SetSelected(bool bSelected)
 
 	if (SlotBorder)
 	{
-		SlotBorder->SetBrushColor(bSelected ? SelectedBorderColor : DefaultBorderColor);
+		if (bTransparentBackground)
+		{
+			SlotBorder->SetBrushColor(FLinearColor::Transparent);
+		}
+		else
+		{
+			SlotBorder->SetBrushColor(bSelected ? SelectedBorderColor : DefaultBorderColor);
+		}
 	}
 }
 
