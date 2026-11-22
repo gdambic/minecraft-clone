@@ -3,11 +3,17 @@
 #include "FirstPersonCharacter.h"
 #include "Components/HorizontalBox.h"
 #include "Components/HorizontalBoxSlot.h"
+#include "Components/TextBlock.h"
+#include "BlockRegistry.h"
 #include "Engine/DataTable.h"
 
 void UHotbarWidget::NativeConstruct()
 {
 	Super::NativeConstruct();
+
+	// Ime itema je skriveno dok se odabrani item ne promijeni
+	ItemNameTimeLeft = 0.0f;
+	ApplyItemNameOpacity();
 
 	// Automatski pronađi player charactera ako nije postavljen
 	if (!PlayerCharacter)
@@ -122,6 +128,12 @@ void UHotbarWidget::HandleSlotChanged(int32 SlotIndex, FInventorySlot NewSlot)
 			SlotWidget->SetSlotData(NewSlot.ItemType, NewSlot.Quantity);
 		}
 	}
+
+	// Promjena sadrzaja odabranog slota (pickup u prazan slot, lom alata) pali ime kao u Minecraftu
+	if (HotbarIndex == CurrentSelectedIndex)
+	{
+		UpdateItemNameHighlight(true);
+	}
 }
 
 void UHotbarWidget::SelectedItemChanged(int32 NewIndex, EItemType NewItemType)
@@ -146,6 +158,8 @@ void UHotbarWidget::SelectedItemChanged(int32 NewIndex, EItemType NewItemType)
 
 	// Ažuriraj trenutni index
 	CurrentSelectedIndex = NewIndex;
+
+	UpdateItemNameHighlight(true);
 }
 
 void UHotbarWidget::RefreshAllSlots()
@@ -211,6 +225,72 @@ void UHotbarWidget::RefreshAllSlots()
 
 	// Ažuriraj trenutni selektirani index
 	CurrentSelectedIndex = SelectedIndex;
+
+	// Samo zapamti item u ruci - ulazak u svijet ne pokazuje ime
+	UpdateItemNameHighlight(false);
+}
+
+void UHotbarWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
+{
+	Super::NativeTick(MyGeometry, InDeltaTime);
+
+	if (ItemNameTimeLeft > 0.0f)
+	{
+		ItemNameTimeLeft = FMath::Max(0.0f, ItemNameTimeLeft - InDeltaTime);
+		ApplyItemNameOpacity();
+	}
+}
+
+void UHotbarWidget::UpdateItemNameHighlight(bool bAllowShow)
+{
+	UInventoryComponent* InvComp = GetInventoryComponent();
+	const EItemType CurrentItem = InvComp
+		? InvComp->GetSlot(HotbarStartIndex + CurrentSelectedIndex).ItemType
+		: EItemType::None;
+
+	if (CurrentItem == EItemType::None)
+	{
+		// Prazan slot: ime odmah nestaje
+		ItemNameTimeLeft = 0.0f;
+	}
+	else if (CurrentItem != LastHighlightedItem && bAllowShow)
+	{
+		// Drugi item: upisi ime i pokreni timer (isti item, npr. promjena kolicine, ne resetira)
+		const UBlockRegistry* Registry = UBlockRegistry::Get(this);
+		const FItemDefinition* Def = Registry ? Registry->GetItemDefinition(CurrentItem) : nullptr;
+		const FText Name = Def ? Def->DisplayName : FText::GetEmpty();
+
+		if (SelectedItemName)
+		{
+			SelectedItemName->SetText(Name);
+		}
+		ItemNameTimeLeft = ItemNameDisplayTime;
+		UE_LOG(LogTemp, Log, TEXT("[ITEMNAME] prikaz \"%s\" na %.2f s"), *Name.ToString(), ItemNameDisplayTime);
+	}
+
+	LastHighlightedItem = CurrentItem;
+	ApplyItemNameOpacity();
+}
+
+void UHotbarWidget::ApplyItemNameOpacity()
+{
+	if (!SelectedItemName)
+	{
+		return;
+	}
+
+	if (ItemNameTimeLeft <= 0.0f)
+	{
+		SelectedItemName->SetVisibility(ESlateVisibility::Hidden);
+		return;
+	}
+
+	// Puna alfa do zadnjih ItemNameFadeTime sekundi, zatim linearno do nule
+	const float Alpha = ItemNameFadeTime > 0.0f
+		? FMath::Clamp(ItemNameTimeLeft / ItemNameFadeTime, 0.0f, 1.0f)
+		: 1.0f;
+	SelectedItemName->SetRenderOpacity(Alpha);
+	SelectedItemName->SetVisibility(ESlateVisibility::HitTestInvisible);
 }
 
 UInventorySlotWidget* UHotbarWidget::GetSlotWidget(int32 Index) const

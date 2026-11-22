@@ -6,6 +6,7 @@
 #include "HotbarWidget.generated.h"
 
 class UHorizontalBox;
+class UTextBlock;
 class UInventorySlotWidget;
 class AFirstPersonCharacter;
 
@@ -15,6 +16,10 @@ class AFirstPersonCharacter;
  *
  * Potrebni BindWidget elementi u Blueprintu:
  * - SlotContainer (UHorizontalBox) - kontejner za slot widgete
+ *
+ * Opcionalno:
+ * - SelectedItemName (UTextBlock) - ime odabranog itema iznad hotbara
+ *   (Minecraft "selected item name"; Docs/PLAN_ItemNameHighlight.md)
  */
 UCLASS()
 class MINECRAFTCLONE_API UHotbarWidget : public UUserWidget
@@ -28,11 +33,23 @@ public:
 	UPROPERTY(meta = (BindWidget))
 	TObjectPtr<UHorizontalBox> SlotContainer;
 
+	/** Ime odabranog itema iznad hotbara - opcionalno, ime u Blueprintu "SelectedItemName" */
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> SelectedItemName;
+
 	// ==================== Konfiguracija ====================
 
 	/** Klasa widgeta za slot (WBP_InventorySlot) */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Hotbar|Config")
 	TSubclassOf<UInventorySlotWidget> InventorySlotWidgetClass;
+
+	/** Koliko dugo se ime itema prikazuje nakon promjene (vanilla 40 tickova = 2 s) */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Hotbar|Config", meta = (ClampMin = "0.1"))
+	float ItemNameDisplayTime = 2.0f;
+
+	/** Zadnjih koliko sekundi ime izblijedi (vanilla 10 tickova = 0.5 s) */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Hotbar|Config", meta = (ClampMin = "0.0"))
+	float ItemNameFadeTime = 0.5f;
 
 	// ==================== Glavne funkcije ====================
 
@@ -99,6 +116,7 @@ public:
 protected:
 	virtual void NativeConstruct() override;
 	virtual void NativeDestruct() override;
+	virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
 
 	/** Array kreeiranih slot widgeta */
 	UPROPERTY(BlueprintReadOnly, Category = "Hotbar|State")
@@ -116,6 +134,22 @@ private:
 	/** Konstante */
 	static constexpr int32 HotbarSlotCount = 9;
 	static constexpr int32 HotbarStartIndex = 27;
+
+	/** Tip itema koji je zadnji put bio u odabranom slotu (za usporedbu kao vanilla lastToolHighlight) */
+	EItemType LastHighlightedItem = EItemType::None;
+
+	/** Preostalo vrijeme prikaza imena (s); 0 = skriveno */
+	float ItemNameTimeLeft = 0.0f;
+
+	/**
+	 * Usporedi item u odabranom slotu sa zapamcenim: prazan slot skriva ime,
+	 * drugaciji tip pali ime na ItemNameDisplayTime, isti tip ne radi nista.
+	 * @param bAllowShow - false pri inicijalnom refreshu (ulazak u svijet ne pokazuje ime)
+	 */
+	void UpdateItemNameHighlight(bool bAllowShow);
+
+	/** Postavi alfu/vidljivost natpisa prema ItemNameTimeLeft */
+	void ApplyItemNameOpacity();
 
 	/** Provjeri je li index validan za hotbar */
 	bool IsValidHotbarIndex(int32 Index) const;
