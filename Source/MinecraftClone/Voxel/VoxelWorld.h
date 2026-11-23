@@ -47,7 +47,7 @@ public:
 	AVoxelWorld();
 
 	/** Z nivo oko kojeg se njise povrsina (Grass). Ispod je Stone. Default 0:
-	 *  teren -HeightAmplitude..+HeightAmplitude, kopanje do WorldMinZ (-24). */
+	 *  teren -HeightAmplitude..+HeightAmplitude, kopanje do WorldMinZ (-128). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "World")
 	int32 SurfaceLevel;
 
@@ -369,6 +369,14 @@ private:
 
 	/** Ima li blok barem jednu izloženu (vidljivu) stranu. Dno svijeta (Z<WorldMinZ) se tretira kao čvrsto. */
 	bool IsBlockExposed(FIntVector Pos) const;
+
+	/**
+	 * Isto sto IsBlockExposed, ali susjede unutar chunka cita izravno iz
+	 * Chunk.Blocks (bez lookupa u mapi chunkova) - vruca petlja ApplyChunkVisuals
+	 * prolazi svaki cvrsti blok chunka. Samo susjedi preko ruba chunka idu
+	 * kroz GetBlockTypeAt.
+	 */
+	bool IsBlockExposedInChunk(const FVoxelChunk& Chunk, const FIntVector& Local) const;
 
 	// === ISM INSTANCE (vizuali) ===
 

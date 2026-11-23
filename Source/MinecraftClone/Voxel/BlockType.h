@@ -18,5 +18,7 @@ enum class EBlockType : uint8
 	BirchLeaves,   // Lišće breze
 	OakPlanks,
 	BirchPlanks,   // Daske od breze
-	CraftingTable  // Crafting stol
+	CraftingTable, // Crafting stol
+	Calcite,       // Kalcit (trake u Stony Peaksu)
+	Gravel         // Šljunak (za sada ne pada)
 };

@@ -122,5 +122,17 @@
     "displayName": "Limestone",
     "material": "/Game/Blocks/Materials/MI_Limestone.MI_Limestone",
     "display": { "type": "block", "block": "Limestone" }
+  },
+  {
+    "itemType": "Calcite",
+    "displayName": "Calcite",
+    "material": "/Game/Blocks/Materials/MI_Calcite.MI_Calcite",
+    "display": { "type": "block", "block": "Calcite" }
+  },
+  {
+    "itemType": "Gravel",
+    "displayName": "Gravel",
+    "material": "/Game/Blocks/Materials/MI_Gravel.MI_Gravel",
+    "display": { "type": "block", "block": "Gravel" }
   }
 ]

@@ -87,7 +87,7 @@ proces se nakon testova sam ugasi da se log flusha.
 | Class | Purpose |
 |-------|---------|
 | `AVoxelWorld` | World manager: chunk streaming (beskonačan svijet), per-chunk ISM vizuali, async generacija |
-| `FVoxelChunk` / `VoxelGrid` | Chunk 16×16×48 (flat array, Air=0) + koordinatni helperi (`VoxelChunk.h`) |
+| `FVoxelChunk` / `VoxelGrid` | Chunk 16×16×256, Z −128..127 (flat array, Air=0) + koordinatni helperi (`VoxelChunk.h`) |
 | `FChunkGenerator` | Čista, thread-safe generacija podataka chunka (teren+stabla+showcase, `ChunkGenerator.h`) |
 | `ABlock` | Individual voxel actor with mesh, destruction system, drop spawning |
 | `AItemDrop` | Physics-enabled dropped items with auto-pickup |
@@ -139,7 +139,7 @@ Configured in `MinecraftClone.Build.cs`:
 ## Key APIs
 
 ```cpp
-// VoxelWorld (beskonačan svijet: chunkovi 16×16×48 streamaju se oko igrača,
+// VoxelWorld (beskonačan svijet: chunkovi 16×16×256 streamaju se oko igrača,
 // generacija na worker threadu; teren = ISM instance PO CHUNKU; ABlock actor
 // postoji samo za fokusirani blok; izmjene prežive unload u RAM-u, ne restart.
 // Streaming properties: VisualRadius (6), ChunkApplyBudgetMs, BootstrapRadius.
@@ -212,6 +212,7 @@ Detailed docs in Croatian available in `Docs/`:
 - `PLAN_Performance.md` - Rendering/performance analysis
 - `PLAN_Knockback.md` - Knockback pri melee udarcu (vanilla formula, sprint-hit, per-mob otpor)
 - `PLAN_Biomes.md` - Biomi i biome tint za Grass/lišće (Biomes.json + PerInstanceCustomData)
+- `PLAN_StonyPeaks.md` - Treći biom Stony Peaks (noise planina, viši svijet, kamena površina s kalcitom, plan)
 - `PLAN_Chunks.md` - Chunk sustav i beskonačan svijet (streaming oko igrača, async generacija)
 - `PLAN_BlockOutline.md` - Minecraft obrub fokusiranog bloka (screen-space linije u vlastitom scene proxyju)
 - `PLAN_BlockSounds.md` - Zvukovi kopanja i lomljenja blokova (sound grupe po materijalu, plan)

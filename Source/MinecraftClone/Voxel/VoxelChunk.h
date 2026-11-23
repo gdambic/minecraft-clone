@@ -28,14 +28,15 @@ namespace VoxelGrid
 
 	/**
 	 * Visina svijeta = zbroj tri komponente (plan 3.1): dubina za kopanje
-	 * + njihaj terena 2*HeightAmplitude + zrak iznad najviseg vrha za stabla
-	 * i gradnju. Povrsina se njise oko Z=0 (SurfaceLevel): kopanje ide u
-	 * minus do WorldMinZ, gradnja u plus do WorldMaxZ.
-	 * Blokovi zive na Z = WorldMinZ..WorldMaxZ.
+	 * + njihaj terena 2*HeightAmplitude + zrak iznad najviseg vrha za stabla,
+	 * planine (PLAN_StonyPeaks.md) i gradnju. Povrsina se njise oko Z=0
+	 * (SurfaceLevel): kopanje ide u minus do WorldMinZ, gradnja u plus do
+	 * WorldMaxZ. Blokovi zive na Z = WorldMinZ..WorldMaxZ (256 slojeva, kao
+	 * Minecraft prije 1.18).
 	 */
-	constexpr int32 WorldHeight = 48;
-	constexpr int32 WorldMinZ = -24;
-	constexpr int32 WorldMaxZ = WorldMinZ + WorldHeight - 1;   // 23
+	constexpr int32 WorldHeight = 256;
+	constexpr int32 WorldMinZ = -128;
+	constexpr int32 WorldMaxZ = WorldMinZ + WorldHeight - 1;   // 127
 
 	constexpr int32 BlocksPerChunk = ChunkSize * ChunkSize * WorldHeight;
 

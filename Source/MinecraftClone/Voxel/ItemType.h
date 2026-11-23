@@ -32,5 +32,8 @@ enum class EItemType : uint8
 
 	WoodenPickaxe,
 
-	Porkchop       // Svinjetina (od svinje)
+	Porkchop,      // Svinjetina (od svinje)
+
+	Calcite,       // Kalcit
+	Gravel         // Šljunak
 };

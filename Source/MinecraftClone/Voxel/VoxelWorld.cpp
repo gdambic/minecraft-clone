@@ -74,7 +74,7 @@ AVoxelWorld::AVoxelWorld()
 	StreamingIntervalSeconds = 0.25f;
 	BootstrapRadius = 2;
 	// Povrsina se njise oko Z=0 (teren -6..6); kopanje ide u minus do
-	// WorldMinZ (-24), zrak za stabla/gradnju u plus do WorldMaxZ (23).
+	// WorldMinZ (-128), zrak za stabla/gradnju u plus do WorldMaxZ (127).
 	SurfaceLevel = 0;
 	WorldSeed = 1337;
 	NoiseScale = 0.08f;
@@ -775,10 +775,9 @@ void AVoxelWorld::ApplyChunkVisuals(FVoxelChunk& Chunk)
 				{
 					continue;
 				}
-				const FIntVector GridPos = Origin + FIntVector(LocalX, LocalY, Z);
-				if (IsBlockExposed(GridPos))
+				if (IsBlockExposedInChunk(Chunk, FIntVector(LocalX, LocalY, Z)))
 				{
-					ExposedByType.FindOrAdd(Type).Add(GridPos);
+					ExposedByType.FindOrAdd(Type).Add(Origin + FIntVector(LocalX, LocalY, Z));
 				}
 			}
 		}
@@ -844,6 +843,42 @@ bool AVoxelWorld::IsBlockExposed(FIntVector Pos) const
 		}
 
 		if (GetBlockTypeAt(N) == EBlockType::Air)
+		{
+			return true;
+		}
+	}
+
+	return false;
+}
+
+bool AVoxelWorld::IsBlockExposedInChunk(const FVoxelChunk& Chunk, const FIntVector& Local) const
+{
+	static const FIntVector Neighbors[6] = {
+		FIntVector(0, 0, 1), FIntVector(0, 0, -1),
+		FIntVector(1, 0, 0), FIntVector(-1, 0, 0),
+		FIntVector(0, 1, 0), FIntVector(0, -1, 0)
+	};
+
+	for (const FIntVector& Offset : Neighbors)
+	{
+		const FIntVector N = Local + Offset;
+
+		// Ista pravila kao IsBlockExposed: dno svijeta je cvrsto, iznad
+		// stropa je zrak (GetBlockTypeAt vraca Air za nevaljani Z)
+		if (N.Z < WorldMinZ)
+		{
+			continue;
+		}
+		if (N.Z > WorldMaxZ)
+		{
+			return true;
+		}
+
+		const bool bInsideChunk = N.X >= 0 && N.X < ChunkSize && N.Y >= 0 && N.Y < ChunkSize;
+		const EBlockType NeighborType = bInsideChunk
+			? Chunk.Blocks[LocalIndex(N)]
+			: GetBlockTypeAt(ChunkOrigin(Chunk.Coord) + N);
+		if (NeighborType == EBlockType::Air)
 		{
 			return true;
 		}

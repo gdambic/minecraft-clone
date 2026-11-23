@@ -143,5 +143,27 @@
     "displayName": "Crafting Table",
     "material": "/Game/Blocks/Materials/MI_CraftingTable.MI_CraftingTable",
     "interaction": "CraftingTable"
+  },
+  {
+    "blockType": "Calcite",
+    "dropItemType": "Calcite",
+    "placeableFromItem": "Calcite",
+    "dropChance": 1.0,
+    "timeToDestroy": 1.5,
+    "toolClass": "pickaxe",
+    "soundGroup": "Stone",
+    "displayName": "Calcite",
+    "material": "/Game/Blocks/Materials/MI_Calcite.MI_Calcite"
+  },
+  {
+    "blockType": "Gravel",
+    "dropItemType": "Gravel",
+    "placeableFromItem": "Gravel",
+    "dropChance": 1.0,
+    "timeToDestroy": 1.5,
+    "toolClass": "shovel",
+    "soundGroup": "Gravel",
+    "displayName": "Gravel",
+    "material": "/Game/Blocks/Materials/MI_Gravel.MI_Gravel"
   }
 ]
