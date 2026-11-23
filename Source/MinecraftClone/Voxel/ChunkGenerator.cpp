@@ -1,5 +1,6 @@
 #include "ChunkGenerator.h"
 #include "TerrainGenerator.h"
+#include "BiomeGenerator.h"
 #include "Math/RandomStream.h"
 
 namespace
@@ -14,12 +15,40 @@ int32 FChunkGenerator::GetTerrainHeight(const FChunkGenParams& Params, int32 X, 
 		Params.NoiseScale, Params.Octaves, Params.SurfaceLevel, Params.HeightAmplitude);
 }
 
-TArray<EBlockType> FChunkGenerator::GenerateChunkData(const FChunkGenParams& Params, const FIntPoint& Coord)
+int32 FChunkGenerator::GetBiomeIndex(const FChunkGenParams& Params, int32 X, int32 Y)
+{
+	return FBiomeGenerator::GetBiomeIndexAt(X, Y, Params.BiomeOffsetX, Params.BiomeOffsetY,
+		Params.BiomeNoiseScale, Params.BiomeCount);
+}
+
+TArray<uint8> FChunkGenerator::GenerateChunkBiomes(const FChunkGenParams& Params, const FIntPoint& Coord)
+{
+	using namespace VoxelGrid;
+
+	TArray<uint8> Biomes;
+	Biomes.SetNumUninitialized(ColumnsPerChunk);
+	const FIntVector Origin = ChunkOrigin(Coord);
+	for (int32 LocalY = 0; LocalY < ChunkSize; LocalY++)
+	{
+		for (int32 LocalX = 0; LocalX < ChunkSize; LocalX++)
+		{
+			Biomes[ColumnIndex(LocalX, LocalY)] =
+				(uint8)GetBiomeIndex(Params, Origin.X + LocalX, Origin.Y + LocalY);
+		}
+	}
+	return Biomes;
+}
+
+TArray<EBlockType> FChunkGenerator::GenerateChunkData(const FChunkGenParams& Params, const FIntPoint& Coord,
+	TArray<uint8>& OutBiomes)
 {
 	using namespace VoxelGrid;
 
 	TArray<EBlockType> Blocks;
 	Blocks.SetNumZeroed(BlocksPerChunk);
+
+	// --- 0. Biomi stupaca (prvi, jer o njima ovisi sve ispod) ---
+	OutBiomes = GenerateChunkBiomes(Params, Coord);
 
 	// --- 1. Teren: height-map po stupcu (grass na vrhu, dirt ispod, stone dublje) ---
 	const FIntVector Origin = ChunkOrigin(Coord);

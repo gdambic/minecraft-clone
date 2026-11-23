@@ -49,7 +49,9 @@ Select-String -Path test.log -Pattern "\[PERF\]|DEBUG|LogNavigation|Error"
 
 Postojeći markeri u logu: `[PERF]` (mjerenje GenerateWorld faza),
 `DEBUG:` (EnemyAIController nav dijagnostika ~2 s nakon starta:
-`Pawn on NavMesh`, `MoveToActor result`). Brojanje ponavljajućih grešaka
+`Pawn on NavMesh`, `MoveToActor result`). `[BIOME]` (stupci po biomu, raspon visine i
+CRC visina/bioma/terena oko (0,0), ispis prije i poslije bootstrapa; isti seed
+mora dati isti CRC). Brojanje ponavljajućih grešaka
 (npr. wander failova) kroz vrijeme dobro otkriva radi li nešto trajno ili
 se samo sporo inicijalizira.
 

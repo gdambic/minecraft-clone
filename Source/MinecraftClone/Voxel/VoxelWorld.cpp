@@ -2,8 +2,6 @@
 #include "Block.h"
 #include "ItemDrop.h"
 #include "ChunkGenerator.h"
-#include "TerrainGenerator.h"
-#include "BiomeGenerator.h"
 #include "TimerManager.h"
 #include "Zombie.h"
 #include "MobBase.h"
@@ -162,6 +160,13 @@ FChunkGenParams AVoxelWorld::MakeChunkGenParams() const
 	Params.Octaves = Octaves;
 	Params.SurfaceLevel = SurfaceLevel;
 	Params.HeightAmplitude = HeightAmplitude;
+	Params.BiomeOffsetX = BiomeOffsetX;
+	Params.BiomeOffsetY = BiomeOffsetY;
+	Params.BiomeNoiseScale = BiomeNoiseScale;
+	if (UBlockRegistry* Registry = UBlockRegistry::Get(this))
+	{
+		Params.BiomeCount = FMath::Clamp(Registry->GetBiomeCount(), 1, 256);   // indeks se sprema kao uint8
+	}
 	Params.TreeAttemptsPerChunk = TreeAttemptsPerChunk;
 	Params.TreeChancePerChunk = TreeChancePerChunk;
 
@@ -232,6 +237,7 @@ void AVoxelWorld::GenerateWorld()
 
 	// Snapshot parametara NAKON postavljanja offseta - streaming ga koristi do kraja igre
 	CachedGenParams = MakeChunkGenParams();
+	LogBiomeDiagnostics();
 
 	// --- Faza 2: bootstrap spawn podrucja (sinkrono - igrac ne smije propasti) ---
 	// Centar je PlayerStart iz levele; podaci se generiraju prsten sire od
@@ -279,6 +285,9 @@ void AVoxelWorld::GenerateWorld()
 	}
 	UE_LOG(LogTemp, Warning, TEXT("[PERF] 3/4 Vizuali    %8.1f ms   %6d instanci"),
 		(T3 - T2) * 1000.0, TotalInstances);
+
+	// Drugi ispis: dio stupaca sad cita biom spremljen u ucitanim chunkovima - CRC mora ostati isti
+	LogBiomeDiagnostics();
 
 	// --- Faza 4: mobovi (oko spawna - dalje od toga zive buduci per-chunk spawn, vidi BACKLOG) ---
 	SpawnEnemies();
@@ -447,12 +456,13 @@ FVoxelChunk& AVoxelWorld::LoadChunkData(const FIntPoint& Coord)
 	if (TArray<EBlockType>* Retained = RetainedModifiedChunks.Find(Coord))
 	{
 		Chunk->Blocks = MoveTemp(*Retained);
+		Chunk->Biomes = FChunkGenerator::GenerateChunkBiomes(CachedGenParams, Coord);
 		Chunk->bModified = true;
 		RetainedModifiedChunks.Remove(Coord);
 	}
 	else
 	{
-		Chunk->Blocks = FChunkGenerator::GenerateChunkData(CachedGenParams, Coord);
+		Chunk->Blocks = FChunkGenerator::GenerateChunkData(CachedGenParams, Coord, Chunk->Biomes);
 	}
 
 	Chunk->State = EChunkState::DataReady;
@@ -486,7 +496,7 @@ void AVoxelWorld::RequestChunkDataAsync(const FIntPoint& Coord)
 		Done.RequestId = RequestId;
 
 		const double Start = FPlatformTime::Seconds();
-		Done.Blocks = FChunkGenerator::GenerateChunkData(Params, Coord);
+		Done.Blocks = FChunkGenerator::GenerateChunkData(Params, Coord, Done.Biomes);
 		Done.GenMs = (FPlatformTime::Seconds() - Start) * 1000.0;
 
 		Queue->Enqueue(MoveTemp(Done));
@@ -507,6 +517,7 @@ void AVoxelWorld::DrainCompletedChunkData()
 		}
 
 		Chunk->Blocks = MoveTemp(Done.Blocks);
+		Chunk->Biomes = MoveTemp(Done.Biomes);
 		Chunk->State = EChunkState::DataReady;
 		SoakVerifyChunkData(*Chunk);
 		UE_LOG(LogTemp, Verbose, TEXT("[PERF] Chunk (%d,%d) gen=%.2fms (worker)"),
@@ -1311,16 +1322,18 @@ ABlock* AVoxelWorld::GetBlock(int32 X, int32 Y, int32 Z)
 
 int32 AVoxelWorld::GetTerrainHeightAt(int32 X, int32 Y) const
 {
-	return FTerrainGenerator::GetColumnHeight(X, Y, NoiseOffsetX, NoiseOffsetY,
-		NoiseScale, Octaves, SurfaceLevel, HeightAmplitude);
+	return FChunkGenerator::GetTerrainHeight(CachedGenParams, X, Y);
 }
 
 int32 AVoxelWorld::GetBiomeIndexAt(int32 X, int32 Y) const
 {
-	UBlockRegistry* Registry = UBlockRegistry::Get(this);
-	const int32 BiomeCount = Registry ? Registry->GetBiomeCount() : 1;
-	return FBiomeGenerator::GetBiomeIndexAt(X, Y, BiomeOffsetX, BiomeOffsetY,
-		BiomeNoiseScale, BiomeCount);
+	// Ucitani chunk nosi biom koji je zapisao generator; formula samo za neucitano
+	const FVoxelChunk* Chunk = FindChunk(GridToChunk(X, Y));
+	if (Chunk && Chunk->Biomes.Num() == ColumnsPerChunk)
+	{
+		return Chunk->Biomes[ColumnIndex(X & ChunkSizeMask, Y & ChunkSizeMask)];
+	}
+	return FChunkGenerator::GetBiomeIndex(CachedGenParams, X, Y);
 }
 
 FBiomeDefinition AVoxelWorld::GetBiomeAt(int32 X, int32 Y) const
@@ -1449,6 +1462,74 @@ TArray<EBlockType> AVoxelWorld::GetPlaceableBlockTypes() const
 	}
 
 	return Result;
+}
+
+// === [BIOME] DIJAGNOSTIKA ===
+
+void AVoxelWorld::LogBiomeDiagnostics() const
+{
+	// Fiksno podrucje oko ishodista (ne oko PlayerStarta) - brojke se mogu
+	// usporedivati izmedu runova i izmedu verzija koda.
+	constexpr int32 HalfSize = 128;
+	constexpr int32 TerrainChunkRadius = 2;
+
+	TArray<int32> ColumnsPerBiome;
+	uint32 ColumnCrc = 0;
+	int32 MinHeight = TNumericLimits<int32>::Max();
+	int32 MaxHeight = TNumericLimits<int32>::Lowest();
+	int32 ColumnsFromChunks = 0;
+	for (int32 Y = -HalfSize; Y < HalfSize; Y++)
+	{
+		for (int32 X = -HalfSize; X < HalfSize; X++)
+		{
+			ColumnsFromChunks += FindChunk(GridToChunk(X, Y)) ? 1 : 0;
+			const int32 Column[2] = { GetTerrainHeightAt(X, Y), GetBiomeIndexAt(X, Y) };
+			ColumnCrc = FCrc::MemCrc32(Column, sizeof(Column), ColumnCrc);
+			MinHeight = FMath::Min(MinHeight, Column[0]);
+			MaxHeight = FMath::Max(MaxHeight, Column[0]);
+			if (!ColumnsPerBiome.IsValidIndex(Column[1]))
+			{
+				ColumnsPerBiome.SetNumZeroed(Column[1] + 1);
+			}
+			ColumnsPerBiome[Column[1]]++;
+		}
+	}
+
+	// Teren + provjera da biom koji generator zapise u chunk odgovara formuli
+	uint32 TerrainCrc = 0;
+	int32 BiomeMismatches = 0;
+	for (int32 CY = -TerrainChunkRadius; CY < TerrainChunkRadius; CY++)
+	{
+		for (int32 CX = -TerrainChunkRadius; CX < TerrainChunkRadius; CX++)
+		{
+			TArray<uint8> ChunkBiomes;
+			const TArray<EBlockType> ChunkBlocks =
+				FChunkGenerator::GenerateChunkData(CachedGenParams, FIntPoint(CX, CY), ChunkBiomes);
+			TerrainCrc = FCrc::MemCrc32(ChunkBlocks.GetData(), ChunkBlocks.Num() * sizeof(EBlockType), TerrainCrc);
+
+			const FIntVector Origin = ChunkOrigin(FIntPoint(CX, CY));
+			for (int32 LocalY = 0; LocalY < ChunkSize; LocalY++)
+			{
+				for (int32 LocalX = 0; LocalX < ChunkSize; LocalX++)
+				{
+					const int32 Formula = FChunkGenerator::GetBiomeIndex(CachedGenParams, Origin.X + LocalX, Origin.Y + LocalY);
+					BiomeMismatches += ChunkBiomes[ColumnIndex(LocalX, LocalY)] != Formula ? 1 : 0;
+				}
+			}
+		}
+	}
+
+	FString Counts;
+	const UBlockRegistry* Registry = UBlockRegistry::Get(this);
+	for (int32 Index = 0; Index < ColumnsPerBiome.Num(); Index++)
+	{
+		const FString Name = Registry ? Registry->GetBiome(Index).Name.ToString() : FString::FromInt(Index);
+		Counts += FString::Printf(TEXT(" %s=%d"), *Name, ColumnsPerBiome[Index]);
+	}
+	UE_LOG(LogTemp, Warning, TEXT("[BIOME] %dx%d stupaca oko (0,0):%s | visina %d..%d"),
+		HalfSize * 2, HalfSize * 2, *Counts, MinHeight, MaxHeight);
+	UE_LOG(LogTemp, Warning, TEXT("[BIOME] CRC stupci=%08X teren(%dx%d chunkova)=%08X | biom iz ucitanih chunkova za %d stupaca, chunk!=formula: %d"),
+		ColumnCrc, TerrainChunkRadius * 2, TerrainChunkRadius * 2, TerrainCrc, ColumnsFromChunks, BiomeMismatches);
 }
 
 // === [PERF] DIJAGNOSTIKA ===

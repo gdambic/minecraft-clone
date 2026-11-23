@@ -40,6 +40,9 @@ namespace VoxelGrid
 
 	constexpr int32 BlocksPerChunk = ChunkSize * ChunkSize * WorldHeight;
 
+	/** Broj stupaca (X,Y) u chunku - velicina per-stupac podataka poput bioma. */
+	constexpr int32 ColumnsPerChunk = ChunkSize * ChunkSize;
+
 	/**
 	 * Grid -> chunk koordinata. Aritmeticki shift radi floor-division i za
 	 * negativne koordinate: (-1 >> 4) == -1. Integer '/' bi dao 0 (bug:
@@ -69,6 +72,12 @@ namespace VoxelGrid
 	FORCEINLINE int32 LocalIndex(const FIntVector& Local)
 	{
 		return ((Local.Z - WorldMinZ) * ChunkSize + Local.Y) * ChunkSize + Local.X;
+	}
+
+	/** Lokalni stupac (X,Y) -> indeks u per-stupac arrayu (ColumnsPerChunk elemenata). */
+	FORCEINLINE int32 ColumnIndex(int32 LocalX, int32 LocalY)
+	{
+		return LocalY * ChunkSize + LocalX;
 	}
 
 	/** Grid pozicija prvog (jugozapadnog) stupca chunka. */
@@ -140,6 +149,7 @@ struct FCompletedChunkData
 	uint64 RequestId = 0;
 	double GenMs = 0.0;
 	TArray<EBlockType> Blocks;
+	TArray<uint8> Biomes;
 };
 
 /**
@@ -153,6 +163,12 @@ struct FVoxelChunk
 
 	/** Izvor istine: flat array BlocksPerChunk celija, Air = odsutnost bloka. Indeksira SAMO VoxelGrid::LocalIndex. */
 	TArray<EBlockType> Blocks;
+
+	/**
+	 * Indeks bioma po stupcu (VoxelGrid::ColumnIndex, ColumnsPerChunk elemenata)
+	 * - zapisuje ga generator, svi ostali samo citaju. Prazno dok podaci nisu gotovi.
+	 */
+	TArray<uint8> Biomes;
 
 	/** Vizuali - ISM set SAMO za tipove prisutne u chunku (lazy kreiranje). */
 	TMap<EBlockType, FChunkInstanceSet> InstanceSets;

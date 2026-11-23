@@ -185,11 +185,11 @@ public:
 	UFUNCTION(BlueprintPure, Category = "World")
 	EBlockType GetBlockTypeAt(FIntVector GridPosition) const;
 
-	/** Visina površine (Z najvišeg čvrstog bloka) na stupcu (X,Y) - isti algoritam kao generacija terena. */
+	/** Visina površine (Z najvišeg čvrstog bloka) na stupcu (X,Y) - FChunkGenerator::GetTerrainHeight nad CachedGenParams. Valjana nakon GenerateWorld. */
 	UFUNCTION(BlueprintPure, Category = "World")
 	int32 GetTerrainHeightAt(int32 X, int32 Y) const;
 
-	/** Indeks bioma stupca (X,Y) u registry listi - deterministicki iz seeda, nigdje se ne sprema. */
+	/** Indeks bioma stupca (X,Y) u registry listi - iz ucitanog chunka (zapisao ga generator), inace FChunkGenerator::GetBiomeIndex. */
 	UFUNCTION(BlueprintPure, Category = "World")
 	int32 GetBiomeIndexAt(int32 X, int32 Y) const;
 
@@ -328,6 +328,9 @@ private:
 
 	/** Usporedi/zapamti CRC podataka chunka (no-op bez soak moda ili za izmijenjene chunkove). */
 	void SoakVerifyChunkData(const FVoxelChunk& Chunk);
+
+	/** [BIOME] dijagnostika: stupci po biomu + CRC visina/bioma/terena oko ishodista (Docs/PLAN_StonyPeaks.md). */
+	void LogBiomeDiagnostics() const;
 
 	/** Jedan hop: teleport igraca (3 istocno pa povratak), na kraju [SOAK] sazetak. */
 	void SoakTestHop();

@@ -23,6 +23,12 @@ struct FChunkGenParams
 	int32 HeightAmplitude = 6;
 	int32 DirtLayers = 3;
 
+	// Biomi (FBiomeGenerator) - BiomeCount je broj bioma u Biomes.json
+	float BiomeOffsetX = 0.f;
+	float BiomeOffsetY = 0.f;
+	float BiomeNoiseScale = 0.012f;
+	int32 BiomeCount = 1;
+
 	// Stabla - deterministicki po chunku (plan 3.5)
 	int32 TreeAttemptsPerChunk = 1;
 	float TreeChancePerChunk = 0.25f;
@@ -54,10 +60,21 @@ struct FTreeCandidate
 class MINECRAFTCLONE_API FChunkGenerator
 {
 public:
-	static TArray<EBlockType> GenerateChunkData(const FChunkGenParams& Params, const FIntPoint& Coord);
+	/** Blokovi chunka; OutBiomes dobiva biom svakog stupca (VoxelGrid::ColumnIndex). */
+	static TArray<EBlockType> GenerateChunkData(const FChunkGenParams& Params, const FIntPoint& Coord,
+		TArray<uint8>& OutBiomes);
 
-	/** Visina povrsine stupca - prosljeduje FTerrainGeneratoru parametre iz Params. */
+	/** Samo biomi stupaca chunka - za chunk ciji blokovi dolaze iz memorije (izmijenjeni chunk). */
+	static TArray<uint8> GenerateChunkBiomes(const FChunkGenParams& Params, const FIntPoint& Coord);
+
+	/**
+	 * Visina povrsine stupca - JEDINA formula visine: koriste je generacija,
+	 * spawn i teleport (AVoxelWorld::GetTerrainHeightAt).
+	 */
 	static int32 GetTerrainHeight(const FChunkGenParams& Params, int32 X, int32 Y);
+
+	/** Indeks bioma stupca - JEDINA formula bioma (generacija i AVoxelWorld::GetBiomeIndexAt). */
+	static int32 GetBiomeIndex(const FChunkGenParams& Params, int32 X, int32 Y);
 
 	/** Deterministicki kandidati stabala jednog chunka (bez upisivanja blokova). */
 	static void GetTreeCandidates(const FChunkGenParams& Params, const FIntPoint& Coord,

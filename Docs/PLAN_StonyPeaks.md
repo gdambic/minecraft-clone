@@ -108,6 +108,14 @@ s `treeDensity` nula ili dodati zasebno polje `passiveMobs`.
 3. **Biom u generaciji.** Parametri bioma ulaze u `FChunkGenParams`, a odabir bioma
    postaje zajednička funkcija za generaciju i tint. Teren se još ne mijenja.
    Provjera: isti seed daje isti raspored boja kao prije.
+   **GOTOVO (2026-11-23).** Visina i biom imaju po jednu formulu u `FChunkGenerator`
+   (`GetTerrainHeight`, `GetBiomeIndex`); `AVoxelWorld` ih samo poziva. Generator
+   uz blokove zapisuje biom svakog stupca u chunk (`FVoxelChunk::Biomes`, 256 B),
+   a tint ga čita odatle. Izmijenjeni chunk iz memorije dobiva biome ponovno
+   izračunate. `[BIOME]` u logu (ispis prije i poslije bootstrapa) dao je isti
+   rezultat kao stari kod: Plains=35628, Desert=29908, CRC stupaca `FDCCB0A5`,
+   CRC terena `8DD5368A`, 0 razlika između spremljenog bioma i formule. Soak
+   prolazi (`FAIL=0`, `RETAINED OK`).
 4. **Noise planina i visina.** Dodaje se noise planina sa smoothstep podizanjem i
    pragom za Stony Peaks. Biom se upisuje u `Biomes.json` (grass `#9ABE4B`, foliage
    `#82AC1E`, `treeDensity` 0). Privremeni log `[BIOME]` ispisuje broj stupaca po
