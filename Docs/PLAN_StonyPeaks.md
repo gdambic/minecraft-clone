@@ -73,11 +73,17 @@ Odabir bioma i visina prelaze u jednu čistu funkciju koju zovu i generacija i
 trava bi na granici dobila boju krivog bioma.
 
 **Površina se čita iz JSON-a.** Biom definira površinski blok, blok ispod njega i
-dubinu tog sloja. Plains i Desert ostaju Grass/Dirt/3, Stony Peaks dobiva Stone/Stone/0.
-Biom uz to može navesti **blok traka** (Calcite) i **blok mrlja** (Gravel). Trake su
-vodoravni slojevi po Z, blago pomaknuti 2D noiseom da ne izgledaju kao ravnalo. Mrlje
-su 2D noise koji na najgornjem bloku zamijeni kamen šljunkom. Andezit se može ubaciti
-kao drugi blok traka, ali to je opcionalno.
+dubinu tog sloja. Plains i Desert ostaju Grass/Dirt/3, Stony Peaks dobiva Stone/Stone/5.
+Biom uz to može navesti **blok pruga** (`stripeBlock`, za Stony Peaks Calcite). Prema
+Minecraftovom pravilu površine (`worldgen/noise_settings/overworld.json` u jaru 1.21.11)
+kalcit dolazi tamo gdje 2D noise kalcita pada u uski raspon oko nule (±0,0125), a
+inače je kamen. Pruge su zato vijugave linije na karti, a ne vodoravni slojevi, i
+prolaze kroz cijeli površinski sloj.
+
+**Šljunak ne ide u površinu (odluka 2026-11-23).** U Minecraftovom pravilu površine za
+Stony Peaks šljunka nema. On dolazi iz podzemnih nakupina (`ore_gravel`) koje izbijaju
+na površinu jer biom nema sloj zemlje. Šljunak čeka taj sustav nakupina, isti koji
+će trebati za rude. Andezit i granit dolaze istim putem.
 
 **Stabla čitaju `treeDensity`.** Kandidat stabla odbacuje se ako je vjerojatnost bioma
 na njegovoj bazi nula. Stony Peaks ima 0. Odluka ne smije mijenjati broj izvlačenja iz
@@ -120,9 +126,36 @@ s `treeDensity` nula ili dodati zasebno polje `passiveMobs`.
    pragom za Stony Peaks. Biom se upisuje u `Biomes.json` (grass `#9ABE4B`, foliage
    `#82AC1E`, `treeDensity` 0). Privremeni log `[BIOME]` ispisuje broj stupaca po
    biomu i najvišu visinu u učitanom području.
-5. **Površina, trake i mrlje.** Generacija čita površinski blok, sloj ispod njega,
-   dubinu sloja, blok traka i blok mrlja iz definicije bioma.
+   **IMPLEMENTIRANO (2026-11-23), čeka ručni test u editoru.** Stony Peaks u
+   `Biomes.json` ima `"placement": "peaks"` i ne sudjeluje u biome noiseu.
+   Postavke su u kategoriji World|Mountains na `AVoxelWorld`: `MountainNoiseScale`
+   0.0025, `MountainOctaves` 3, `MountainNoiseStart` 0.15, `MountainNoiseFull` 0.55,
+   `MountainMaxLift` 70 i `PeakBiomeLift` 30. Uz njih su planine široke 150–300
+   blokova, razmaknute 400–600 blokova, a najviša točka u 2048×2048 je Z=66. Planina
+   diže 19,7 % svijeta, a Stony Peaks pokriva 2,7 %. S `MountainMaxLift` 0 `[BIOME]`
+   CRC je jednak onome prije koraka, pa planine ne mijenjaju ostatak svijeta. Soak
+   ima peti hop, skok na najbliži vrh, i prolazi. NavMesh volumen pokriva Z
+   −5000..5000. Najsporiji chunk u streamingu izmjeren je na 10,8 ms u oba runa s
+   planinama i 6,1 ms bez njih, uz budžet od 8 ms. U drugom runu najsporiji chunk
+   leži na ravnom terenu, pa uzrok još nije utvrđen.
+5. **Površina i pruge.** Generacija čita površinski blok, sloj ispod njega,
+   dubinu sloja i blok pruga iz definicije bioma.
+   **IMPLEMENTIRANO (2026-11-23), čeka ručni test u editoru.** Stupac slaže jedna
+   funkcija, `FChunkGenerator::GetColumnBlock`. Pruge podešavaju `StripeNoiseScale`
+   0.02, `StripeOctaves` 2 i `StripeHalfWidth` 0.025 (World|Surface). Na vrhovima je
+   89,1 % površine kamen, a 10,9 % kalcit. CRC terena ravnice ostao je `8DD5368A`, a
+   soak prolazi. Najsporiji chunk izmjeren je na 5,9 ms. U prethodna dva runa s
+   planinama bio je 10,8 ms, pa ta brojka jako varira između runova.
 6. **Stabla po biomu.** Kandidati stabala čitaju `treeDensity`.
+   **IMPLEMENTIRANO (2026-11-23), čeka ručni test u editoru.** Gustoća skalira
+   postojeću kocku stabla (`Roll < TreeChancePerChunk * treeDensity`), bez novog
+   izvlačenja iz streama, pa Plains (1.0) ima ista stabla kao prije. Pustinja je
+   prvi put dobila svojih 0.1, a Stony Peaks 0. U 2048×2048 to daje Plains 1984,
+   Desert 207 i StonyPeaks 0 stabala.
+   **Nazubljena granica vrhova (dodano nakon ručnog testa).** Granica na pragu
+   podizanja od 30 blokova izgledala je kao umjetna izohipsa. Prag se zato po
+   stupcu pomiče 2D noiseom za ±`PeakBorderJitter` (8) blokova, uz
+   `PeakBorderNoiseScale` 0.06 (World|Mountains). Udio Stony Peaksa ostao je 2,7 %.
 7. **Test.** Prvo headless run, u kojem `[BIOME]` mora pokazati sva tri bioma, a soak
    test mora i dalje prolaziti. Zatim ručna provjera u editoru komandom `voxel.tp`:
    padina je bez stijene na granici, vrh je kamen s trakama kalcita, na vrhovima nema

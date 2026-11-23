@@ -79,6 +79,17 @@ AVoxelWorld::AVoxelWorld()
 	HeightAmplitude = 6;
 	Octaves = 3;
 	BiomeNoiseScale = 0.012f;
+	MountainNoiseScale = 0.0025f;
+	MountainOctaves = 3;
+	MountainNoiseStart = 0.15f;
+	MountainNoiseFull = 0.55f;
+	MountainMaxLift = 70.f;
+	PeakBiomeLift = 30.f;
+	PeakBorderJitter = 8.f;
+	PeakBorderNoiseScale = 0.06f;
+	StripeNoiseScale = 0.02f;
+	StripeOctaves = 2;
+	StripeHalfWidth = 0.025f;
 	// ~0.25 stabla po chunku = gustoca starog svijeta (10 stabala na 100x100)
 	TreeAttemptsPerChunk = 1;
 	TreeChancePerChunk = 0.25f;
@@ -163,9 +174,60 @@ FChunkGenParams AVoxelWorld::MakeChunkGenParams() const
 	Params.BiomeOffsetX = BiomeOffsetX;
 	Params.BiomeOffsetY = BiomeOffsetY;
 	Params.BiomeNoiseScale = BiomeNoiseScale;
+	Params.MountainOffsetX = MountainOffsetX;
+	Params.MountainOffsetY = MountainOffsetY;
+	Params.MountainNoiseScale = MountainNoiseScale;
+	Params.MountainOctaves = MountainOctaves;
+	Params.MountainNoiseStart = MountainNoiseStart;
+	Params.MountainNoiseFull = MountainNoiseFull;
+	Params.MountainMaxLift = MountainMaxLift;
+	Params.PeakBiomeLift = PeakBiomeLift;
+	Params.PeakBorderOffsetX = PeakBorderOffsetX;
+	Params.PeakBorderOffsetY = PeakBorderOffsetY;
+	Params.PeakBorderNoiseScale = PeakBorderNoiseScale;
+	Params.PeakBorderJitter = PeakBorderJitter;
+	Params.StripeOffsetX = StripeOffsetX;
+	Params.StripeOffsetY = StripeOffsetY;
+	Params.StripeNoiseScale = StripeNoiseScale;
+	Params.StripeOctaves = StripeOctaves;
+	Params.StripeHalfWidth = StripeHalfWidth;
+
+	// Biomi po nacinu postavljanja: "noise" dijele biome noise jednakim
+	// pragovima (redom iz JSON-a), "peaks" dobiva vrhove planina
 	if (UBlockRegistry* Registry = UBlockRegistry::Get(this))
 	{
-		Params.BiomeCount = FMath::Clamp(Registry->GetBiomeCount(), 1, 256);   // indeks se sprema kao uint8
+		Params.NoiseBiomes.Reset();
+		const int32 BiomeCount = FMath::Min(Registry->GetBiomeCount(), 256);   // indeks se sprema kao uint8
+		for (int32 Index = 0; Index < BiomeCount; Index++)
+		{
+			const FBiomeDefinition& Biome = Registry->GetBiome(Index);
+			FBiomeGenData& GenData = Params.BiomeGenData.AddDefaulted_GetRef();
+			GenData.Surface = Biome.SurfaceBlock;
+			GenData.Subsurface = Biome.SubsurfaceBlock;
+			GenData.SubsurfaceDepth = Biome.SubsurfaceDepth;
+			GenData.Stripe = Biome.StripeBlock;
+			GenData.TreeDensity = Biome.TreeDensity;
+
+			const EBiomePlacement Placement = Biome.Placement;
+			if (Placement == EBiomePlacement::Peaks)
+			{
+				if (Params.PeakBiome >= 0)
+				{
+					UE_LOG(LogTemp, Warning, TEXT("VoxelWorld: vise bioma s placement 'peaks' - koristim prvi (%s)"),
+						*Registry->GetBiome(Params.PeakBiome).Name.ToString());
+					continue;
+				}
+				Params.PeakBiome = Index;
+			}
+			else
+			{
+				Params.NoiseBiomes.Add((uint8)Index);
+			}
+		}
+		if (Params.NoiseBiomes.IsEmpty())
+		{
+			Params.NoiseBiomes.Add(0);
+		}
 	}
 	Params.TreeAttemptsPerChunk = TreeAttemptsPerChunk;
 	Params.TreeChancePerChunk = TreeChancePerChunk;
@@ -234,6 +296,12 @@ void AVoxelWorld::GenerateWorld()
 	NoiseOffsetY = NoiseSeedStream.FRandRange(-100000.f, 100000.f);
 	BiomeOffsetX = NoiseSeedStream.FRandRange(-100000.f, 100000.f);
 	BiomeOffsetY = NoiseSeedStream.FRandRange(-100000.f, 100000.f);
+	MountainOffsetX = NoiseSeedStream.FRandRange(-100000.f, 100000.f);
+	MountainOffsetY = NoiseSeedStream.FRandRange(-100000.f, 100000.f);
+	StripeOffsetX = NoiseSeedStream.FRandRange(-100000.f, 100000.f);
+	StripeOffsetY = NoiseSeedStream.FRandRange(-100000.f, 100000.f);
+	PeakBorderOffsetX = NoiseSeedStream.FRandRange(-100000.f, 100000.f);
+	PeakBorderOffsetY = NoiseSeedStream.FRandRange(-100000.f, 100000.f);
 
 	// Snapshot parametara NAKON postavljanja offseta - streaming ga koristi do kraja igre
 	CachedGenParams = MakeChunkGenParams();
@@ -380,13 +448,15 @@ void AVoxelWorld::SoakTestHop()
 
 	SoakHop++;
 
-	if (SoakHop > 4)
+	if (SoakHop > 5)
 	{
 		// Iskopani blok je preizivio unload spawn chunka i regeneraciju?
 		const bool bRetainedOk = GetBlockTypeAt(SoakDigPos) == EBlockType::Air;
 		UE_LOG(LogTemp, Warning, TEXT("[SOAK] RETAINED %s: iskopani blok (%d,%d,%d) je %s"),
 			bRetainedOk ? TEXT("OK") : TEXT("FAIL"),
 			SoakDigPos.X, SoakDigPos.Y, SoakDigPos.Z, bRetainedOk ? TEXT("Air") : TEXT("regeneriran!"));
+		UE_LOG(LogTemp, Warning, TEXT("[PERF] najsporiji vizual chunka u streamingu: %.2f ms, chunk (%d,%d) (budzet %.1f ms)"),
+			MaxChunkApplyMs, MaxChunkApplyCoord.X, MaxChunkApplyCoord.Y, ChunkApplyBudgetMs);
 		UE_LOG(LogTemp, Warning, TEXT("[SOAK] GOTOVO: rehash OK=%d, FAIL=%d, hashirano %d chunkova, ucitano %d, zadrzano %d"),
 			SoakRehashOk, SoakRehashFail, SoakChunkHashes.Num(), Chunks.Num(), RetainedModifiedChunks.Num());
 		GetWorld()->GetTimerManager().ClearTimer(SoakTimerHandle);
@@ -394,7 +464,8 @@ void AVoxelWorld::SoakTestHop()
 	}
 
 	// Hop 1: istok; hop 2: NEGATIVNE koordinate (floor-division test!); hop 3:
-	// daleki istok; hop 4: povratak na start (retained + rehash provjera)
+	// daleki istok; hop 4: najblizi vrh planine (streaming visokih chunkova);
+	// hop 5: povratak na start (retained + rehash provjera)
 	const FIntVector Base = ChunkOrigin(SpawnCenterChunk) + FIntVector(ChunkSize / 2, ChunkSize / 2, 0);
 	int32 GX = Base.X;
 	int32 GY = Base.Y;
@@ -403,6 +474,16 @@ void AVoxelWorld::SoakTestHop()
 	case 1: GX += 10 * ChunkSize; break;
 	case 2: GX -= 12 * ChunkSize; GY -= 12 * ChunkSize; break;
 	case 3: GX += 24 * ChunkSize; break;
+	case 4:
+	{
+		FIntPoint Peak;
+		if (FindNearestPeakColumn(Peak))
+		{
+			GX = Peak.X;
+			GY = Peak.Y;
+		}
+		break;
+	}
 	default: break;
 	}
 	const int32 GZ = GetTerrainHeightAt(GX, GY) + 3;
@@ -598,6 +679,20 @@ void AVoxelWorld::UpdateStreaming()
 		return;
 	}
 
+	if (!bPlayerPlacedOnSurface)
+	{
+		bPlayerPlacedOnSurface = true;
+		const FIntVector Grid = WorldToGrid(Player->GetActorLocation());
+		const int32 SurfaceZ = GetTerrainHeightAt(Grid.X, Grid.Y);
+		if (Grid.Z <= SurfaceZ)
+		{
+			Player->SetActorLocation(GridToWorld(Grid.X, Grid.Y, SurfaceZ + 2) + FVector(50.f, 50.f, 0.f),
+				false, nullptr, ETeleportType::TeleportPhysics);
+			UE_LOG(LogTemp, Warning, TEXT("[BIOME] spawn (%d,%d) je ispod povrsine Z=%d - igrac podignut na povrsinu"),
+				Grid.X, Grid.Y, SurfaceZ);
+		}
+	}
+
 	const FIntPoint PlayerChunk = GridToChunk(WorldToGrid(Player->GetActorLocation()));
 	const bool bChunkChanged = !bHasLastPlayerChunk || PlayerChunk != LastPlayerChunk;
 
@@ -680,7 +775,14 @@ void AVoxelWorld::UpdateStreaming()
 	const double BudgetEnd = FPlatformTime::Seconds() + ChunkApplyBudgetMs / 1000.0;
 	for (FVoxelChunk* Chunk : PendingVisuals)
 	{
+		const double ApplyStart = FPlatformTime::Seconds();
 		ApplyChunkVisuals(*Chunk);
+		const double ApplyMs = (FPlatformTime::Seconds() - ApplyStart) * 1000.0;
+		if (ApplyMs > MaxChunkApplyMs)
+		{
+			MaxChunkApplyMs = ApplyMs;
+			MaxChunkApplyCoord = Chunk->Coord;
+		}
 		Applied++;
 		if (FPlatformTime::Seconds() >= BudgetEnd)
 		{
@@ -736,6 +838,12 @@ void AVoxelWorld::UpdateNavBoundsVolume(const FIntPoint& PlayerChunk)
 		if (!NavBoundsVolume.IsValid())
 		{
 			UE_LOG(LogTemp, Warning, TEXT("VoxelWorld: NavMeshBoundsVolume nije naden - navmesh nece pratiti igraca"));
+		}
+		else
+		{
+			const FBox Bounds = NavBoundsVolume->GetComponentsBoundingBox(true);
+			UE_LOG(LogTemp, Warning, TEXT("[BIOME] NavMesh volumen pokriva Z %.0f..%.0f (grid %d..%d)"),
+				Bounds.Min.Z, Bounds.Max.Z, WorldToGrid(Bounds.Min).Z, WorldToGrid(Bounds.Max).Z);
 		}
 	}
 
@@ -1530,6 +1638,128 @@ void AVoxelWorld::LogBiomeDiagnostics() const
 		HalfSize * 2, HalfSize * 2, *Counts, MinHeight, MaxHeight);
 	UE_LOG(LogTemp, Warning, TEXT("[BIOME] CRC stupci=%08X teren(%dx%d chunkova)=%08X | biom iz ucitanih chunkova za %d stupaca, chunk!=formula: %d"),
 		ColumnCrc, TerrainChunkRadius * 2, TerrainChunkRadius * 2, TerrainCrc, ColumnsFromChunks, BiomeMismatches);
+
+	// Siroko podrucje (planine su rijetke na 256x256): udio bioma, najvisa
+	// tocka i najblizi vrh - koordinate za voxel.tp
+	constexpr int32 WideHalf = 1024;
+	constexpr int32 WideStep = 8;
+	TArray<int32> WidePerBiome;
+	WidePerBiome.SetNumZeroed(ColumnsPerBiome.Num());
+	int32 WideSamples = 0;
+	int32 LiftedSamples = 0;
+	TMap<EBlockType, int32> PeakTopBlocks;
+	FIntVector Highest(0, 0, TNumericLimits<int32>::Lowest());
+	for (int32 Y = -WideHalf; Y < WideHalf; Y += WideStep)
+	{
+		for (int32 X = -WideHalf; X < WideHalf; X += WideStep)
+		{
+			WideSamples++;
+			const int32 Biome = FChunkGenerator::GetBiomeIndex(CachedGenParams, X, Y);
+			if (!WidePerBiome.IsValidIndex(Biome))
+			{
+				WidePerBiome.SetNumZeroed(Biome + 1);
+			}
+			WidePerBiome[Biome]++;
+			LiftedSamples += FChunkGenerator::GetMountainLift(CachedGenParams, X, Y) > 0.f ? 1 : 0;
+			const int32 Height = GetTerrainHeightAt(X, Y);
+			if (Biome == CachedGenParams.PeakBiome)
+			{
+				const FBiomeGenData& Surface = FChunkGenerator::GetBiomeGenData(CachedGenParams, Biome);
+				const EBlockType Top = FChunkGenerator::GetColumnBlock(Surface,
+					FChunkGenerator::IsStripeColumn(CachedGenParams, X, Y), Height, Height);
+				PeakTopBlocks.FindOrAdd(Top)++;
+			}
+			if (Height > Highest.Z)
+			{
+				Highest = FIntVector(X, Y, Height);
+			}
+		}
+	}
+
+	FString WideShares;
+	for (int32 Index = 0; Index < WidePerBiome.Num(); Index++)
+	{
+		const FString Name = Registry ? Registry->GetBiome(Index).Name.ToString() : FString::FromInt(Index);
+		WideShares += FString::Printf(TEXT(" %s=%.1f%%"), *Name, WidePerBiome[Index] * 100.f / WideSamples);
+	}
+	UE_LOG(LogTemp, Warning, TEXT("[BIOME] %dx%d (uzorak svakih %d):%s | planina dize %.1f%% | najvise Z=%d na (%d,%d)"),
+		WideHalf * 2, WideHalf * 2, WideStep, *WideShares, LiftedSamples * 100.f / WideSamples,
+		Highest.Z, Highest.X, Highest.Y);
+
+	int32 PeakTopTotal = 0;
+	for (const TPair<EBlockType, int32>& Pair : PeakTopBlocks)
+	{
+		PeakTopTotal += Pair.Value;
+	}
+	FString PeakTops;
+	for (const TPair<EBlockType, int32>& Pair : PeakTopBlocks)
+	{
+		PeakTops += FString::Printf(TEXT(" %s=%.1f%%"),
+			*StaticEnum<EBlockType>()->GetNameStringByValue((int64)Pair.Key), Pair.Value * 100.f / PeakTopTotal);
+	}
+	UE_LOG(LogTemp, Warning, TEXT("[BIOME] povrsina vrhova (%d uzoraka):%s"), PeakTopTotal, *PeakTops);
+
+	TArray<int32> TreesPerBiome;
+	TreesPerBiome.SetNumZeroed(WidePerBiome.Num());
+	TArray<FTreeCandidate> Trees;
+	for (int32 CY = -WideHalf / ChunkSize; CY < WideHalf / ChunkSize; CY++)
+	{
+		for (int32 CX = -WideHalf / ChunkSize; CX < WideHalf / ChunkSize; CX++)
+		{
+			FChunkGenerator::GetTreeCandidates(CachedGenParams, FIntPoint(CX, CY), Trees);
+		}
+	}
+	for (const FTreeCandidate& Tree : Trees)
+	{
+		const int32 Biome = FChunkGenerator::GetBiomeIndex(CachedGenParams, Tree.Base.X, Tree.Base.Y);
+		if (TreesPerBiome.IsValidIndex(Biome))
+		{
+			TreesPerBiome[Biome]++;
+		}
+	}
+	FString TreeCounts;
+	for (int32 Index = 0; Index < TreesPerBiome.Num(); Index++)
+	{
+		const FString Name = Registry ? Registry->GetBiome(Index).Name.ToString() : FString::FromInt(Index);
+		TreeCounts += FString::Printf(TEXT(" %s=%d"), *Name, TreesPerBiome[Index]);
+	}
+	UE_LOG(LogTemp, Warning, TEXT("[BIOME] stabla u %dx%d:%s"), WideHalf * 2, WideHalf * 2, *TreeCounts);
+
+	FIntPoint Peak;
+	if (FindNearestPeakColumn(Peak))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[BIOME] najblizi vrh od (0,0): (%d,%d) Z=%d, udaljenost %.0f blokova -> voxel.tp %d %d"),
+			Peak.X, Peak.Y, GetTerrainHeightAt(Peak.X, Peak.Y), FVector2D(Peak).Size(), Peak.X, Peak.Y);
+	}
+	else
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[BIOME] nema bioma vrhova unutar +-1024 od (0,0)"));
+	}
+}
+
+bool AVoxelWorld::FindNearestPeakColumn(FIntPoint& OutColumn) const
+{
+	if (CachedGenParams.PeakBiome < 0)
+	{
+		return false;
+	}
+
+	constexpr int32 SearchHalf = 1024;
+	constexpr int32 Step = 8;
+	int64 BestDistSq = TNumericLimits<int64>::Max();
+	for (int32 Y = -SearchHalf; Y <= SearchHalf; Y += Step)
+	{
+		for (int32 X = -SearchHalf; X <= SearchHalf; X += Step)
+		{
+			const int64 DistSq = (int64)X * X + (int64)Y * Y;
+			if (DistSq < BestDistSq && FChunkGenerator::GetBiomeIndex(CachedGenParams, X, Y) == CachedGenParams.PeakBiome)
+			{
+				BestDistSq = DistSq;
+				OutColumn = FIntPoint(X, Y);
+			}
+		}
+	}
+	return BestDistSq != TNumericLimits<int64>::Max();
 }
 
 // === [PERF] DIJAGNOSTIKA ===

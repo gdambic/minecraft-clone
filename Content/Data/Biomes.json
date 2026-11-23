@@ -7,6 +7,8 @@
     "treeDensity": 1.0,
     "treeTypes": ["Oak", "Birch"],
     "surfaceBlock": "Grass",
+    "subsurfaceBlock": "Dirt",
+    "subsurfaceDepth": 3,
     "heightAmplitudeScale": 1.0
   },
   {
@@ -17,6 +19,22 @@
     "treeDensity": 0.1,
     "treeTypes": ["Oak"],
     "surfaceBlock": "Grass",
+    "subsurfaceBlock": "Dirt",
+    "subsurfaceDepth": 3,
     "heightAmplitudeScale": 0.5
+  },
+  {
+    "name": "StonyPeaks",
+    "displayName": "Kameni vrhovi",
+    "grassTint": "#9ABE4B",
+    "foliageTint": "#82AC1E",
+    "treeDensity": 0.0,
+    "treeTypes": [],
+    "surfaceBlock": "Stone",
+    "subsurfaceBlock": "Stone",
+    "subsurfaceDepth": 5,
+    "stripeBlock": "Calcite",
+    "heightAmplitudeScale": 1.0,
+    "placement": "peaks"
   }
 ]

@@ -104,6 +104,57 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "World|Terrain")
 	float BiomeNoiseScale;
 
+	// === MOUNTAINS (Docs/PLAN_StonyPeaks.md) ===
+
+	/**
+	 * "Zoom" noisea planina - odreduje velicinu i razmak planina. Vece = manje
+	 * i cesce planine (za testiranje), manje = vece i rjede.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "World|Mountains")
+	float MountainNoiseScale;
+
+	/** Broj oktava noisea planina - 1 = glatka kupola, vise = grbe i grebeni. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "World|Mountains")
+	int32 MountainOctaves;
+
+	/** Vrijednost noisea planina (-1..1) od koje teren pocinje rasti - vise = manji dio svijeta su planine. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "World|Mountains")
+	float MountainNoiseStart;
+
+	/** Vrijednost noisea planina na kojoj je dosegnuto puno podizanje (MountainMaxLift). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "World|Mountains")
+	float MountainNoiseFull;
+
+	/** Najvece podizanje terena planinom, u blokovima. 0 = svijet bez planina. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "World|Mountains")
+	float MountainMaxLift;
+
+	/** Podizanje (u blokovima) od kojeg stupac pripada biomu s placement "peaks". */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "World|Mountains")
+	float PeakBiomeLift;
+
+	/** Za koliko blokova podizanja noise pomice granicu vrhova gore-dolje. 0 = granica je ravna izohipsa. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "World|Mountains")
+	float PeakBorderJitter;
+
+	/** "Zoom" noisea granice vrhova - vece = sitniji zupci, manje = veci jezici kamena i trave. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "World|Mountains")
+	float PeakBorderNoiseScale;
+
+	// === SURFACE STRIPES (kalcit na Stony Peaksu, "stripeBlock" u Biomes.json) ===
+
+	/** "Zoom" noisea pruga - vece = gusce i krace pruge. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "World|Surface")
+	float StripeNoiseScale;
+
+	/** Broj oktava noisea pruga - vise = vijugavije pruge. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "World|Surface")
+	int32 StripeOctaves;
+
+	/** Pola sirine raspona oko nule u kojem je stupac na pruzi - vece = sire pruge. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "World|Surface")
+	float StripeHalfWidth;
+
 	// === TREES ===
 
 	/** Broj pokusaja sadnje stabla po chunku (deterministicki iz chunk seeda). */
@@ -363,6 +414,28 @@ private:
 	/** Pomak uzorkovanja biome noisea - takodjer iz WorldSeed (GenerateWorld). */
 	float BiomeOffsetX = 0.f;
 	float BiomeOffsetY = 0.f;
+
+	/** Pomak uzorkovanja noisea planina - iz WorldSeed, izvlaci se NAKON ostalih da ih ne pomakne. */
+	float MountainOffsetX = 0.f;
+	float MountainOffsetY = 0.f;
+
+	/** Pomak uzorkovanja noisea pruga - iz WorldSeed, nakon planina. */
+	float StripeOffsetX = 0.f;
+	float StripeOffsetY = 0.f;
+
+	/** Pomak uzorkovanja noisea granice vrhova - iz WorldSeed, nakon pruga. */
+	float PeakBorderOffsetX = 0.f;
+	float PeakBorderOffsetY = 0.f;
+
+	/** Je li igrac nakon starta postavljen na povrsinu (planina moze prekriti PlayerStart). */
+	bool bPlayerPlacedOnSurface = false;
+
+	/** Najsporija izgradnja vizuala jednog chunka od starta ([PERF] u soak sazetku). */
+	double MaxChunkApplyMs = 0.0;
+	FIntPoint MaxChunkApplyCoord = FIntPoint::ZeroValue;
+
+	/** Najblizi stupac bioma vrhova oko ishodista (pretraga ±1024, korak 8); false = nema ga. */
+	bool FindNearestPeakColumn(FIntPoint& OutColumn) const;
 
 	/**
 	 * Tint bioma na poziciji za zadani tip tinta (Grass/Foliage); bijelo za

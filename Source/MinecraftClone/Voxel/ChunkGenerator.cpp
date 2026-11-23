@@ -9,16 +9,70 @@ namespace
 	constexpr uint32 TreeStreamSalt = 0x7EE5EED5;
 }
 
+float FChunkGenerator::GetMountainLift(const FChunkGenParams& Params, int32 X, int32 Y)
+{
+	if (Params.MountainMaxLift <= 0.f)
+	{
+		return 0.f;
+	}
+	return FTerrainGenerator::GetMountainLift(X, Y, Params.MountainOffsetX, Params.MountainOffsetY,
+		Params.MountainNoiseScale, Params.MountainOctaves, Params.MountainNoiseStart,
+		Params.MountainNoiseFull, Params.MountainMaxLift);
+}
+
+const FBiomeGenData& FChunkGenerator::GetBiomeGenData(const FChunkGenParams& Params, int32 BiomeIndex)
+{
+	static const FBiomeGenData Default;
+	return Params.BiomeGenData.IsValidIndex(BiomeIndex) ? Params.BiomeGenData[BiomeIndex] : Default;
+}
+
+bool FChunkGenerator::IsStripeColumn(const FChunkGenParams& Params, int32 X, int32 Y)
+{
+	const float Noise = FTerrainGenerator::FractalNoise2D(X, Y, Params.StripeOffsetX, Params.StripeOffsetY,
+		Params.StripeNoiseScale, Params.StripeOctaves);
+	return FMath::Abs(Noise) < Params.StripeHalfWidth;
+}
+
+EBlockType FChunkGenerator::GetColumnBlock(const FBiomeGenData& Surface, bool bStripeColumn, int32 Z, int32 Height)
+{
+	// Povrsinski sloj = najgornji blok + (SubsurfaceDepth - 1) ispod njega
+	if (Z <= Height - FMath::Max(Surface.SubsurfaceDepth, 1))
+	{
+		return EBlockType::Stone;
+	}
+	if (bStripeColumn && Surface.Stripe != EBlockType::Air)
+	{
+		return Surface.Stripe;
+	}
+	return Z == Height ? Surface.Surface : Surface.Subsurface;
+}
+
 int32 FChunkGenerator::GetTerrainHeight(const FChunkGenParams& Params, int32 X, int32 Y)
 {
-	return FTerrainGenerator::GetColumnHeight(X, Y, Params.NoiseOffsetX, Params.NoiseOffsetY,
+	const int32 BaseHeight = FTerrainGenerator::GetColumnHeight(X, Y, Params.NoiseOffsetX, Params.NoiseOffsetY,
 		Params.NoiseScale, Params.Octaves, Params.SurfaceLevel, Params.HeightAmplitude);
+	return BaseHeight + FMath::RoundToInt(GetMountainLift(Params, X, Y));
 }
 
 int32 FChunkGenerator::GetBiomeIndex(const FChunkGenParams& Params, int32 X, int32 Y)
 {
-	return FBiomeGenerator::GetBiomeIndexAt(X, Y, Params.BiomeOffsetX, Params.BiomeOffsetY,
-		Params.BiomeNoiseScale, Params.BiomeCount);
+	// Biom vrhova ovisi o istom podizanju koje radi visinu - granica bioma je
+	// izohipsa na padini, a ne mrlja neovisna o terenu
+	if (Params.PeakBiome >= 0)
+	{
+		// Prag se po stupcu pomice malim noiseom - inace je granica savrsena
+		// izohipsa; ovako kamen mjestimicno silazi niz padinu, a trava se penje
+		const float Jitter = FTerrainGenerator::FractalNoise2D(X, Y, Params.PeakBorderOffsetX,
+			Params.PeakBorderOffsetY, Params.PeakBorderNoiseScale, 2) * Params.PeakBorderJitter;
+		if (GetMountainLift(Params, X, Y) >= Params.PeakBiomeLift + Jitter)
+		{
+			return Params.PeakBiome;
+		}
+	}
+
+	const int32 Pick = FBiomeGenerator::GetBiomeIndexAt(X, Y, Params.BiomeOffsetX, Params.BiomeOffsetY,
+		Params.BiomeNoiseScale, Params.NoiseBiomes.Num());
+	return Params.NoiseBiomes.IsValidIndex(Pick) ? Params.NoiseBiomes[Pick] : 0;
 }
 
 TArray<uint8> FChunkGenerator::GenerateChunkBiomes(const FChunkGenParams& Params, const FIntPoint& Coord)
@@ -50,30 +104,20 @@ TArray<EBlockType> FChunkGenerator::GenerateChunkData(const FChunkGenParams& Par
 	// --- 0. Biomi stupaca (prvi, jer o njima ovisi sve ispod) ---
 	OutBiomes = GenerateChunkBiomes(Params, Coord);
 
-	// --- 1. Teren: height-map po stupcu (grass na vrhu, dirt ispod, stone dublje) ---
+	// --- 1. Teren: height-map po stupcu, povrsinski sloj iz bioma stupca, stone dublje ---
 	const FIntVector Origin = ChunkOrigin(Coord);
 	for (int32 LocalX = 0; LocalX < ChunkSize; LocalX++)
 	{
 		for (int32 LocalY = 0; LocalY < ChunkSize; LocalY++)
 		{
-			const int32 Height = FMath::Min(
-				GetTerrainHeight(Params, Origin.X + LocalX, Origin.Y + LocalY), WorldMaxZ);
+			const int32 X = Origin.X + LocalX;
+			const int32 Y = Origin.Y + LocalY;
+			const int32 Height = FMath::Min(GetTerrainHeight(Params, X, Y), WorldMaxZ);
+			const FBiomeGenData& Surface = GetBiomeGenData(Params, OutBiomes[ColumnIndex(LocalX, LocalY)]);
+			const bool bStripe = Surface.Stripe != EBlockType::Air && IsStripeColumn(Params, X, Y);
 			for (int32 Z = WorldMinZ; Z <= Height; Z++)
 			{
-				EBlockType Type;
-				if (Z == Height)
-				{
-					Type = EBlockType::Grass;
-				}
-				else if (Z > Height - Params.DirtLayers)
-				{
-					Type = EBlockType::Dirt;
-				}
-				else
-				{
-					Type = EBlockType::Stone;
-				}
-				Blocks[LocalIndex(FIntVector(LocalX, LocalY, Z))] = Type;
+				Blocks[LocalIndex(FIntVector(LocalX, LocalY, Z))] = GetColumnBlock(Surface, bStripe, Z, Height);
 			}
 		}
 	}
@@ -136,10 +180,20 @@ void FChunkGenerator::GetTreeCandidates(const FChunkGenParams& Params, const FIn
 			continue;
 		}
 
-		const int32 GroundZ = GetTerrainHeight(Params, Origin.X + LocalX, Origin.Y + LocalY);
+		// Gustoca bioma na bazi stabla skalira istu kocku (Roll), bez novog
+		// izvlacenja - gustoca 1 daje tocno stara stabla, 0 nijedno
+		const int32 X = Origin.X + LocalX;
+		const int32 Y = Origin.Y + LocalY;
+		const float Density = GetBiomeGenData(Params, GetBiomeIndex(Params, X, Y)).TreeDensity;
+		if (Roll >= Params.TreeChancePerChunk * Density)
+		{
+			continue;
+		}
+
+		const int32 GroundZ = GetTerrainHeight(Params, X, Y);
 
 		FTreeCandidate Tree;
-		Tree.Base = FIntVector(Origin.X + LocalX, Origin.Y + LocalY, GroundZ + 1);
+		Tree.Base = FIntVector(X, Y, GroundZ + 1);
 		Tree.Type = bOak ? ETreeType::Oak : ETreeType::Birch;
 		Tree.TrunkHeight = TrunkHeight;
 		OutCandidates.Add(Tree);

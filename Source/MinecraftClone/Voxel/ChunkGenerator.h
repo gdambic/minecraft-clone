@@ -5,6 +5,16 @@
 #include "TreeGenerator.h"
 #include "VoxelChunk.h"
 
+/** Polja jednog bioma koja generacija cita - kopija iz FBiomeDefinition (worker ne cita registry). */
+struct FBiomeGenData
+{
+	EBlockType Surface = EBlockType::Grass;
+	EBlockType Subsurface = EBlockType::Dirt;
+	int32 SubsurfaceDepth = 3;
+	EBlockType Stripe = EBlockType::Air;
+	float TreeDensity = 1.f;
+};
+
 /**
  * Ulazni parametri generacije chunka - snapshot svih postavki AVoxelWorld-a
  * koje generacija koristi. Kopira se po vrijednosti u worker task (faza 3
@@ -21,13 +31,38 @@ struct FChunkGenParams
 	int32 Octaves = 3;
 	int32 SurfaceLevel = 24;
 	int32 HeightAmplitude = 6;
-	int32 DirtLayers = 3;
 
-	// Biomi (FBiomeGenerator) - BiomeCount je broj bioma u Biomes.json
+	// Planine (FTerrainGenerator::GetMountainLift) - MaxLift 0 = bez planina
+	float MountainOffsetX = 0.f;
+	float MountainOffsetY = 0.f;
+	float MountainNoiseScale = 0.004f;
+	int32 MountainOctaves = 3;
+	float MountainNoiseStart = 0.1f;
+	float MountainNoiseFull = 0.5f;
+	float MountainMaxLift = 0.f;
+
+	// Biomi (FBiomeGenerator). NoiseBiomes = indeksi bioma s placement "noise"
+	// (redom iz Biomes.json); PeakBiome = biom s placement "peaks", -1 = nema ga.
 	float BiomeOffsetX = 0.f;
 	float BiomeOffsetY = 0.f;
 	float BiomeNoiseScale = 0.012f;
-	int32 BiomeCount = 1;
+	TArray<uint8> NoiseBiomes = { 0 };
+	int32 PeakBiome = -1;
+	float PeakBiomeLift = 30.f;
+
+	// Nazubljena granica vrhova: noise pomice PeakBiomeLift za ±PeakBorderJitter po stupcu
+	float PeakBorderOffsetX = 0.f;
+	float PeakBorderOffsetY = 0.f;
+	float PeakBorderNoiseScale = 0.06f;
+	float PeakBorderJitter = 8.f;
+
+	// Generacijska polja po biomu (indeks = indeks bioma) + noise pruga (FBiomeGenData::Stripe)
+	TArray<FBiomeGenData> BiomeGenData;
+	float StripeOffsetX = 0.f;
+	float StripeOffsetY = 0.f;
+	float StripeNoiseScale = 0.02f;
+	int32 StripeOctaves = 2;
+	float StripeHalfWidth = 0.025f;
 
 	// Stabla - deterministicki po chunku (plan 3.5)
 	int32 TreeAttemptsPerChunk = 1;
@@ -75,6 +110,18 @@ public:
 
 	/** Indeks bioma stupca - JEDINA formula bioma (generacija i AVoxelWorld::GetBiomeIndexAt). */
 	static int32 GetBiomeIndex(const FChunkGenParams& Params, int32 X, int32 Y);
+
+	/** Koliko planina podize stupac (u blokovima) - ulazi i u visinu i u odabir bioma. */
+	static float GetMountainLift(const FChunkGenParams& Params, int32 X, int32 Y);
+
+	/** Generacijska polja bioma; nepoznat indeks dobiva default (Grass/Dirt/3, bez pruga, gustoca 1). */
+	static const FBiomeGenData& GetBiomeGenData(const FChunkGenParams& Params, int32 BiomeIndex);
+
+	/** Lezi li stupac na pruzi - noise pruga unutar ±StripeHalfWidth oko nule. */
+	static bool IsStripeColumn(const FChunkGenParams& Params, int32 X, int32 Y);
+
+	/** Blok na visini Z stupca s povrsinom Height - JEDINO pravilo slaganja stupca. */
+	static EBlockType GetColumnBlock(const FBiomeGenData& Surface, bool bStripeColumn, int32 Z, int32 Height);
 
 	/** Deterministicki kandidati stabala jednog chunka (bez upisivanja blokova). */
 	static void GetTreeCandidates(const FChunkGenParams& Params, const FIntPoint& Coord,

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "BlockType.h"
 #include "BiomeDefinition.generated.h"
 
 /**
@@ -13,6 +14,19 @@ enum class EBiomeTintType : uint8
 	None,
 	Grass,
 	Foliage
+};
+
+/**
+ * Kako biom dobiva mjesto u svijetu (JSON polje "placement" u Biomes.json).
+ * Noise = bira ga biome noise jednakim pragovima (default).
+ * Peaks = ne sudjeluje u biome noiseu; pripada stupcima koje noise planina
+ * podigne barem za AVoxelWorld::PeakBiomeLift (Docs/PLAN_StonyPeaks.md).
+ */
+UENUM(BlueprintType)
+enum class EBiomePlacement : uint8
+{
+	Noise,
+	Peaks
 };
 
 /**
@@ -41,7 +55,7 @@ struct MINECRAFTCLONE_API FBiomeDefinition
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Biome")
 	FLinearColor FoliageTint = FLinearColor::White;
 
-	/** REZERVIRANO: mnozitelj gustoce stabala - generacija ga jos ne cita */
+	/** Mnozitelj sanse za stablo na stupcima ovog bioma (1 = puna gustoca, 0 = bez stabala) */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Biome")
 	float TreeDensity = 1.0f;
 
@@ -49,13 +63,33 @@ struct MINECRAFTCLONE_API FBiomeDefinition
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Biome")
 	TArray<FString> TreeTypes;
 
-	/** REZERVIRANO: povrsinski blok (npr. Sand za pustinju) - generacija ga jos ne cita */
+	/** Najgornji blok stupca (JSON "surfaceBlock") */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Biome")
-	FString SurfaceBlock;
+	EBlockType SurfaceBlock = EBlockType::Grass;
+
+	/** Blok ispod najgornjeg, do dubine SubsurfaceDepth (JSON "subsurfaceBlock") */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Biome")
+	EBlockType SubsurfaceBlock = EBlockType::Dirt;
+
+	/** Debljina povrsinskog sloja ukljucujuci najgornji blok; ispod je Stone (JSON "subsurfaceDepth") */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Biome")
+	int32 SubsurfaceDepth = 3;
+
+	/**
+	 * Blok pruga u povrsinskom sloju (JSON "stripeBlock", npr. Calcite za Stony
+	 * Peaks). Pruge su linije na karti gdje noise pruga pada blizu nule, kao
+	 * Minecraftovo calcite pravilo. Air = biom nema pruge.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Biome")
+	EBlockType StripeBlock = EBlockType::Air;
 
 	/** REZERVIRANO: mnozitelj amplitude visine terena - generacija ga jos ne cita */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Biome")
 	float HeightAmplitudeScale = 1.0f;
+
+	/** Kako biom dobiva mjesto u svijetu - vidi EBiomePlacement */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Biome")
+	EBiomePlacement Placement = EBiomePlacement::Noise;
 
 	bool IsValid() const { return !Name.IsNone(); }
 };
