@@ -51,7 +51,9 @@ Postojeći markeri u logu: `[PERF]` (mjerenje GenerateWorld faza),
 `DEBUG:` (EnemyAIController nav dijagnostika ~2 s nakon starta:
 `Pawn on NavMesh`, `MoveToActor result`). `[BIOME]` (stupci po biomu, raspon visine i
 CRC visina/bioma/terena oko (0,0), ispis prije i poslije bootstrapa; isti seed
-mora dati isti CRC). Brojanje ponavljajućih grešaka
+mora dati isti CRC; `more (SeaLevel=0)` = udio stupaca pod vodom i lokvi,
+`kontinentalnost` = percentili za ugađanje pragova, `najblizi ocean` s `voxel.tp`). `[WATER]` (ploha mora: stupci pod plohom vs. stupci
+s vrhom ispod mora u podacima, `OK` = prolaz; ispis na startu i na svakom soak hopu; `pogled ispod vode UKLJUCEN/iskljucen` kad se kamera spusti pod vrh vala nad morem ili izađe; `kutija vode UKLJUCENA/iskljucena` i `igrac PLIVA/vise ne pliva ... vZ=` za plivanje, vZ ~520 = skok na obalu). Brojanje ponavljajućih grešaka
 (npr. wander failova) kroz vrijeme dobro otkriva radi li nešto trajno ili
 se samo sporo inicijalizira.
 
@@ -72,6 +74,11 @@ U headless runu se proces nakon testova sam ugasi.
 Pickup dropa mjeri `voxel.pickuptest`: spawna drop u pickup zoni igraca i jedan
 izvan nje; `[PICKUP] ... pokupljen nakon 0.50 s` i `let gotov nakon 0.150 s` =
 prolaz (dalji drop se ne smije pokupiti). Proces se nakon testa sam ugasi.
+
+Plivanje mjeri `voxel.swimtest`: baci igrača u najbliže more dublje od 8
+blokova, pusti ga da tone, drži razmak do površine i na njoj, pa ga pusti;
+`[WATER] swim t=... mod=... sredina-povrsina=... vZ=...` svakih 0.1 s
+(tonjenje ~160 UU/s, dizanje ~190 UU/s). Proces se nakon testa sam ugasi.
 
 Knockback se mjeri komandom `voxel.kbtest [jacina...]` (default `0.4 0.9`
 blokova/tick): odbaci stvorenje najbliže igraču i u log ispiše `[KB]` linije s
@@ -215,6 +222,8 @@ Detailed docs in Croatian available in `Docs/`:
 - `PLAN_Knockback.md` - Knockback pri melee udarcu (vanilla formula, sprint-hit, per-mob otpor)
 - `PLAN_Biomes.md` - Biomi i biome tint za Grass/lišće (Biomes.json + PerInstanceCustomData)
 - `PLAN_StonyPeaks.md` - Treći biom Stony Peaks (noise planina, viši svijet, kamena površina s kalcitom, plan)
+- `PLAN_Oceans.md` - Razina mora (Z=0) i noise kontinentalnosti: oceani, obala, dno mora, spawn na kopnu (implementirano)
+- `PLAN_Water.md` - Realistična voda: vlastita ploha po chunku sa Single Layer Water materijalom, valovi, pogled ispod vode, plivanje (faze 1-4 implementirane)
 - `PLAN_Chunks.md` - Chunk sustav i beskonačan svijet (streaming oko igrača, async generacija)
 - `PLAN_BlockOutline.md` - Minecraft obrub fokusiranog bloka (screen-space linije u vlastitom scene proxyju)
 - `PLAN_BlockSounds.md` - Zvukovi kopanja i lomljenja blokova (sound grupe po materijalu, plan)

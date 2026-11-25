@@ -29,8 +29,22 @@ struct FChunkGenParams
 	float NoiseOffsetY = 0.f;
 	float NoiseScale = 0.08f;
 	int32 Octaves = 3;
-	int32 SurfaceLevel = 24;
+	int32 SeaLevel = 0;
 	int32 HeightAmplitude = 6;
+
+	// Kontinenti (Docs/PLAN_Oceans.md): noise kontinentalnosti -> visina iznad/ispod
+	// mora kroz krivulju (X = kontinentalnost, Y = blokovi od SeaLevel), ocean i obala
+	float ContinentOffsetX = 0.f;
+	float ContinentOffsetY = 0.f;
+	float ContinentNoiseScale = 0.0015f;
+	int32 ContinentOctaves = 4;
+	float ContinentNoiseGain = 2.3f;
+	TArray<FVector2D> ContinentHeightCurve;
+	float OceanContinentalness = -0.19f;
+	float CoastContinentalness = -0.11f;
+	float InlandContinentalness = 0.3f;
+	float UnderwaterAmplitudeScale = 0.3f;
+	int32 ShallowWaterDepth = 5;
 
 	// Planine (FTerrainGenerator::GetMountainLift) - MaxLift 0 = bez planina
 	float MountainOffsetX = 0.f;
@@ -48,6 +62,7 @@ struct FChunkGenParams
 	float BiomeNoiseScale = 0.012f;
 	TArray<uint8> NoiseBiomes = { 0 };
 	int32 PeakBiome = -1;
+	int32 OceanBiome = -1;   // biom s placement "ocean", -1 = nema ga
 	float PeakBiomeLift = 30.f;
 
 	// Nazubljena granica vrhova: noise pomice PeakBiomeLift za ±PeakBorderJitter po stupcu
@@ -111,11 +126,30 @@ public:
 	/** Indeks bioma stupca - JEDINA formula bioma (generacija i AVoxelWorld::GetBiomeIndexAt). */
 	static int32 GetBiomeIndex(const FChunkGenParams& Params, int32 X, int32 Y);
 
+	/** Kontinentalnost stupca (fraktalni noise, ~-1..1): nisko = ocean, visoko = unutrasnjost. */
+	static float GetContinentalness(const FChunkGenParams& Params, int32 X, int32 Y);
+
+	/** Visina terena od SeaLevel za danu kontinentalnost - linearno izmedu tocaka ContinentHeightCurve. */
+	static float GetContinentHeight(const FChunkGenParams& Params, float Continentalness);
+
+	/**
+	 * Je li celija morska voda: prazna celija na otvorenom (iznad generirane
+	 * povrsine stupca) do ukljucivo SeaLevel. JEDINO pravilo gdje je more -
+	 * na njega se oslanja prikaz vode (Docs/PLAN_Water.md).
+	 */
+	static bool IsSeaWater(const FChunkGenParams& Params, int32 X, int32 Y, int32 Z);
+
 	/** Koliko planina podize stupac (u blokovima) - ulazi i u visinu i u odabir bioma. */
 	static float GetMountainLift(const FChunkGenParams& Params, int32 X, int32 Y);
 
 	/** Generacijska polja bioma; nepoznat indeks dobiva default (Grass/Dirt/3, bez pruga, gustoca 1). */
 	static const FBiomeGenData& GetBiomeGenData(const FChunkGenParams& Params, int32 BiomeIndex);
+
+	/**
+	 * Povrsinski sloj stupca ciji je vrh pod morem (Height < SeaLevel): plitko
+	 * dno je Dirt, duboko Gravel na Stoneu (Minecraft surface pravilo), neovisno o biomu.
+	 */
+	static const FBiomeGenData& GetUnderwaterGenData(const FChunkGenParams& Params, int32 Height);
 
 	/** Lezi li stupac na pruzi - noise pruga unutar ±StripeHalfWidth oko nule. */
 	static bool IsStripeColumn(const FChunkGenParams& Params, int32 X, int32 Y);

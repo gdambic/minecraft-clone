@@ -1,5 +1,4 @@
 #include "TerrainGenerator.h"
-#include "VoxelChunk.h"
 
 float FTerrainGenerator::FractalNoise2D(int32 X, int32 Y, float NoiseOffsetX, float NoiseOffsetY,
 	float NoiseScale, int32 Octaves)
@@ -24,17 +23,6 @@ float FTerrainGenerator::FractalNoise2D(int32 X, int32 Y, float NoiseOffsetX, fl
 	}
 
 	return MaxAmplitude > 0.f ? Total / MaxAmplitude : 0.f;
-}
-
-int32 FTerrainGenerator::GetColumnHeight(int32 X, int32 Y, float NoiseOffsetX, float NoiseOffsetY,
-	float NoiseScale, int32 Octaves, int32 SurfaceLevel, int32 HeightAmplitude)
-{
-	const float Normalized = FractalNoise2D(X, Y, NoiseOffsetX, NoiseOffsetY, NoiseScale, Octaves);
-	const int32 Height = SurfaceLevel + FMath::RoundToInt(Normalized * HeightAmplitude);
-
-	// Donja granica da povrsina nikad ne padne na samo dno svijeta
-	// (WorldMinZ mora ostati cvrst sloj ispod najdubljeg terena)
-	return FMath::Max(Height, VoxelGrid::WorldMinZ + 1);
 }
 
 float FTerrainGenerator::GetMountainLift(int32 X, int32 Y, float NoiseOffsetX, float NoiseOffsetY,

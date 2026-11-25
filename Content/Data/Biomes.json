@@ -36,5 +36,18 @@
     "stripeBlock": "Calcite",
     "heightAmplitudeScale": 1.0,
     "placement": "peaks"
+  },
+  {
+    "name": "Ocean",
+    "displayName": "Ocean",
+    "grassTint": "#8EB971",
+    "foliageTint": "#71A74D",
+    "treeDensity": 0.0,
+    "treeTypes": [],
+    "surfaceBlock": "Gravel",
+    "subsurfaceBlock": "Stone",
+    "subsurfaceDepth": 1,
+    "heightAmplitudeScale": 1.0,
+    "placement": "ocean"
   }
 ]

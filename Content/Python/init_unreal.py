@@ -9,6 +9,7 @@ Registrira stavke:
 - **Tools > MinecraftClone > Generate Items Sprites** - pokrece Scripts/generate_item_sprites.py
 - **Tools > MinecraftClone > Import Block Sounds** - pokrece Scripts/import_block_sounds.py
 - **Tools > MinecraftClone > Import Block Cracks** - pokrece Scripts/import_block_cracks.py
+- **Tools > MinecraftClone > Build Water Material** - pokrece Scripts/build_water_material.py
 
 Time otpada lijepljenje exec(open(...)) u Python konzolu.
 
@@ -31,6 +32,9 @@ SCRIPT_PATH_BLOCK_SOUNDS = unreal.Paths.convert_relative_path_to_full(
 
 SCRIPT_PATH_BLOCK_CRACKS = unreal.Paths.convert_relative_path_to_full(
     unreal.Paths.project_dir() + "Scripts/import_block_cracks.py")
+
+SCRIPT_PATH_WATER_MATERIAL = unreal.Paths.convert_relative_path_to_full(
+    unreal.Paths.project_dir() + "Scripts/build_water_material.py")
 
 
 def _register_menu():
@@ -97,13 +101,24 @@ def _register_menu():
         'exec(open(r"{0}").read())'.format(SCRIPT_PATH_BLOCK_CRACKS))
     menu.add_menu_entry(SECTION_NAME, entry_block_cracks)
 
+    entry_water_material = unreal.ToolMenuEntry(
+        name="BuildWaterMaterial",
+        type=unreal.MultiBlockType.MENU_ENTRY)
+    entry_water_material.set_label("Build Water Material")
+    entry_water_material.set_tool_tip(
+        "Izgradi materijal vode M_Water i instancu MI_Water u Content/Water")
+    entry_water_material.set_string_command(
+        unreal.ToolMenuStringCommandType.PYTHON, "",
+        'exec(open(r"{0}").read())'.format(SCRIPT_PATH_WATER_MATERIAL))
+    menu.add_menu_entry(SECTION_NAME, entry_water_material)
+
     menus.refresh_all_widgets()
     return True
 
 
 try:
     if _register_menu():
-        unreal.log("[MinecraftClone] Tools > MinecraftClone > Build Block Materials / Generate Items Sprites / Import Block Sounds / Import Block Cracks registrirano")
+        unreal.log("[MinecraftClone] Tools > MinecraftClone > Build Block Materials / Generate Items Sprites / Import Block Sounds / Import Block Cracks / Build Water Material registrirano")
     else:
         unreal.log("[MinecraftClone] ToolMenus nedostupan (headless) - izbornik preskocen")
 except Exception as error:

@@ -5,6 +5,7 @@
 #include "BiomeDefinition.h"
 
 class UInstancedStaticMeshComponent;
+class UProceduralMeshComponent;
 
 /**
  * Konstante i koordinatni helperi chunk sustava (vidi Docs/PLAN_Chunks.md).
@@ -29,8 +30,9 @@ namespace VoxelGrid
 	/**
 	 * Visina svijeta = zbroj tri komponente (plan 3.1): dubina za kopanje
 	 * + njihaj terena 2*HeightAmplitude + zrak iznad najviseg vrha za stabla,
-	 * planine (PLAN_StonyPeaks.md) i gradnju. Povrsina se njise oko Z=0
-	 * (SurfaceLevel): kopanje ide u minus do WorldMinZ, gradnja u plus do
+	 * planine (PLAN_StonyPeaks.md) i gradnju. Razina mora je Z=0 (SeaLevel),
+	 * kopno je iznad nje, dno oceana do ~25 blokova ispod (PLAN_Oceans.md);
+	 * kopanje ide u minus do WorldMinZ, gradnja u plus do
 	 * WorldMaxZ. Blokovi zive na Z = WorldMinZ..WorldMaxZ (256 slojeva, kao
 	 * Minecraft prije 1.18).
 	 */
@@ -172,6 +174,9 @@ struct FVoxelChunk
 
 	/** Vizuali - ISM set SAMO za tipove prisutne u chunku (lazy kreiranje). */
 	TMap<EBlockType, FChunkInstanceSet> InstanceSets;
+
+	/** Ploha mora nad stupcima s vodom (Docs/PLAN_Water.md); nullptr = chunk nema mora. Zivi kao InstanceSets. */
+	TObjectPtr<UProceduralMeshComponent> WaterMesh = nullptr;
 
 	/** Je li igrac mijenjao chunk - odreduje cuva li se sadrzaj pri unloadu (plan 3.1). */
 	bool bModified = false;

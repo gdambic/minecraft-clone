@@ -15,6 +15,10 @@ class AMobBase;
 class UInstancedStaticMeshComponent;
 class ANavMeshBoundsVolume;
 class UBlockCrackComponent;
+class UMaterialInterface;
+class UMaterialInstanceDynamic;
+class UPostProcessComponent;
+class AVoxelWaterVolume;
 struct FHitResult;
 
 /** Jedan unos u spawn listi pasivnih mobova: koja klasa i koliko komada. */
@@ -46,10 +50,13 @@ class MINECRAFTCLONE_API AVoxelWorld : public AActor
 public:
 	AVoxelWorld();
 
-	/** Z nivo oko kojeg se njise povrsina (Grass). Ispod je Stone. Default 0:
-	 *  teren -HeightAmplitude..+HeightAmplitude, kopanje do WorldMinZ (-128). */
+	/**
+	 * Razina mora (Minecraftov Y=63): prazne celije na otvorenom do ukljucivo
+	 * ove visine su more. Kopno je iznad nje za ContinentHeightCurve, oceani
+	 * ispod; kopanje ide do WorldMinZ (-128). Docs/PLAN_Oceans.md.
+	 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "World")
-	int32 SurfaceLevel;
+	int32 SeaLevel;
 
 	// Veličina jednog bloka u UE units
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "World")
@@ -73,6 +80,26 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "World|Streaming", meta = (ClampMin = "1", ClampMax = "4"))
 	int32 BootstrapRadius;
 
+	// === WATER (Docs/PLAN_Water.md) ===
+
+	/** Materijal plohe mora: MI_Water (instanca M_Water) iz Scripts/build_water_material.py. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "World|Water")
+	TSoftObjectPtr<UMaterialInterface> WaterMaterial;
+
+	/** Broj kvadrata mreze vode po rubu bloka - valovi (faza 2) pomicu tocke, pa ih treba vise od jedne po bloku. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "World|Water", meta = (ClampMin = "1", ClampMax = "8"))
+	int32 WaterSubdivisions;
+
+	/** Visina povrsine vode unutar bloka na razini mora (0 = dno bloka, 1 = vrh); Minecraft 14/16. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "World|Water", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	float WaterSurfaceHeight;
+
+	/** Post-process ispod vode: MI_Underwater (instanca M_Underwater) iz Scripts/build_water_material.py. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "World|Water")
+	TSoftObjectPtr<UMaterialInterface> UnderwaterMaterial;
+
+	virtual void Tick(float DeltaSeconds) override;
+
 	/** Chunkovi s podacima - prsten sire od vizuala da je exposure na rubu vizualnog ringa uvijek tocan. */
 	int32 GetDataRadius() const { return VisualRadius + 1; }
 
@@ -89,7 +116,7 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "World|Terrain")
 	float NoiseScale;
 
-	/** Maksimalno odstupanje visine stupca od SurfaceLevel (u blokovima). */
+	/** Maksimalno odstupanje sitnih neravnina od visine kontinenta (u blokovima), puna vrijednost u unutrasnjosti. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "World|Terrain")
 	int32 HeightAmplitude;
 
@@ -103,6 +130,52 @@ public:
 	 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "World|Terrain")
 	float BiomeNoiseScale;
+
+	// === CONTINENTS (Docs/PLAN_Oceans.md) ===
+
+	/** "Zoom" noisea kontinentalnosti - mora biti manji od BiomeNoiseScale da oceani budu veci od bioma. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "World|Continents")
+	float ContinentNoiseScale;
+
+	/** Broj oktava noisea kontinentalnosti - vise = razvedenija obala. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "World|Continents")
+	int32 ContinentOctaves;
+
+	/**
+	 * Mnozitelj noisea kontinentalnosti. Fraktalni Perlin s 4 oktave pada u
+	 * ~-0.4..0.4; pojacanje ga razvuce na ~-1..1 kao Minecraftov, pa
+	 * Minecraftovi pragovi daju slican udio oceana. Vece = vise oceana i kopna u unutrasnjosti.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "World|Continents")
+	float ContinentNoiseGain;
+
+	/**
+	 * Visina terena od SeaLevel po kontinentalnosti: X = kontinentalnost, Y =
+	 * blokovi iznad (+) ili ispod (-) mora; izmedu tocaka linearno. Tocke moraju
+	 * biti sortirane po X.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "World|Continents")
+	TArray<FVector2D> ContinentHeightCurve;
+
+	/** Kontinentalnost ispod koje je stupac biom Ocean (Minecraft: -0.19). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "World|Continents")
+	float OceanContinentalness;
+
+	/** Kontinentalnost na kojoj pocinje kopno (Minecraft: -0.11) - odatle planine smiju rasti. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "World|Continents")
+	float CoastContinentalness;
+
+	/** Kontinentalnost od koje su planine i sitne neravnine u punoj mjeri. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "World|Continents")
+	float InlandContinentalness;
+
+	/** Udio amplitude sitnih neravnina na dnu oceana (0..1) - manje = mirnije dno. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "World|Continents", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	float UnderwaterAmplitudeScale;
+
+	/** Dubina vode (u blokovima) do koje je dno Dirt; dublje je Gravel na Stoneu. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "World|Continents", meta = (ClampMin = "0"))
+	int32 ShallowWaterDepth;
 
 	// === MOUNTAINS (Docs/PLAN_StonyPeaks.md) ===
 
@@ -268,6 +341,13 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "World")
 	TArray<EBlockType> GetPlaceableBlockTypes() const;
 
+	/**
+	 * Mjerenje plivanja ([WATER] swim u logu): igrac lebdi nad najblizim
+	 * dubokim morem dok se chunkovi ne ucitaju, padne u vodu, tone, pa drzi
+	 * skok (plivanje gore) i pusti ga. Vraca trajanje testa u sekundama.
+	 */
+	float RunSwimTest();
+
 protected:
 	virtual void BeginPlay() override;
 
@@ -315,6 +395,54 @@ private:
 
 	/** Izgradi ISM instance za sve izlozene blokove chunka (podaci moraju postojati, i susjedni). */
 	void ApplyChunkVisuals(FVoxelChunk& Chunk);
+
+	/**
+	 * Izgradi plohu mora chunka: mreza na razini mora samo nad stupcima koje
+	 * FChunkGenerator::IsSeaWater proglasi morem. Vertex color R = 1 na tockama
+	 * uz kopno (materijal tamo stisava valove, faza 2).
+	 */
+	void BuildChunkWater(FVoxelChunk& Chunk);
+
+	/** [WATER] dijagnostika bootstrap podrucja: stupci s vodom iz mesha vs. iz podataka chunka. */
+	void LogWaterDiagnostics() const;
+
+	/** Ucitani WaterMaterial (jednom, u BuildBlockAssetCache) - nullptr = default materijal + Error u logu. */
+	UPROPERTY(Transient)
+	TObjectPtr<UMaterialInterface> WaterMaterialLoaded = nullptr;
+
+	/** Z plohe mora u svijetu (prije valova) - isto kao u BuildChunkWater. */
+	float GetWaterSurfaceZ() const;
+
+	/** Stvori unbound post-process s MI_Underwater (iskljucen dok kamera nije blizu vode). */
+	void SetupUnderwater();
+
+	/**
+	 * Svaki frame: ukljuci post-process kad je kamera nad stupcem mora i ispod
+	 * najviseg vrha vala, i prepisi valove iz MI_Water u njega (stimanje MI_Water
+	 * se tako vidi i ispod vode). Crtu vode piksel po piksel radi materijal.
+	 */
+	void UpdateUnderwater();
+
+	UPROPERTY(Transient)
+	TObjectPtr<UPostProcessComponent> UnderwaterPostProcess = nullptr;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UMaterialInstanceDynamic> UnderwaterMID = nullptr;
+
+	bool bUnderwaterActive = false;
+
+	/** Kutija vode oko igraca (faza 4) - ukljucena samo kad je ispod igraca more. */
+	void UpdateWaterVolume();
+
+	UPROPERTY(Transient)
+	TObjectPtr<AVoxelWaterVolume> WaterVolume = nullptr;
+
+	/** Zadnje logirano stanje plivanja igraca ([WATER] igrac PLIVA). */
+	bool bPlayerSwimming = false;
+
+	/** Ukupno vrijeme i broj izgradnji plohe mora od starta ([WATER] u logu). */
+	double WaterBuildMsTotal = 0.0;
+	int32 WaterBuildCount = 0;
 
 	// === STREAMING ===
 
@@ -427,6 +555,14 @@ private:
 	float PeakBorderOffsetX = 0.f;
 	float PeakBorderOffsetY = 0.f;
 
+	/** Pomak uzorkovanja noisea kontinentalnosti - iz WorldSeed, nakon granice vrhova. */
+	float ContinentOffsetX = 0.f;
+	float ContinentOffsetY = 0.f;
+
+	/** Stupac kopna na koji se stavlja igrac kad PlayerStart padne u ocean; vrijedi uz bSpawnMovedToLand. */
+	FIntPoint SpawnLandColumn = FIntPoint::ZeroValue;
+	bool bSpawnMovedToLand = false;
+
 	/** Je li igrac nakon starta postavljen na povrsinu (planina moze prekriti PlayerStart). */
 	bool bPlayerPlacedOnSurface = false;
 
@@ -434,8 +570,14 @@ private:
 	double MaxChunkApplyMs = 0.0;
 	FIntPoint MaxChunkApplyCoord = FIntPoint::ZeroValue;
 
-	/** Najblizi stupac bioma vrhova oko ishodista (pretraga ±1024, korak 8); false = nema ga. */
-	bool FindNearestPeakColumn(FIntPoint& OutColumn) const;
+	/** Najblizi stupac bioma Biome oko ishodista (pretraga ±1024, korak 8); false = nema ga ili Biome < 0. */
+	bool FindNearestBiomeColumn(int32 Biome, FIntPoint& OutColumn) const;
+
+	/** Najblizi stupac kopna (povrsina na ili iznad SeaLevel) oko Center (pretraga ±1024, korak 4). */
+	bool FindNearestLandColumn(const FIntPoint& Center, FIntPoint& OutColumn) const;
+
+	/** Je li stupac kopno - povrsina na ili iznad razine mora (spawn igraca i mobova). */
+	bool IsLandColumn(int32 X, int32 Y) const;
 
 	/**
 	 * Tint bioma na poziciji za zadani tip tinta (Grass/Foliage); bijelo za

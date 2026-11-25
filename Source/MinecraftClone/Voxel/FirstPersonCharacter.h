@@ -128,6 +128,9 @@ public:
 
 	virtual void Tick(float DeltaTime) override;
 
+	/** U vodi iskljucuje dodatno kocenje bez inputa (vidi .cpp) */
+	virtual void OnMovementModeChanged(EMovementMode PrevMovementMode, uint8 PreviousCustomMode = 0) override;
+
 	/** Doseg za interakciju s blokovima (u UE units) - postavlja se u BP */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Block Interaction")
 	float BlockInteractionRange;
@@ -187,6 +190,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Inventory")
 	UInventoryComponent* GetInventoryComponent() const { return InventoryComponent; }
 
+	/** Testovi (voxel.swimtest): pritisni ili pusti skok kao da je igrac drzi tipku */
+	void SetJumpInputForTest(bool bPressed) { bPressed ? DoJumpStart() : DoJumpEnd(); }
+
 protected:
 	virtual void BeginPlay() override;
 
@@ -221,6 +227,9 @@ protected:
 	/** Trci li igrac (uvjet za sprint-hit knockback) */
 	UPROPERTY(BlueprintReadOnly, Category = "Movement")
 	bool bIsSprinting = false;
+
+	/** Drzi li se tipka skoka - u vodi znaci plivanje prema gore (Tick) */
+	bool bJumpHeld = false;
 
 	/** MaxWalkSpeed prije sprinta - vraca se na njega pri prekidu */
 	float BaseWalkSpeed = 0.0f;

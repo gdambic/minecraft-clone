@@ -21,12 +21,15 @@ enum class EBiomeTintType : uint8
  * Noise = bira ga biome noise jednakim pragovima (default).
  * Peaks = ne sudjeluje u biome noiseu; pripada stupcima koje noise planina
  * podigne barem za AVoxelWorld::PeakBiomeLift (Docs/PLAN_StonyPeaks.md).
+ * Ocean = ne sudjeluje u biome noiseu; pripada stupcima cija je kontinentalnost
+ * ispod AVoxelWorld::OceanContinentalness (Docs/PLAN_Oceans.md).
  */
 UENUM(BlueprintType)
 enum class EBiomePlacement : uint8
 {
 	Noise,
-	Peaks
+	Peaks,
+	Ocean
 };
 
 /**

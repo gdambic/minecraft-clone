@@ -53,6 +53,18 @@ AFirstPersonCharacter::AFirstPersonCharacter()
 	// Configure character movement
 	GetCharacterMovement()->BrakingDecelerationFalling = 1500.0f;
 	GetCharacterMovement()->AirControl = 0.5f;
+	// Plivanje (Docs/PLAN_Water.md, faza 4): Minecraft tone ~1.6 bloka/s. Uz
+	// kocenje vode 4.46 /s (AVoxelWaterVolume) tonjenje je g*(1-Buoyancy)/4.46,
+	// pa 160 UU/s pri g=980 daje Buoyancy 0.27. Vodoravno ~2 bloka/s.
+	GetCharacterMovement()->Buoyancy = 0.27f;
+	GetCharacterMovement()->MaxSwimSpeed = 200.0f;
+	// Izlaz na obalu: na povrsini je sredina na razini vode, a stopala ~1 blok
+	// ispod nje. Kad lik izade iz vode s razmakom i W prema zidu,
+	// UCharacterMovementComponent::CheckWaterJump ga odbaci s OutofWaterZ.
+	// Default trazi pogled gore >11.25° (Minecraft ne trazi) i 420 UU/s (vrh
+	// 90 UU, premalo za obalu Z=0); 520 UU/s digne stopala ~30 UU iznad bloka.
+	GetCharacterMovement()->JumpOutOfWaterPitch = -90.0f;
+	GetCharacterMovement()->OutofWaterZ = 520.0f;
 
 	// Create inventory component
 	InventoryComponent = CreateDefaultSubobject<UInventoryComponent>(TEXT("InventoryComponent"));
@@ -201,11 +213,13 @@ void AFirstPersonCharacter::StopSprint()
 
 void AFirstPersonCharacter::DoJumpStart()
 {
+	bJumpHeld = true;
 	Jump();
 }
 
 void AFirstPersonCharacter::DoJumpEnd()
 {
+	bJumpHeld = false;
 	StopJumping();
 }
 
@@ -311,10 +325,28 @@ void AFirstPersonCharacter::SpawnStartingItemDrops()
 	AItemDrop::SpawnItemDrop(this, EItemType::WoodenPickaxe, GetActorLocation() + GetActorRightVector() * 400.0f);
 }
 
+void AFirstPersonCharacter::OnMovementModeChanged(EMovementMode PrevMovementMode, uint8 PreviousCustomMode)
+{
+	Super::OnMovementModeChanged(PrevMovementMode, PreviousCustomMode);
+
+	// Bez inputa CalcVelocity u vodi koci dvaput: kocenjem (BrakingFrictionFactor
+	// 2 * 0.5 * FluidFriction) i trenjem fluida (0.5 * FluidFriction). Izmjereno
+	// tonjenje bilo je 54 UU/s umjesto 160. Minecraft koci isto s inputom i bez,
+	// pa u vodi ostaje samo trenje fluida; na kopnu vrijedi default 2.
+	UCharacterMovementComponent* Move = GetCharacterMovement();
+	Move->BrakingFrictionFactor = Move->IsSwimming() ? 0.0f : 2.0f;
+}
+
 void AFirstPersonCharacter::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
 	UpdateBlockLookAt();
+
+	// U vodi skok ne radi (CanJump trazi tlo), pa drzanje skoka pliva prema gore
+	if (bJumpHeld && GetCharacterMovement()->IsSwimming())
+	{
+		AddMovementInput(FVector::UpVector, 1.f);
+	}
 	TickOpenScreenSafety();
 
 	// Kopanje: komponenta zna cilj (UpdateBlockLookAt) i drzi li se tipka

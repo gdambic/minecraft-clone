@@ -12,6 +12,7 @@
 #include "NavigationSystem.h"
 #include "NavMesh/RecastNavMesh.h"
 #include "Components/InstancedStaticMeshComponent.h"
+#include "ProceduralMeshComponent.h"
 #include "CreatureBase.h"
 #include "EngineUtils.h"
 #include "GameFramework/PlayerStart.h"
@@ -22,6 +23,11 @@
 #include "Engine/StaticMesh.h"
 #include "Materials/MaterialInterface.h"
 #include "Materials/MaterialInstanceDynamic.h"
+#include "Components/PostProcessComponent.h"
+#include "Camera/PlayerCameraManager.h"
+#include "VoxelWaterVolume.h"
+#include "FirstPersonCharacter.h"
+#include "GameFramework/CharacterMovementComponent.h"
 #include "Math/RandomStream.h"
 #include "Tasks/Task.h"
 
@@ -61,9 +67,38 @@ static FAutoConsoleCommandWithWorldAndArgs GVoxelTeleportCmd(
 		UE_LOG(LogTemp, Log, TEXT("voxel.tp: igrac na grid (%d,%d,%d)"), GX, GY, GZ);
 	}));
 
+/**
+ * voxel.swimtest - izmjeri plivanje ([WATER] swim u logu): pad u duboko more,
+ * tonjenje, drzanje skoka. Headless run se nakon testa sam ugasi.
+ */
+static FAutoConsoleCommandWithWorldAndArgs GVoxelSwimTestCmd(
+	TEXT("voxel.swimtest"),
+	TEXT("Izmjeri plivanje: pad u najblize duboko more, tonjenje, plivanje gore."),
+	FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
+		{
+			if (!World)
+			{
+				return;
+			}
+			for (TActorIterator<AVoxelWorld> It(World); It; ++It)
+			{
+				const float Duration = It->RunSwimTest();
+				// Headless run se sam gasi da se log flusha; u editoru se ne gasi nista
+				if (!GIsEditor && Duration > 0.f)
+				{
+					FTimerHandle QuitHandle;
+					World->GetTimerManager().SetTimer(QuitHandle, FTimerDelegate::CreateLambda(
+						[]() { FPlatformMisc::RequestExit(false); }), Duration + 2.0f, false);
+				}
+				break;
+			}
+		}));
+
 AVoxelWorld::AVoxelWorld()
 {
-	PrimaryActorTick.bCanEverTick = false;
+	// Tick samo za pogled ispod vode (UpdateUnderwater); nakon kamere da prati njen frame
+	PrimaryActorTick.bCanEverTick = true;
+	PrimaryActorTick.TickGroup = TG_PostUpdateWork;
 
 	// Default vrijednosti - mogu se override-ati u BP_VoxelWorld
 	BlockSize = 100.0f;
@@ -71,14 +106,31 @@ AVoxelWorld::AVoxelWorld()
 	ChunkApplyBudgetMs = 8.0f;
 	StreamingIntervalSeconds = 0.25f;
 	BootstrapRadius = 2;
-	// Povrsina se njise oko Z=0 (teren -6..6); kopanje ide u minus do
-	// WorldMinZ (-128), zrak za stabla/gradnju u plus do WorldMaxZ (127).
-	SurfaceLevel = 0;
+	WaterMaterial = TSoftObjectPtr<UMaterialInterface>(FSoftObjectPath(TEXT("/Game/Water/MI_Water.MI_Water")));
+	WaterSubdivisions = 2;
+	WaterSurfaceHeight = 0.875f;
+	UnderwaterMaterial = TSoftObjectPtr<UMaterialInterface>(FSoftObjectPath(TEXT("/Game/Water/MI_Underwater.MI_Underwater")));
+	// More je na Z=0: kopno iznad, oceani ispod (Docs/PLAN_Oceans.md); kopanje
+	// ide u minus do WorldMinZ (-128), zrak za stabla/gradnju do WorldMaxZ (127).
+	SeaLevel = 0;
 	WorldSeed = 1337;
 	NoiseScale = 0.08f;
 	HeightAmplitude = 6;
 	Octaves = 3;
 	BiomeNoiseScale = 0.012f;
+	// Pragovi kontinentalnosti iz Minecrafta (ocean < -0.19, obala do -0.11);
+	// krivulja: duboki ocean do -24, crta obale na pragu oceana, unutrasnjost do +10
+	ContinentNoiseScale = 0.0015f;
+	ContinentOctaves = 4;
+	ContinentNoiseGain = 2.3f;
+	ContinentHeightCurve = {
+		FVector2D(-1.0f, -24.f), FVector2D(-0.455f, -16.f), FVector2D(-0.19f, -1.f),
+		FVector2D(-0.11f, 2.f), FVector2D(0.03f, 4.f), FVector2D(0.3f, 7.f), FVector2D(1.0f, 10.f) };
+	OceanContinentalness = -0.19f;
+	CoastContinentalness = -0.11f;
+	InlandContinentalness = 0.3f;
+	UnderwaterAmplitudeScale = 0.3f;
+	ShallowWaterDepth = 5;
 	MountainNoiseScale = 0.0025f;
 	MountainOctaves = 3;
 	MountainNoiseStart = 0.15f;
@@ -103,6 +155,71 @@ void AVoxelWorld::BeginPlay()
 {
 	Super::BeginPlay();
 	GenerateWorld();
+	SetupUnderwater();
+}
+
+void AVoxelWorld::Tick(float DeltaSeconds)
+{
+	Super::Tick(DeltaSeconds);
+	UpdateWaterVolume();
+	UpdateUnderwater();
+}
+
+void AVoxelWorld::UpdateWaterVolume()
+{
+	APawn* Player = UGameplayStatics::GetPlayerPawn(this, 0);
+	if (!Player)
+	{
+		return;
+	}
+	if (!WaterVolume)
+	{
+		FActorSpawnParameters Params;
+		Params.Owner = this;
+		Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+		WaterVolume = GetWorld()->SpawnActor<AVoxelWaterVolume>(Params);
+		if (!WaterVolume)
+		{
+			return;
+		}
+	}
+
+	// Ista odluka kao za plohu: je li stupac ispod sredine igraca more
+	const FVector PlayerPos = Player->GetActorLocation();
+	const FVector Rel = (PlayerPos - GetActorLocation()) / BlockSize;
+	const int32 X = FMath::RoundToInt(Rel.X);
+	const int32 Y = FMath::RoundToInt(Rel.Y);
+	const bool bSea = FChunkGenerator::IsSeaWater(CachedGenParams, X, Y, SeaLevel);
+
+	// Vrh na povrsini vode, dno na dnu svijeta; 3 bloka sirine
+	const float SurfaceZ = GetWaterSurfaceZ();
+	const float BottomZ = GetActorLocation().Z + (VoxelGrid::WorldMinZ - 0.5f) * BlockSize;
+	const bool bChanged = bSea != WaterVolume->IsWaterActive();
+	WaterVolume->SetWaterBox(FVector(PlayerPos.X, PlayerPos.Y, SurfaceZ), 1.5f * BlockSize, SurfaceZ - BottomZ, bSea);
+
+	// Lik volumen provjerava samo kad se sam pomakne; kad se pomakne ili upali
+	// kutija, a igrac stoji (npr. teleport na dno), ne bi je nasao. Zato
+	// provjera svaki frame dok je kutija ukljucena i na iskljucenju.
+	if (bSea || bChanged)
+	{
+		Player->GetRootComponent()->UpdatePhysicsVolume(true);
+	}
+	if (bChanged)
+	{
+		UE_LOG(LogTemp, Log, TEXT("[WATER] kutija vode %s: stupac (%d,%d), igrac Z=%.1f, povrsina Z=%.1f"),
+			bSea ? TEXT("UKLJUCENA") : TEXT("iskljucena"), X, Y, PlayerPos.Z, SurfaceZ);
+	}
+
+	const ACharacter* PlayerCharacter = Cast<ACharacter>(Player);
+	const bool bSwimming = PlayerCharacter && PlayerCharacter->GetCharacterMovement()->IsSwimming();
+	if (bSwimming != bPlayerSwimming)
+	{
+		bPlayerSwimming = bSwimming;
+		// vZ ~520 pri izlasku = skok na obalu (OutofWaterZ)
+		UE_LOG(LogTemp, Log, TEXT("[WATER] igrac %s: sredina %.1f od povrsine, vZ=%.0f"),
+			bSwimming ? TEXT("PLIVA") : TEXT("vise ne pliva"), PlayerPos.Z - SurfaceZ,
+			PlayerCharacter ? PlayerCharacter->GetCharacterMovement()->Velocity.Z : 0.f);
+	}
 }
 
 // === CHUNKS ===
@@ -169,8 +286,20 @@ FChunkGenParams AVoxelWorld::MakeChunkGenParams() const
 	Params.NoiseOffsetY = NoiseOffsetY;
 	Params.NoiseScale = NoiseScale;
 	Params.Octaves = Octaves;
-	Params.SurfaceLevel = SurfaceLevel;
+	Params.SeaLevel = SeaLevel;
 	Params.HeightAmplitude = HeightAmplitude;
+	Params.ContinentOffsetX = ContinentOffsetX;
+	Params.ContinentOffsetY = ContinentOffsetY;
+	Params.ContinentNoiseScale = ContinentNoiseScale;
+	Params.ContinentOctaves = ContinentOctaves;
+	Params.ContinentNoiseGain = ContinentNoiseGain;
+	Params.ContinentHeightCurve = ContinentHeightCurve;
+	Params.ContinentHeightCurve.Sort([](const FVector2D& A, const FVector2D& B) { return A.X < B.X; });
+	Params.OceanContinentalness = OceanContinentalness;
+	Params.CoastContinentalness = CoastContinentalness;
+	Params.InlandContinentalness = InlandContinentalness;
+	Params.UnderwaterAmplitudeScale = UnderwaterAmplitudeScale;
+	Params.ShallowWaterDepth = ShallowWaterDepth;
 	Params.BiomeOffsetX = BiomeOffsetX;
 	Params.BiomeOffsetY = BiomeOffsetY;
 	Params.BiomeNoiseScale = BiomeNoiseScale;
@@ -193,7 +322,7 @@ FChunkGenParams AVoxelWorld::MakeChunkGenParams() const
 	Params.StripeHalfWidth = StripeHalfWidth;
 
 	// Biomi po nacinu postavljanja: "noise" dijele biome noise jednakim
-	// pragovima (redom iz JSON-a), "peaks" dobiva vrhove planina
+	// pragovima (redom iz JSON-a), "peaks" dobiva vrhove planina, "ocean" more
 	if (UBlockRegistry* Registry = UBlockRegistry::Get(this))
 	{
 		Params.NoiseBiomes.Reset();
@@ -218,6 +347,16 @@ FChunkGenParams AVoxelWorld::MakeChunkGenParams() const
 					continue;
 				}
 				Params.PeakBiome = Index;
+			}
+			else if (Placement == EBiomePlacement::Ocean)
+			{
+				if (Params.OceanBiome >= 0)
+				{
+					UE_LOG(LogTemp, Warning, TEXT("VoxelWorld: vise bioma s placement 'ocean' - koristim prvi (%s)"),
+						*Registry->GetBiome(Params.OceanBiome).Name.ToString());
+					continue;
+				}
+				Params.OceanBiome = Index;
 			}
 			else
 			{
@@ -260,23 +399,29 @@ void AVoxelWorld::GenerateWorld()
 		return;
 	}
 
-	// Vrijednosti iz BP_VoxelWorld mogu biti stare (SurfaceLevel=24 iz svijeta
-	// s 0-baziranim Z) - upozori ako profil visine ne stane u WorldMinZ..WorldMaxZ
-	if (SurfaceLevel + HeightAmplitude + 8 > WorldMaxZ + 1)
+	// Profil visine (krivulja kontinenata +- amplituda + planine) mora stati u WorldMinZ..WorldMaxZ
+	float CurveMin = 0.f;
+	float CurveMax = 0.f;
+	for (int32 i = 0; i < ContinentHeightCurve.Num(); i++)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("VoxelWorld: SurfaceLevel=%d + amplituda %d ostavlja premalo zraka do stropa %d (stabla trebaju ~8)"),
-			SurfaceLevel, HeightAmplitude, WorldMaxZ + 1);
+		CurveMin = i == 0 ? ContinentHeightCurve[i].Y : FMath::Min(CurveMin, ContinentHeightCurve[i].Y);
+		CurveMax = i == 0 ? ContinentHeightCurve[i].Y : FMath::Max(CurveMax, ContinentHeightCurve[i].Y);
 	}
-	if (SurfaceLevel - HeightAmplitude < WorldMinZ)
+	if (SeaLevel + CurveMax + HeightAmplitude + MountainMaxLift + 8 > WorldMaxZ + 1)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("VoxelWorld: SurfaceLevel=%d - amplituda %d pada ispod dna svijeta %d"),
-			SurfaceLevel, HeightAmplitude, WorldMinZ);
+		UE_LOG(LogTemp, Warning, TEXT("VoxelWorld: SeaLevel=%d + kopno %.0f + amplituda %d + planine %.0f ostavlja premalo zraka do stropa %d (stabla trebaju ~8)"),
+			SeaLevel, CurveMax, HeightAmplitude, MountainMaxLift, WorldMaxZ + 1);
+	}
+	if (SeaLevel + CurveMin - HeightAmplitude < WorldMinZ)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("VoxelWorld: SeaLevel=%d + dno oceana %.0f - amplituda %d pada ispod dna svijeta %d"),
+			SeaLevel, CurveMin, HeightAmplitude, WorldMinZ);
 	}
 
 	// === [PERF] Početak mjerenja - vidi Docs/PLAN_UbrzanjePokretanja.md, sekcija 2 ===
 	UE_LOG(LogTemp, Warning, TEXT("[PERF] ================================================"));
-	UE_LOG(LogTemp, Warning, TEXT("[PERF] GenerateWorld  seed=%d, SurfaceLevel=%d +/-%d, WorldHeight=%d, VisualRadius=%d (data %d, unload %d)"),
-		WorldSeed, SurfaceLevel, HeightAmplitude, WorldHeight, VisualRadius, GetDataRadius(), GetUnloadRadius());
+	UE_LOG(LogTemp, Warning, TEXT("[PERF] GenerateWorld  seed=%d, SeaLevel=%d, amplituda +/-%d, WorldHeight=%d, VisualRadius=%d (data %d, unload %d)"),
+		WorldSeed, SeaLevel, HeightAmplitude, WorldHeight, VisualRadius, GetDataRadius(), GetUnloadRadius());
 
 	const double T0 = FPlatformTime::Seconds();
 
@@ -302,6 +447,8 @@ void AVoxelWorld::GenerateWorld()
 	StripeOffsetY = NoiseSeedStream.FRandRange(-100000.f, 100000.f);
 	PeakBorderOffsetX = NoiseSeedStream.FRandRange(-100000.f, 100000.f);
 	PeakBorderOffsetY = NoiseSeedStream.FRandRange(-100000.f, 100000.f);
+	ContinentOffsetX = NoiseSeedStream.FRandRange(-100000.f, 100000.f);
+	ContinentOffsetY = NoiseSeedStream.FRandRange(-100000.f, 100000.f);
 
 	// Snapshot parametara NAKON postavljanja offseta - streaming ga koristi do kraja igre
 	CachedGenParams = MakeChunkGenParams();
@@ -315,6 +462,26 @@ void AVoxelWorld::GenerateWorld()
 	{
 		SpawnGrid = WorldToGrid(It->GetActorLocation());
 		break;
+	}
+	// PlayerStart u oceanu: kao Minecraft, igrac krece s najblizeg kopna
+	bSpawnMovedToLand = false;
+	if (!IsLandColumn(SpawnGrid.X, SpawnGrid.Y))
+	{
+		FIntPoint Land;
+		if (FindNearestLandColumn(FIntPoint(SpawnGrid.X, SpawnGrid.Y), Land))
+		{
+			UE_LOG(LogTemp, Warning, TEXT("[BIOME] spawn (%d,%d) je u oceanu (Z=%d) -> najblize kopno (%d,%d) Z=%d"),
+				SpawnGrid.X, SpawnGrid.Y, GetTerrainHeightAt(SpawnGrid.X, SpawnGrid.Y),
+				Land.X, Land.Y, GetTerrainHeightAt(Land.X, Land.Y));
+			SpawnGrid = FIntVector(Land.X, Land.Y, SpawnGrid.Z);
+			SpawnLandColumn = Land;
+			bSpawnMovedToLand = true;
+		}
+		else
+		{
+			UE_LOG(LogTemp, Warning, TEXT("[BIOME] spawn (%d,%d) je u oceanu, a kopna nema unutar +-1024 - ostajem"),
+				SpawnGrid.X, SpawnGrid.Y);
+		}
 	}
 	SpawnCenterChunk = GridToChunk(SpawnGrid);
 
@@ -353,6 +520,7 @@ void AVoxelWorld::GenerateWorld()
 	}
 	UE_LOG(LogTemp, Warning, TEXT("[PERF] 3/4 Vizuali    %8.1f ms   %6d instanci"),
 		(T3 - T2) * 1000.0, TotalInstances);
+	LogWaterDiagnostics();
 
 	// Drugi ispis: dio stupaca sad cita biom spremljen u ucitanim chunkovima - CRC mora ostati isti
 	LogBiomeDiagnostics();
@@ -446,6 +614,9 @@ void AVoxelWorld::SoakTestHop()
 		return;
 	}
 
+	// Stanje oko prethodnog hopa (12 s je dovoljno da se vizuali izgrade)
+	LogWaterDiagnostics();
+
 	SoakHop++;
 
 	if (SoakHop > 5)
@@ -477,7 +648,7 @@ void AVoxelWorld::SoakTestHop()
 	case 4:
 	{
 		FIntPoint Peak;
-		if (FindNearestPeakColumn(Peak))
+		if (FindNearestBiomeColumn(CachedGenParams.PeakBiome, Peak))
 		{
 			GX = Peak.X;
 			GY = Peak.Y;
@@ -648,6 +819,12 @@ void AVoxelWorld::UnloadChunk(const FIntPoint& Coord)
 		CrackComponent->ClearCracksInChunk(Coord);
 	}
 
+	if (Chunk->WaterMesh)
+	{
+		Chunk->WaterMesh->DestroyComponent();
+		Chunk->WaterMesh = nullptr;
+	}
+
 	// ISM komponente + ComponentToChunk unosi zive tocno koliko i chunk
 	for (TPair<EBlockType, FChunkInstanceSet>& Pair : Chunk->InstanceSets)
 	{
@@ -682,6 +859,13 @@ void AVoxelWorld::UpdateStreaming()
 	if (!bPlayerPlacedOnSurface)
 	{
 		bPlayerPlacedOnSurface = true;
+		if (bSpawnMovedToLand)
+		{
+			// Bootstrap je generiran oko kopna, a ne oko PlayerStarta u oceanu
+			Player->SetActorLocation(GridToWorld(SpawnLandColumn.X, SpawnLandColumn.Y,
+				GetTerrainHeightAt(SpawnLandColumn.X, SpawnLandColumn.Y) + 2) + FVector(50.f, 50.f, 0.f),
+				false, nullptr, ETeleportType::TeleportPhysics);
+		}
 		const FIntVector Grid = WorldToGrid(Player->GetActorLocation());
 		const int32 SurfaceZ = GetTerrainHeightAt(Grid.X, Grid.Y);
 		if (Grid.Z <= SurfaceZ)
@@ -907,8 +1091,368 @@ void AVoxelWorld::ApplyChunkVisuals(FVoxelChunk& Chunk)
 		AddChunkInstancesBatch(Chunk, Pair.Key, Pair.Value);
 	}
 
+	BuildChunkWater(Chunk);
+
 	Chunk.bVisualsBuilt = true;
 	Chunk.State = EChunkState::Applied;
+}
+
+void AVoxelWorld::BuildChunkWater(FVoxelChunk& Chunk)
+{
+	const double Start = FPlatformTime::Seconds();
+	const FIntVector Origin = ChunkOrigin(Chunk.Coord);
+
+	// More po stupcu za chunk + rub od jednog stupca oko njega: rubne tocke
+	// mreze trebaju znati je li susjedni stupac (i u susjednom chunku) kopno.
+	// IsSeaWater je formula, pa susjed ne mora biti ucitan.
+	constexpr int32 Span = ChunkSize + 2;
+	TArray<bool> Sea;
+	Sea.SetNumUninitialized(Span * Span);
+	int32 SeaColumns = 0;
+	for (int32 CY = -1; CY <= ChunkSize; CY++)
+	{
+		for (int32 CX = -1; CX <= ChunkSize; CX++)
+		{
+			const bool bSea = FChunkGenerator::IsSeaWater(CachedGenParams, Origin.X + CX, Origin.Y + CY, SeaLevel);
+			Sea[(CY + 1) * Span + (CX + 1)] = bSea;
+			const bool bInside = CX >= 0 && CX < ChunkSize && CY >= 0 && CY < ChunkSize;
+			SeaColumns += bInside && bSea ? 1 : 0;
+		}
+	}
+	if (SeaColumns == 0)
+	{
+		return;
+	}
+	auto IsSea = [&Sea](int32 CX, int32 CY) { return Sea[(CY + 1) * Span + (CX + 1)]; };
+
+	// Zajednicka mreza tocaka za cijeli chunk (susjedni kvadrati dijele tocke),
+	// tocka nastaje tek kad je koristi neki kvadrat nad morem
+	const int32 Sub = FMath::Clamp(WaterSubdivisions, 1, 8);
+	const int32 Res = ChunkSize * Sub + 1;
+	const float Step = BlockSize / Sub;
+	// GridToWorld je sredina bloka: stupac X pokriva X*BlockSize +- BlockSize/2
+	const FVector Corner((Origin.X - 0.5f) * BlockSize, (Origin.Y - 0.5f) * BlockSize,
+		(SeaLevel - 0.5f + WaterSurfaceHeight) * BlockSize);
+
+	TArray<int32> VertexIndex;
+	VertexIndex.Init(INDEX_NONE, Res * Res);
+	TArray<FVector> Vertices;
+	TArray<FVector> Normals;
+	TArray<FVector2D> UV0;
+	TArray<FLinearColor> Colors;
+	TArray<FProcMeshTangent> Tangents;
+	TArray<int32> Triangles;
+	Triangles.Reserve(SeaColumns * Sub * Sub * 6);
+
+	auto GetVertex = [&](int32 I, int32 J) -> int32
+	{
+		int32& Index = VertexIndex[J * Res + I];
+		if (Index != INDEX_NONE)
+		{
+			return Index;
+		}
+		Index = Vertices.Add(Corner + FVector(I * Step, J * Step, 0.f));
+		Normals.Add(FVector::UpVector);
+		Tangents.Add(FProcMeshTangent(1.f, 0.f, 0.f));
+		// UV u blokovima svijeta - normal mapa (faza 2) se ponavlja bez savova preko chunkova
+		UV0.Add(FVector2D(Origin.X - 0.5f + (float)I / Sub, Origin.Y - 0.5f + (float)J / Sub));
+
+		// Tocka na granici stupaca dodiruje dva ili cetiri stupca; obala je
+		// ako je bilo koji od njih kopno
+		const int32 MinCX = I % Sub == 0 ? I / Sub - 1 : I / Sub;
+		const int32 MinCY = J % Sub == 0 ? J / Sub - 1 : J / Sub;
+		bool bShore = false;
+		for (int32 CY = MinCY; CY <= J / Sub && !bShore; CY++)
+		{
+			for (int32 CX = MinCX; CX <= I / Sub && !bShore; CX++)
+			{
+				bShore = !IsSea(CX, CY);
+			}
+		}
+		Colors.Add(FLinearColor(bShore ? 1.f : 0.f, 0.f, 0.f, 1.f));
+		return Index;
+	};
+
+	for (int32 CY = 0; CY < ChunkSize; CY++)
+	{
+		for (int32 CX = 0; CX < ChunkSize; CX++)
+		{
+			if (!IsSea(CX, CY))
+			{
+				continue;
+			}
+			for (int32 B = 0; B < Sub; B++)
+			{
+				for (int32 A = 0; A < Sub; A++)
+				{
+					const int32 I = CX * Sub + A;
+					const int32 J = CY * Sub + B;
+					const int32 V00 = GetVertex(I, J);
+					const int32 V10 = GetVertex(I + 1, J);
+					const int32 V01 = GetVertex(I, J + 1);
+					const int32 V11 = GetVertex(I + 1, J + 1);
+					// Redoslijed kao UKismetProceduralMeshLibrary::CreateGridMeshWelded (ploha prema gore)
+					Triangles.Append({ V00, V01, V10, V10, V01, V11 });
+				}
+			}
+		}
+	}
+
+	const FString BaseName = FString::Printf(TEXT("Water_%d_%d"), Chunk.Coord.X, Chunk.Coord.Y);
+	UProceduralMeshComponent* Mesh = NewObject<UProceduralMeshComponent>(
+		this, MakeUniqueObjectName(this, UProceduralMeshComponent::StaticClass(), FName(*BaseName)));
+	Mesh->SetMobility(GetRootComponent()->Mobility);
+	// Voda ne smije blokirati raycast kopanja ni navigaciju, a sjenu ne baca
+	Mesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	Mesh->SetCanEverAffectNavigation(false);
+	Mesh->SetCastShadow(false);
+	Mesh->SetupAttachment(GetRootComponent());
+	Mesh->CreateMeshSection_LinearColor(0, Vertices, Triangles, Normals, UV0, Colors, Tangents, /*bCreateCollision=*/false);
+	if (WaterMaterialLoaded)
+	{
+		Mesh->SetMaterial(0, WaterMaterialLoaded);
+	}
+	Mesh->RegisterComponent();
+	Chunk.WaterMesh = Mesh;
+
+	WaterBuildMsTotal += (FPlatformTime::Seconds() - Start) * 1000.0;
+	WaterBuildCount++;
+}
+
+float AVoxelWorld::RunSwimTest()
+{
+	ACharacter* Player = Cast<ACharacter>(UGameplayStatics::GetPlayerPawn(this, 0));
+	UCharacterMovementComponent* Move = Player ? Player->GetCharacterMovement() : nullptr;
+	if (!Move)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[WATER] swim: nema igraca"));
+		return 0.f;
+	}
+
+	// Najblize more dublje od 8 blokova (dovoljno za tonjenje bez dna)
+	const FIntVector PlayerGrid = WorldToGrid(Player->GetActorLocation());
+	constexpr int32 MinDepth = 8;
+	constexpr int32 SearchHalf = 512;
+	constexpr int32 Step = 4;
+	FIntPoint Target;
+	int64 BestDistSq = TNumericLimits<int64>::Max();
+	for (int32 DY = -SearchHalf; DY <= SearchHalf; DY += Step)
+	{
+		for (int32 DX = -SearchHalf; DX <= SearchHalf; DX += Step)
+		{
+			const int64 DistSq = (int64)DX * DX + (int64)DY * DY;
+			if (DistSq < BestDistSq && GetTerrainHeightAt(PlayerGrid.X + DX, PlayerGrid.Y + DY) <= SeaLevel - MinDepth)
+			{
+				BestDistSq = DistSq;
+				Target = FIntPoint(PlayerGrid.X + DX, PlayerGrid.Y + DY);
+			}
+		}
+	}
+	if (BestDistSq == TNumericLimits<int64>::Max())
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[WATER] swim: nema mora dubljeg od %d blokova u krugu %d"), MinDepth, SearchHalf);
+		return 0.f;
+	}
+
+	// Lebdi 3 bloka iznad povrsine dok streaming ne ucita dno (Flying ne pada)
+	const float SurfaceZ = GetWaterSurfaceZ();
+	Player->SetActorLocation(GridToWorld(Target.X, Target.Y, SeaLevel + 3), false, nullptr, ETeleportType::TeleportPhysics);
+	Move->Velocity = FVector::ZeroVector;
+	Move->SetMovementMode(MOVE_Flying);
+	UE_LOG(LogTemp, Log, TEXT("[WATER] swim: stupac (%d,%d), dno Z=%d, povrsina Z=%.1f, gravitacija %.0f, MaxSwimSpeed %.0f, Buoyancy %.2f"),
+		Target.X, Target.Y, GetTerrainHeightAt(Target.X, Target.Y), SurfaceZ, Move->GetGravityZ(), Move->MaxSwimSpeed, Move->Buoyancy);
+
+	// Faze: 0..4 s lebdi, 4 s pusti (pada u vodu i tone), 10 s drzi skok do
+	// povrsine i jos ~4 s na njoj, 18 s pusti
+	constexpr float ReleaseAt = 4.f;
+	constexpr float SwimUpAt = 10.f;
+	constexpr float SwimUpEnd = 18.f;
+	constexpr float EndAt = 21.f;
+	constexpr float SampleEvery = 0.1f;
+	TWeakObjectPtr<ACharacter> WeakPlayer = Player;
+	auto Schedule = [this](float Delay, TFunction<void()> Fn)
+	{
+		FTimerHandle Handle;
+		GetWorldTimerManager().SetTimer(Handle, FTimerDelegate::CreateLambda(MoveTemp(Fn)), Delay, false);
+	};
+
+	Schedule(ReleaseAt, [WeakPlayer]()
+	{
+		if (ACharacter* P = WeakPlayer.Get())
+		{
+			P->GetCharacterMovement()->SetMovementMode(MOVE_Falling);
+		}
+	});
+	Schedule(SwimUpAt, [WeakPlayer]()
+	{
+		if (AFirstPersonCharacter* P = Cast<AFirstPersonCharacter>(WeakPlayer.Get()))
+		{
+			P->SetJumpInputForTest(true);
+		}
+	});
+	Schedule(SwimUpEnd, [WeakPlayer]()
+	{
+		if (AFirstPersonCharacter* P = Cast<AFirstPersonCharacter>(WeakPlayer.Get()))
+		{
+			P->SetJumpInputForTest(false);
+		}
+	});
+	for (float T = ReleaseAt; T <= EndAt + KINDA_SMALL_NUMBER; T += SampleEvery)
+	{
+		Schedule(T + 0.01f, [WeakPlayer, T, SurfaceZ, SwimUpAt, SwimUpEnd]()
+		{
+			ACharacter* P = WeakPlayer.Get();
+			if (!P)
+			{
+				return;
+			}
+			const UCharacterMovementComponent* M = P->GetCharacterMovement();
+			const TCHAR* Phase = T < SwimUpAt ? TEXT("tone") : (T < SwimUpEnd ? TEXT("skok") : TEXT("pusten"));
+			UE_LOG(LogTemp, Log, TEXT("[WATER] swim t=%5.2f %-6s mod=%-9s sredina-povrsina=%7.1f vZ=%7.1f vXY=%5.1f"),
+				T - ReleaseAt, Phase, *StaticEnum<EMovementMode>()->GetNameStringByValue(M->MovementMode).RightChop(5),
+				P->GetActorLocation().Z - SurfaceZ, M->Velocity.Z, M->Velocity.Size2D());
+		});
+	}
+	return EndAt;
+}
+
+float AVoxelWorld::GetWaterSurfaceZ() const
+{
+	return GetActorLocation().Z + (SeaLevel - 0.5f + WaterSurfaceHeight) * BlockSize;
+}
+
+void AVoxelWorld::SetupUnderwater()
+{
+	UMaterialInterface* Material = UnderwaterMaterial.LoadSynchronous();
+	if (!Material)
+	{
+		UE_LOG(LogTemp, Error, TEXT("VoxelWorld: materijal ispod vode %s ne postoji - pokreni Tools > MinecraftClone > Build Water Material"),
+			*UnderwaterMaterial.ToString());
+		return;
+	}
+	UnderwaterMID = UMaterialInstanceDynamic::Create(Material, this);
+	UnderwaterPostProcess = NewObject<UPostProcessComponent>(this, TEXT("UnderwaterPostProcess"));
+	// Bez shape roditelja je volumen unbound - vrijedi gdje god je kamera
+	UnderwaterPostProcess->bUnbound = true;
+	UnderwaterPostProcess->bEnabled = false;
+	UnderwaterPostProcess->Settings.AddBlendable(UnderwaterMID, 1.f);
+	UnderwaterPostProcess->SetupAttachment(GetRootComponent());
+	UnderwaterPostProcess->RegisterComponent();
+}
+
+void AVoxelWorld::UpdateUnderwater()
+{
+	const APlayerCameraManager* CameraManager = UGameplayStatics::GetPlayerCameraManager(this, 0);
+	if (!UnderwaterPostProcess || !CameraManager)
+	{
+		return;
+	}
+
+	// Valovi iz MI_Water: isti parametri pomicu plohu i crtu vode na ekranu
+	static const FName WaveNames[] = { TEXT("Wave0"), TEXT("Wave1"), TEXT("Wave2"), TEXT("Wave3") };
+	FLinearColor Waves[UE_ARRAY_COUNT(WaveNames)];
+	float MaxCrest = 0.f;
+	for (int32 i = 0; i < UE_ARRAY_COUNT(WaveNames); i++)
+	{
+		Waves[i] = FLinearColor::Black;
+		if (WaterMaterialLoaded)
+		{
+			WaterMaterialLoaded->GetVectorParameterValue(FHashedMaterialParameterInfo(WaveNames[i]), Waves[i]);
+		}
+		MaxCrest += FMath::Abs(Waves[i].A);
+	}
+
+	// Ukljuci se dok kamera moze biti ispod vrha vala nad stupcem mora; near
+	// plane je ispred kamere, pa se i on racuna kao dio kamere
+	const FVector CameraPos = CameraManager->GetCameraLocation();
+	const FVector Rel = (CameraPos - GetActorLocation()) / BlockSize;
+	const int32 X = FMath::RoundToInt(Rel.X);
+	const int32 Y = FMath::RoundToInt(Rel.Y);
+	const float SurfaceZ = GetWaterSurfaceZ();
+	const float NearDist = GNearClippingPlane;
+	const bool bActive = FChunkGenerator::IsSeaWater(CachedGenParams, X, Y, SeaLevel)
+		&& CameraPos.Z < SurfaceZ + MaxCrest + NearDist;
+
+	if (bActive != bUnderwaterActive)
+	{
+		bUnderwaterActive = bActive;
+		UnderwaterPostProcess->bEnabled = bActive;
+		UE_LOG(LogTemp, Log, TEXT("[WATER] pogled ispod vode %s: stupac (%d,%d), kamera Z=%.1f, ploha Z=%.1f, vrh vala +%.1f"),
+			bActive ? TEXT("UKLJUCEN") : TEXT("iskljucen"), X, Y, CameraPos.Z, SurfaceZ, MaxCrest);
+	}
+	if (!bActive)
+	{
+		return;
+	}
+
+	for (int32 i = 0; i < UE_ARRAY_COUNT(WaveNames); i++)
+	{
+		UnderwaterMID->SetVectorParameterValue(WaveNames[i], Waves[i]);
+	}
+	float WaveSpeed = 1.f;
+	if (WaterMaterialLoaded)
+	{
+		WaterMaterialLoaded->GetScalarParameterValue(FHashedMaterialParameterInfo(TEXT("WaveSpeed")), WaveSpeed);
+	}
+	UnderwaterMID->SetScalarParameterValue(TEXT("WaveSpeed"), WaveSpeed);
+	UnderwaterMID->SetScalarParameterValue(TEXT("SurfaceZ"), SurfaceZ);
+	UnderwaterMID->SetScalarParameterValue(TEXT("NearDist"), NearDist);
+}
+
+void AVoxelWorld::LogWaterDiagnostics() const
+{
+	// Neovisna provjera mesha: stupac ima more ako je u PODACIMA chunka najvisi
+	// blok ispod razine mora (stabla u moru ne rastu). Izmijenjeni chunkovi se
+	// preskacu - njihovi podaci vise nisu generirani teren.
+	int32 MeshChunks = 0;
+	int32 MeshQuads = 0;
+	int32 MeshVertices = 0;
+	int32 DataColumns = 0;
+	int32 CheckedChunks = 0;
+	const int32 Sub = FMath::Clamp(WaterSubdivisions, 1, 8);
+	for (const TPair<FIntPoint, TUniquePtr<FVoxelChunk>>& Pair : Chunks)
+	{
+		const FVoxelChunk* Chunk = Pair.Value.Get();
+		if (!Chunk->bVisualsBuilt || Chunk->bModified)
+		{
+			continue;
+		}
+		CheckedChunks++;
+		if (Chunk->WaterMesh)
+		{
+			MeshChunks++;
+			if (const FProcMeshSection* Section = Chunk->WaterMesh->GetProcMeshSection(0))
+			{
+				MeshQuads += Section->ProcIndexBuffer.Num() / 6;
+				MeshVertices += Section->ProcVertexBuffer.Num();
+			}
+		}
+		for (int32 LocalY = 0; LocalY < ChunkSize; LocalY++)
+		{
+			for (int32 LocalX = 0; LocalX < ChunkSize; LocalX++)
+			{
+				int32 Top = WorldMinZ - 1;
+				for (int32 Z = SeaLevel; Z >= WorldMinZ; Z--)
+				{
+					if (Chunk->Blocks[LocalIndex(FIntVector(LocalX, LocalY, Z))] != EBlockType::Air)
+					{
+						Top = Z;
+						break;
+					}
+				}
+				DataColumns += Top < SeaLevel ? 1 : 0;
+			}
+		}
+	}
+
+	const int32 MeshColumns = MeshQuads / (Sub * Sub);
+	UE_LOG(LogTemp, Warning, TEXT("[WATER] %d chunkova s vizualima: ploha u %d chunkova, %d stupaca (%d kvadrata, %d tocaka) | iz podataka %d stupaca -> %s"),
+		CheckedChunks, MeshChunks, MeshColumns, MeshQuads, MeshVertices,
+		DataColumns, MeshColumns == DataColumns ? TEXT("OK") : TEXT("RAZLIKA"));
+	UE_LOG(LogTemp, Warning, TEXT("[WATER] povrsina na Z=%.1f UU, materijal %s | izgradeno %d ploha, prosjek %.3f ms"),
+		GetActorLocation().Z + (SeaLevel - 0.5f + WaterSurfaceHeight) * BlockSize,
+		WaterMaterialLoaded ? *WaterMaterialLoaded->GetName() : TEXT("NEMA (default)"),
+		WaterBuildCount, WaterBuildCount > 0 ? WaterBuildMsTotal / WaterBuildCount : 0.0);
 }
 
 void AVoxelWorld::EnsureNavMeshStepHeight() const
@@ -1649,6 +2193,11 @@ void AVoxelWorld::LogBiomeDiagnostics() const
 	int32 LiftedSamples = 0;
 	TMap<EBlockType, int32> PeakTopBlocks;
 	FIntVector Highest(0, 0, TNumericLimits<int32>::Lowest());
+	int32 UnderwaterSamples = 0;
+	int32 LandBiomeUnderwater = 0;   // lokve: stupac kopnenog bioma s vrhom ispod mora
+	int32 DeepestFloor = TNumericLimits<int32>::Max();
+	TArray<float> ContinentSamples;
+	ContinentSamples.Reserve((WideHalf * 2 / WideStep) * (WideHalf * 2 / WideStep));
 	for (int32 Y = -WideHalf; Y < WideHalf; Y += WideStep)
 	{
 		for (int32 X = -WideHalf; X < WideHalf; X += WideStep)
@@ -1662,6 +2211,13 @@ void AVoxelWorld::LogBiomeDiagnostics() const
 			WidePerBiome[Biome]++;
 			LiftedSamples += FChunkGenerator::GetMountainLift(CachedGenParams, X, Y) > 0.f ? 1 : 0;
 			const int32 Height = GetTerrainHeightAt(X, Y);
+			ContinentSamples.Add(FChunkGenerator::GetContinentalness(CachedGenParams, X, Y));
+			if (FChunkGenerator::IsSeaWater(CachedGenParams, X, Y, SeaLevel))
+			{
+				UnderwaterSamples++;
+				LandBiomeUnderwater += Biome != CachedGenParams.OceanBiome ? 1 : 0;
+				DeepestFloor = FMath::Min(DeepestFloor, Height);
+			}
 			if (Biome == CachedGenParams.PeakBiome)
 			{
 				const FBiomeGenData& Surface = FChunkGenerator::GetBiomeGenData(CachedGenParams, Biome);
@@ -1685,6 +2241,20 @@ void AVoxelWorld::LogBiomeDiagnostics() const
 	UE_LOG(LogTemp, Warning, TEXT("[BIOME] %dx%d (uzorak svakih %d):%s | planina dize %.1f%% | najvise Z=%d na (%d,%d)"),
 		WideHalf * 2, WideHalf * 2, WideStep, *WideShares, LiftedSamples * 100.f / WideSamples,
 		Highest.Z, Highest.X, Highest.Y);
+
+	// More: udio stupaca pod vodom, lokve u kopnenim biomima i raspodjela
+	// kontinentalnosti (za ugadanje pragova - nas noise nije Minecraftov)
+	ContinentSamples.Sort();
+	auto Percentile = [&ContinentSamples](float P)
+	{
+		return ContinentSamples[FMath::Clamp(FMath::FloorToInt32(P * ContinentSamples.Num()), 0, ContinentSamples.Num() - 1)];
+	};
+	UE_LOG(LogTemp, Warning, TEXT("[BIOME] more (SeaLevel=%d): pod vodom %.1f%% stupaca, od toga lokve u kopnenim biomima %.1f%% | najdublje dno Z=%d"),
+		SeaLevel, UnderwaterSamples * 100.f / WideSamples, LandBiomeUnderwater * 100.f / WideSamples,
+		UnderwaterSamples > 0 ? DeepestFloor : SeaLevel);
+	UE_LOG(LogTemp, Warning, TEXT("[BIOME] kontinentalnost: min %.3f p10 %.3f p25 %.3f p50 %.3f p75 %.3f p90 %.3f max %.3f (ocean < %.2f, obala < %.2f)"),
+		ContinentSamples[0], Percentile(0.1f), Percentile(0.25f), Percentile(0.5f), Percentile(0.75f), Percentile(0.9f),
+		ContinentSamples.Last(), OceanContinentalness, CoastContinentalness);
 
 	int32 PeakTopTotal = 0;
 	for (const TPair<EBlockType, int32>& Pair : PeakTopBlocks)
@@ -1725,8 +2295,19 @@ void AVoxelWorld::LogBiomeDiagnostics() const
 	}
 	UE_LOG(LogTemp, Warning, TEXT("[BIOME] stabla u %dx%d:%s"), WideHalf * 2, WideHalf * 2, *TreeCounts);
 
+	FIntPoint Ocean;
+	if (FindNearestBiomeColumn(CachedGenParams.OceanBiome, Ocean))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[BIOME] najblizi ocean od (0,0): (%d,%d) dno Z=%d, udaljenost %.0f blokova -> voxel.tp %d %d"),
+			Ocean.X, Ocean.Y, GetTerrainHeightAt(Ocean.X, Ocean.Y), FVector2D(Ocean).Size(), Ocean.X, Ocean.Y);
+	}
+	else
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[BIOME] nema oceana unutar +-1024 od (0,0)"));
+	}
+
 	FIntPoint Peak;
-	if (FindNearestPeakColumn(Peak))
+	if (FindNearestBiomeColumn(CachedGenParams.PeakBiome, Peak))
 	{
 		UE_LOG(LogTemp, Warning, TEXT("[BIOME] najblizi vrh od (0,0): (%d,%d) Z=%d, udaljenost %.0f blokova -> voxel.tp %d %d"),
 			Peak.X, Peak.Y, GetTerrainHeightAt(Peak.X, Peak.Y), FVector2D(Peak).Size(), Peak.X, Peak.Y);
@@ -1737,9 +2318,9 @@ void AVoxelWorld::LogBiomeDiagnostics() const
 	}
 }
 
-bool AVoxelWorld::FindNearestPeakColumn(FIntPoint& OutColumn) const
+bool AVoxelWorld::FindNearestBiomeColumn(int32 Biome, FIntPoint& OutColumn) const
 {
-	if (CachedGenParams.PeakBiome < 0)
+	if (Biome < 0)
 	{
 		return false;
 	}
@@ -1752,7 +2333,7 @@ bool AVoxelWorld::FindNearestPeakColumn(FIntPoint& OutColumn) const
 		for (int32 X = -SearchHalf; X <= SearchHalf; X += Step)
 		{
 			const int64 DistSq = (int64)X * X + (int64)Y * Y;
-			if (DistSq < BestDistSq && FChunkGenerator::GetBiomeIndex(CachedGenParams, X, Y) == CachedGenParams.PeakBiome)
+			if (DistSq < BestDistSq && FChunkGenerator::GetBiomeIndex(CachedGenParams, X, Y) == Biome)
 			{
 				BestDistSq = DistSq;
 				OutColumn = FIntPoint(X, Y);
@@ -1760,6 +2341,31 @@ bool AVoxelWorld::FindNearestPeakColumn(FIntPoint& OutColumn) const
 		}
 	}
 	return BestDistSq != TNumericLimits<int64>::Max();
+}
+
+bool AVoxelWorld::FindNearestLandColumn(const FIntPoint& Center, FIntPoint& OutColumn) const
+{
+	constexpr int32 SearchHalf = 1024;
+	constexpr int32 Step = 4;
+	int64 BestDistSq = TNumericLimits<int64>::Max();
+	for (int32 DY = -SearchHalf; DY <= SearchHalf; DY += Step)
+	{
+		for (int32 DX = -SearchHalf; DX <= SearchHalf; DX += Step)
+		{
+			const int64 DistSq = (int64)DX * DX + (int64)DY * DY;
+			if (DistSq < BestDistSq && IsLandColumn(Center.X + DX, Center.Y + DY))
+			{
+				BestDistSq = DistSq;
+				OutColumn = Center + FIntPoint(DX, DY);
+			}
+		}
+	}
+	return BestDistSq != TNumericLimits<int64>::Max();
+}
+
+bool AVoxelWorld::IsLandColumn(int32 X, int32 Y) const
+{
+	return GetTerrainHeightAt(X, Y) >= SeaLevel;
 }
 
 // === [PERF] DIJAGNOSTIKA ===
@@ -1821,6 +2427,13 @@ void AVoxelWorld::BuildBlockAssetCache()
 		}
 	}
 
+	WaterMaterialLoaded = WaterMaterial.LoadSynchronous();
+	if (!WaterMaterialLoaded)
+	{
+		UE_LOG(LogTemp, Error, TEXT("VoxelWorld: materijal vode %s ne postoji - pokreni Tools > MinecraftClone > Build Water Material"),
+			*WaterMaterial.ToString());
+	}
+
 	bAssetCacheReady = true;
 
 	const double ElapsedMs = (FPlatformTime::Seconds() - Start) * 1000.0;
@@ -1854,8 +2467,23 @@ void AVoxelWorld::SpawnEnemies()
 	// Spawn zombie na nasumičnoj poziciji na površini spawn podrucja
 	// (uvijek unutar bootstrap chunkova - teren garantirano postoji)
 	const FIntVector SpawnCenter = ChunkOrigin(SpawnCenterChunk) + FIntVector(ChunkSize / 2, ChunkSize / 2, 0);
-	int32 RandX = SpawnCenter.X + FMath::RandRange(-20, 20);
-	int32 RandY = SpawnCenter.Y + FMath::RandRange(-20, 20);
+	// Samo kopno - spawn podrucje moze dodirivati obalu
+	int32 RandX = SpawnCenter.X;
+	int32 RandY = SpawnCenter.Y;
+	for (int32 Attempt = 0; Attempt < 10; Attempt++)
+	{
+		RandX = SpawnCenter.X + FMath::RandRange(-20, 20);
+		RandY = SpawnCenter.Y + FMath::RandRange(-20, 20);
+		if (IsLandColumn(RandX, RandY))
+		{
+			break;
+		}
+	}
+	if (!IsLandColumn(RandX, RandY))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("VoxelWorld: nema kopna za zombija oko spawna - preskacem"));
+		return;
+	}
 	int32 SpawnZ = GetTerrainHeightAt(RandX, RandY) + 1;
 
 	FVector WorldPos = GridToWorld(RandX, RandY, SpawnZ);
@@ -1896,9 +2524,22 @@ void AVoxelWorld::SpawnMobs()
 
 		for (int32 i = 0; i < Entry.Count; i++)
 		{
-			// Random pozicija na površini spawn podrucja (unutar bootstrap chunkova)
-			int32 RandX = SpawnCenter.X + FMath::RandRange(-20, 20);
-			int32 RandY = SpawnCenter.Y + FMath::RandRange(-20, 20);
+			// Random pozicija na kopnu spawn podrucja (unutar bootstrap chunkova)
+			int32 RandX = SpawnCenter.X;
+			int32 RandY = SpawnCenter.Y;
+			for (int32 Attempt = 0; Attempt < 10; Attempt++)
+			{
+				RandX = SpawnCenter.X + FMath::RandRange(-20, 20);
+				RandY = SpawnCenter.Y + FMath::RandRange(-20, 20);
+				if (IsLandColumn(RandX, RandY))
+				{
+					break;
+				}
+			}
+			if (!IsLandColumn(RandX, RandY))
+			{
+				continue;
+			}
 			int32 SpawnZ = GetTerrainHeightAt(RandX, RandY) + 1;
 
 			FVector WorldPos = GridToWorld(RandX, RandY, SpawnZ);

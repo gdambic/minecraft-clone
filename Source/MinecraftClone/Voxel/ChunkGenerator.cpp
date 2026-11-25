@@ -17,7 +17,48 @@ float FChunkGenerator::GetMountainLift(const FChunkGenParams& Params, int32 X, i
 	}
 	return FTerrainGenerator::GetMountainLift(X, Y, Params.MountainOffsetX, Params.MountainOffsetY,
 		Params.MountainNoiseScale, Params.MountainOctaves, Params.MountainNoiseStart,
-		Params.MountainNoiseFull, Params.MountainMaxLift);
+		Params.MountainNoiseFull, Params.MountainMaxLift)
+		* FMath::SmoothStep(Params.CoastContinentalness, Params.InlandContinentalness, GetContinentalness(Params, X, Y));
+}
+
+float FChunkGenerator::GetContinentalness(const FChunkGenParams& Params, int32 X, int32 Y)
+{
+	return FTerrainGenerator::FractalNoise2D(X, Y, Params.ContinentOffsetX, Params.ContinentOffsetY,
+		Params.ContinentNoiseScale, Params.ContinentOctaves) * Params.ContinentNoiseGain;
+}
+
+float FChunkGenerator::GetContinentHeight(const FChunkGenParams& Params, float Continentalness)
+{
+	const TArray<FVector2D>& Curve = Params.ContinentHeightCurve;
+	if (Curve.IsEmpty())
+	{
+		return 0.f;
+	}
+	if (Continentalness <= Curve[0].X)
+	{
+		return Curve[0].Y;
+	}
+	for (int32 i = 1; i < Curve.Num(); i++)
+	{
+		if (Continentalness <= Curve[i].X)
+		{
+			return FMath::GetMappedRangeValueClamped(FVector2D(Curve[i - 1].X, Curve[i].X),
+				FVector2D(Curve[i - 1].Y, Curve[i].Y), Continentalness);
+		}
+	}
+	return Curve.Last().Y;
+}
+
+bool FChunkGenerator::IsSeaWater(const FChunkGenParams& Params, int32 X, int32 Y, int32 Z)
+{
+	return Z <= Params.SeaLevel && Z > GetTerrainHeight(Params, X, Y);
+}
+
+const FBiomeGenData& FChunkGenerator::GetUnderwaterGenData(const FChunkGenParams& Params, int32 Height)
+{
+	static const FBiomeGenData Shallow = { EBlockType::Dirt, EBlockType::Dirt, 3, EBlockType::Air, 0.f };
+	static const FBiomeGenData Deep = { EBlockType::Gravel, EBlockType::Stone, 1, EBlockType::Air, 0.f };
+	return Params.SeaLevel - Height <= Params.ShallowWaterDepth ? Shallow : Deep;
 }
 
 const FBiomeGenData& FChunkGenerator::GetBiomeGenData(const FChunkGenParams& Params, int32 BiomeIndex)
@@ -49,13 +90,29 @@ EBlockType FChunkGenerator::GetColumnBlock(const FBiomeGenData& Surface, bool bS
 
 int32 FChunkGenerator::GetTerrainHeight(const FChunkGenParams& Params, int32 X, int32 Y)
 {
-	const int32 BaseHeight = FTerrainGenerator::GetColumnHeight(X, Y, Params.NoiseOffsetX, Params.NoiseOffsetY,
-		Params.NoiseScale, Params.Octaves, Params.SurfaceLevel, Params.HeightAmplitude);
-	return BaseHeight + FMath::RoundToInt(GetMountainLift(Params, X, Y));
+	// Kontinentalnost daje grubu visinu prema moru; sitne neravnine su pod morem
+	// prigusene (mirnije dno), a puna amplituda vrijedi tek dublje u kopnu
+	const float Continentalness = GetContinentalness(Params, X, Y);
+	const float AmplitudeScale = FMath::Lerp(Params.UnderwaterAmplitudeScale, 1.f,
+		FMath::SmoothStep(Params.OceanContinentalness, Params.InlandContinentalness, Continentalness));
+	const float Local = FTerrainGenerator::FractalNoise2D(X, Y, Params.NoiseOffsetX, Params.NoiseOffsetY,
+		Params.NoiseScale, Params.Octaves) * Params.HeightAmplitude * AmplitudeScale;
+	const int32 Height = FMath::RoundToInt(Params.SeaLevel + GetContinentHeight(Params, Continentalness)
+		+ Local + GetMountainLift(Params, X, Y));
+
+	// Donja granica da povrsina nikad ne padne na samo dno svijeta
+	// (WorldMinZ mora ostati cvrst sloj ispod najdubljeg terena)
+	return FMath::Max(Height, VoxelGrid::WorldMinZ + 1);
 }
 
 int32 FChunkGenerator::GetBiomeIndex(const FChunkGenParams& Params, int32 X, int32 Y)
 {
+	// Ocean bira ista kontinentalnost koja spusta teren - biom i dubina se ne razilaze
+	if (Params.OceanBiome >= 0 && GetContinentalness(Params, X, Y) < Params.OceanContinentalness)
+	{
+		return Params.OceanBiome;
+	}
+
 	// Biom vrhova ovisi o istom podizanju koje radi visinu - granica bioma je
 	// izohipsa na padini, a ne mrlja neovisna o terenu
 	if (Params.PeakBiome >= 0)
@@ -113,7 +170,9 @@ TArray<EBlockType> FChunkGenerator::GenerateChunkData(const FChunkGenParams& Par
 			const int32 X = Origin.X + LocalX;
 			const int32 Y = Origin.Y + LocalY;
 			const int32 Height = FMath::Min(GetTerrainHeight(Params, X, Y), WorldMaxZ);
-			const FBiomeGenData& Surface = GetBiomeGenData(Params, OutBiomes[ColumnIndex(LocalX, LocalY)]);
+			const FBiomeGenData& Surface = Height < Params.SeaLevel
+				? GetUnderwaterGenData(Params, Height)
+				: GetBiomeGenData(Params, OutBiomes[ColumnIndex(LocalX, LocalY)]);
 			const bool bStripe = Surface.Stripe != EBlockType::Air && IsStripeColumn(Params, X, Y);
 			for (int32 Z = WorldMinZ; Z <= Height; Z++)
 			{
@@ -191,6 +250,10 @@ void FChunkGenerator::GetTreeCandidates(const FChunkGenParams& Params, const FIn
 		}
 
 		const int32 GroundZ = GetTerrainHeight(Params, X, Y);
+		if (GroundZ < Params.SeaLevel)
+		{
+			continue;   // stablo bi stajalo u moru
+		}
 
 		FTreeCandidate Tree;
 		Tree.Base = FIntVector(X, Y, GroundZ + 1);
