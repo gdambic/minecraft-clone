@@ -9,6 +9,7 @@ class USphereComponent;
 class UProceduralMeshComponent;
 class UBlockRegistry;
 class ACharacter;
+class AVoxelWorld;
 
 UCLASS()
 class MINECRAFTCLONE_API AItemDrop : public AActor
@@ -20,6 +21,10 @@ public:
 
 	virtual void Tick(float DeltaTime) override;
 
+protected:
+	virtual void BeginPlay() override;
+
+public:
 	/** Mesh komponenta - postavlja se u BP */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "ItemDrop")
 	UStaticMeshComponent* MeshComponent;
@@ -64,6 +69,14 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "ItemDrop")
 	bool bIsGrounded;
 
+	/** Uzgon pod vodom (UU/s^2 prema gore) - drop izranja i pluta (Docs/PLAN_Water.md, faza 5) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "ItemDrop|Water")
+	float WaterBuoyancy;
+
+	/** Kocenje vode (1/s): brzina pod vodom gubi ovaj udio svake sekunde */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "ItemDrop|Water")
+	float WaterDrag;
+
 	// === REGISTRY INITIALIZATION ===
 
 	/** Inicijaliziraj item drop iz registry-a (postavlja mesh, materijal, ItemType) */
@@ -82,6 +95,18 @@ private:
 	bool TickPickupFlight(float DeltaTime);
 
 	float CurrentLifetime;
+
+	/** Okomita brzina (UU/s, + gore). Na kopnu odmah -FallSpeed; u vodi je mijenjaju uzgon i kocenje. */
+	float VerticalVelocity = 0.0f;
+
+	/** Svijet za pitanje "je li ovdje more" - nade se u BeginPlay */
+	TWeakObjectPtr<AVoxelWorld> VoxelWorld;
+
+	/** [WATER] mjerenje: kad je drop prvi put zaronio i koliko najdublje (UU ispod plohe) */
+	void UpdateWaterLog(float SurfaceZ);
+	float WaterEnterLifetime = -1.0f;
+	float MaxWaterDepth = 0.0f;
+	bool bLoggedSurfaced = false;
 
 	/** Pola visine vidljivog mesha - drop lezi toliko (+ razmak) iznad tla */
 	float HalfVisualHeight = 12.5f;

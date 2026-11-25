@@ -348,6 +348,19 @@ public:
 	 */
 	float RunSwimTest();
 
+	/**
+	 * Provjera da mobovi ne ulaze u more ([WATER] mob u logu): igrac stane na
+	 * najblizu obalu s plitkim morem, kraj njega se stvori 6 ovaca na kopnu
+	 * (bjeze od igraca prema moru) i jedna u moru (mora izaci). Vraca trajanje.
+	 */
+	float RunMobWaterTest();
+
+	/**
+	 * Je li stupac ispod WorldLocation more (FChunkGenerator::IsSeaWater, isto
+	 * pravilo kao ploha). OutSurfaceZ = Z plohe mora prije valova.
+	 */
+	bool GetSeaSurfaceAt(const FVector& WorldLocation, float& OutSurfaceZ) const;
+
 protected:
 	virtual void BeginPlay() override;
 
@@ -403,6 +416,13 @@ private:
 	 */
 	void BuildChunkWater(FVoxelChunk& Chunk);
 
+	/**
+	 * Stupce mora chunka (IsSea(CX, CY), lokalno 0..ChunkSize-1) pokrij sto manje
+	 * pravokutnika i za svaki postavi kutiju - dinamicku prepreku s
+	 * UNavArea_Water od dna mora do plohe. Mobovi s UNavFilter_NoWater tamo ne idu.
+	 */
+	void BuildChunkWaterNav(FVoxelChunk& Chunk, TFunctionRef<bool(int32, int32)> IsSea);
+
 	/** [WATER] dijagnostika bootstrap podrucja: stupci s vodom iz mesha vs. iz podataka chunka. */
 	void LogWaterDiagnostics() const;
 
@@ -439,6 +459,10 @@ private:
 
 	/** Zadnje logirano stanje plivanja igraca ([WATER] igrac PLIVA). */
 	bool bPlayerSwimming = false;
+
+	/** [WATER] svakih 10 s: koliko stvorenja je u moru (faza 5, mobovi izbjegavaju vodu) */
+	void LogCreaturesInSea(float DeltaSeconds);
+	float CreatureSeaLogTimer = 0.f;
 
 	/** Ukupno vrijeme i broj izgradnji plohe mora od starta ([WATER] u logu). */
 	double WaterBuildMsTotal = 0.0;

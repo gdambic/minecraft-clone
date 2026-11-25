@@ -3,6 +3,7 @@
 #include "BehaviorTree/BlackboardComponent.h"
 #include "NavigationSystem.h"
 #include "../MobBase.h"
+#include "../VoxelNavigation.h"
 
 UBTTask_FindFleeLocation::UBTTask_FindFleeLocation()
 {
@@ -43,17 +44,28 @@ EBTNodeResult::Type UBTTask_FindFleeLocation::ExecuteTask(UBehaviorTreeComponent
 
 	// Try to find a valid point on the NavMesh
 	FNavLocation NavLocation;
-	bool bFound = NavSys->ProjectPointToNavigation(TargetLocation, NavLocation, FVector(FleeDistance, FleeDistance, 500.0f));
+	// Filter kontrolera na kopnu iskljucuje vodu, a cilj nad morem se odbacuje
+	// (Docs/PLAN_Water.md, faza 5)
+	const TSubclassOf<UNavigationQueryFilter> FilterClass = AIController->GetDefaultNavigationFilterClass();
+	ANavigationData* NavData = NavSys->GetDefaultNavDataInstance();
+	FSharedConstNavQueryFilter QueryFilter = NavData ? UNavigationQueryFilter::GetQueryFilter(*NavData, AIController, FilterClass) : nullptr;
+	bool bFound = NavSys->ProjectPointToNavigation(TargetLocation, NavLocation, FVector(FleeDistance, FleeDistance, 500.0f), NavData, QueryFilter)
+		&& !VoxelNav::IsOverSea(Mob, NavLocation.Location);
 
 	if (!bFound)
 	{
 		// Try to find any reachable point in the flee direction
 		// Use a smaller radius search if direct projection fails
-		bFound = NavSys->GetRandomReachablePointInRadius(
-			MobLocation + (FleeDirection * FleeDistance * 0.5f),
-			FleeDistance * 0.5f,
-			NavLocation
-		);
+		for (int32 Attempt = 0; Attempt < 10 && !bFound; Attempt++)
+		{
+			bFound = NavSys->GetRandomReachablePointInRadius(
+				MobLocation + (FleeDirection * FleeDistance * 0.5f),
+				FleeDistance * 0.5f,
+				NavLocation,
+				NavData,
+				QueryFilter
+			) && !VoxelNav::IsOverSea(Mob, NavLocation.Location);
+		}
 	}
 
 	if (bFound)

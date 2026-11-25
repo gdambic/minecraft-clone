@@ -3,6 +3,7 @@
 #include "BehaviorTree/BehaviorTree.h"
 #include "BehaviorTree/BehaviorTreeComponent.h"
 #include "BehaviorTree/BlackboardComponent.h"
+#include "VoxelNavigation.h"
 #include "Kismet/GameplayStatics.h"
 #include "NavigationSystem.h"
 #include "Navigation/PathFollowingComponent.h"
@@ -17,6 +18,15 @@ AEnemyAIController::AEnemyAIController()
 
 	// Use blackboard from this controller
 	Blackboard = BlackboardComponent;
+
+	DefaultNavigationFilterClass = UNavFilter_NoWater::StaticClass();
+}
+
+void AEnemyAIController::Tick(float DeltaSeconds)
+{
+	Super::Tick(DeltaSeconds);
+	// Na kopnu put nikad ne ulazi u more; mob koji je ipak u moru smije kroz vodu van
+	DefaultNavigationFilterClass = VoxelNav::FilterFor(GetPawn());
 }
 
 void AEnemyAIController::OnPossess(APawn* InPawn)

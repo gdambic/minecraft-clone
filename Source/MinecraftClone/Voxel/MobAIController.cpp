@@ -3,6 +3,7 @@
 #include "BehaviorTree/BehaviorTree.h"
 #include "BehaviorTree/BehaviorTreeComponent.h"
 #include "BehaviorTree/BlackboardComponent.h"
+#include "VoxelNavigation.h"
 
 // Static key names
 const FName AMobAIController::ThreatActorKey = FName("ThreatActor");
@@ -17,6 +18,15 @@ AMobAIController::AMobAIController()
 
 	// Use blackboard from this controller
 	Blackboard = BlackboardComponent;
+
+	DefaultNavigationFilterClass = UNavFilter_NoWater::StaticClass();
+}
+
+void AMobAIController::Tick(float DeltaSeconds)
+{
+	Super::Tick(DeltaSeconds);
+	// Na kopnu put nikad ne ulazi u more; mob koji je ipak u moru smije kroz vodu van
+	DefaultNavigationFilterClass = VoxelNav::FilterFor(GetPawn());
 }
 
 void AMobAIController::OnPossess(APawn* InPawn)

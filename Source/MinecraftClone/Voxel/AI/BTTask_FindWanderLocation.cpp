@@ -3,6 +3,7 @@
 #include "BehaviorTree/BlackboardComponent.h"
 #include "NavigationSystem.h"
 #include "../CreatureBase.h"
+#include "../VoxelNavigation.h"
 
 UBTTask_FindWanderLocation::UBTTask_FindWanderLocation()
 {
@@ -28,7 +29,18 @@ EBTNodeResult::Type UBTTask_FindWanderLocation::ExecuteTask(UBehaviorTreeCompone
 	FVector Origin = Creature->GetActorLocation();
 	FNavLocation RandomLocation;
 
-	bool bFound = NavSys->GetRandomReachablePointInRadius(Origin, Creature->GetWanderRadius(), RandomLocation);
+	// Filter kontrolera na kopnu iskljucuje vodu; mob u moru smije kroz vodu,
+	// ali cilj mu mora biti kopno (Docs/PLAN_Water.md, faza 5)
+	ANavigationData* NavData = NavSys->GetDefaultNavDataInstance();
+	FSharedConstNavQueryFilter QueryFilter = NavData
+		? UNavigationQueryFilter::GetQueryFilter(*NavData, AIController, AIController->GetDefaultNavigationFilterClass()) : nullptr;
+	bool bFound = false;
+	for (int32 Attempt = 0; Attempt < 10 && !bFound; Attempt++)
+	{
+		bFound = NavSys->GetRandomReachablePointInRadius(Origin, Creature->GetWanderRadius(), RandomLocation,
+			NavData, QueryFilter)
+			&& !VoxelNav::IsOverSea(Creature, RandomLocation.Location);
+	}
 
 	if (bFound)
 	{

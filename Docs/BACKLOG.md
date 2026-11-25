@@ -18,6 +18,13 @@ Ako se chunk unloada ispod ItemDropa (igrač pobjegne odmah nakon kopanja),
 drop propada kroz svijet dok ga KillZ ne počisti. Kozmetički problem —
 po potrebi vezati dropove uz chunk (despawn pri unloadu, kao mobovi).
 
+## 0c. Voda: odgođeni ostatak
+
+Rad na vodi je zatvoren 2026-11-25. Ostatak su zvuk pljuska, trzanje na površini,
+plivanje mobova u kutiji oko igrača, drop koji prati val, linija vode uz obalu,
+bacanje predmeta (Q) i mob u dubokom moru. Popis je u `PLAN_Water.md`, odjeljak
+"Odgođeno".
+
 ## 1. NavMeshBoundsVolume u leveli je divovski
 
 **Problem:** NavMeshBoundsVolume u `Lvl_ThirdPerson` je višestruko veći od

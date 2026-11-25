@@ -78,7 +78,13 @@ prolaz (dalji drop se ne smije pokupiti). Proces se nakon testa sam ugasi.
 Plivanje mjeri `voxel.swimtest`: baci igrača u najbliže more dublje od 8
 blokova, pusti ga da tone, drži razmak do površine i na njoj, pa ga pusti;
 `[WATER] swim t=... mod=... sredina-povrsina=... vZ=...` svakih 0.1 s
-(tonjenje ~160 UU/s, dizanje ~190 UU/s). Proces se nakon testa sam ugasi.
+(tonjenje ~160 UU/s, dizanje ~190 UU/s). Baci i Dirt drop u more:
+`[WATER] drop ... izronio nakon ~1.5 s`. Proces se nakon testa sam ugasi.
+
+Mobove uz more provjerava `voxel.mobwatertest`: ovce na obali bježe od igrača prema
+moru, jedna ovca je stvorena u moru; `[WATER] mob test GOTOVO: ... najvise 0 ... -> OK`
+= prolaz. `voxel.mobs.avoidwater 0` isključuje popravak za usporedbu. Svakih 10 s
+log ispiše `[WATER] stvorenja u moru: N od M`.
 
 Knockback se mjeri komandom `voxel.kbtest [jacina...]` (default `0.4 0.9`
 blokova/tick): odbaci stvorenje najbliže igraču i u log ispiše `[KB]` linije s
@@ -223,7 +229,7 @@ Detailed docs in Croatian available in `Docs/`:
 - `PLAN_Biomes.md` - Biomi i biome tint za Grass/lišće (Biomes.json + PerInstanceCustomData)
 - `PLAN_StonyPeaks.md` - Treći biom Stony Peaks (noise planina, viši svijet, kamena površina s kalcitom, plan)
 - `PLAN_Oceans.md` - Razina mora (Z=0) i noise kontinentalnosti: oceani, obala, dno mora, spawn na kopnu (implementirano)
-- `PLAN_Water.md` - Realistična voda: vlastita ploha po chunku sa Single Layer Water materijalom, valovi, pogled ispod vode, plivanje (faze 1-4 implementirane)
+- `PLAN_Water.md` - Realistična voda: vlastita ploha po chunku sa Single Layer Water materijalom, valovi, pogled ispod vode, plivanje, plutanje dropova, mobovi izvan mora (zatvoreno; ostatak odgođen)
 - `PLAN_Chunks.md` - Chunk sustav i beskonačan svijet (streaming oko igrača, async generacija)
 - `PLAN_BlockOutline.md` - Minecraft obrub fokusiranog bloka (screen-space linije u vlastitom scene proxyju)
 - `PLAN_BlockSounds.md` - Zvukovi kopanja i lomljenja blokova (sound grupe po materijalu, plan)

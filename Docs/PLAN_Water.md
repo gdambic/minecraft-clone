@@ -1,7 +1,8 @@
 # PLAN: Realistična voda
 
-> **STATUS (2026-11-25): FAZE 1-4 GOTOVE** (headless i u editoru). Faza 5 je plan. Preduvjet (razina mora
-> i oceani u generaciji) je gotov, vidi `PLAN_Oceans.md`.
+> **STATUS (2026-11-25): ZATVORENO ZA SADA.** Faze 1-4 i faza 5 (plutanje dropova, mobovi
+> izvan mora) gotove i provjerene. Sve ostalo oko vode je odgođeno za budućnost, vidi
+> "Odgođeno" na kraju i `BACKLOG.md`. Preduvjet (razina mora i oceani) je u `PLAN_Oceans.md`.
 
 ## Cilj
 
@@ -199,3 +200,53 @@ preskočiti.
 tonjenje 160.8 UU/s, dizanje 191 UU/s i plutanje na površini ±1 UU. Izlaz na obalu
 potvrđen je ručno u editoru. Plivanje je "dovoljno dobro". Otvoreno je trzanje na
 površini i to da stvorenja u kutiji oko igrača također plivaju.
+
+## Faza 5a: plutanje dropova (2026-11-25)
+
+`AItemDrop` pita `AVoxelWorld::GetSeaSurfaceAt` je li ispod njega more. To je isto
+pravilo kao za plohu. Dok mu je sredina ispod plohe, okomitu brzinu mijenjaju uzgon
+(`WaterBuoyancy` 300 UU/s²) i kočenje vode (`WaterDrag` 4.46 /s, isto kao kod igrača). Dno
+mora ga tada ne drži. Iznad plohe ga gravitacija vraća dolje, pa se smiri oko plohe. Na
+kopnu drop i dalje pada stalnom brzinom `FallSpeed`. Ovo nije Minecraftovo ponašanje,
+nego uvjerljiv plovak.
+
+`voxel.swimtest` uz igrača baci i Dirt drop. Izmjereno je: ulaz 397 UU/s, zaron 59 UU,
+izron nakon 1.53 s pri 67 UU/s, a nakon 2 s na plohi ±0.3 UU. To se slaže s izračunom.
+`voxel.pickuptest` i dalje prolazi. Usput je ispravljeno uništavanje dropa ispod
+Z=−1000, jer svijet sada ide do `WorldMinZ`. Drop pluta na ravnoj plohi, a ne na valu.
+U editoru je potvrđeno: "drop pliva".
+
+## Faza 5b: mobovi ne ulaze u more (2026-11-25)
+
+Navmesh vodu ne vidi, jer je dno mora za njega obično tlo. Zato `AVoxelWorld::BuildChunkWaterNav`
+u svakom chunku s morem stupce mora prekrije s što manje pravokutnih `UBoxComponent`
+kutija. Kutije se protežu od dna mora do plohe. Svaka je dinamička prepreka
+(`bDynamicObstacle`) koja u navmesh upiše područje `UNavArea_Water` (`VoxelNavigation.h`).
+Kutije žive i nestaju zajedno s plohom chunka.
+
+Kontroleri mobova (`AMobAIController`, `AEnemyAIController`) svaki tick biraju filter.
+Na kopnu koriste `UNavFilter_NoWater`, koji vodu potpuno isključuje. Zato nijedan put ne
+ulazi u more: ni lutanje, ni bijeg, ni potjera iz behavior treeja. Zombi se zato zaustavi
+na obali kad igrač pliva. Mob koji se ipak nađe nad morem, na primjer od knockbacka, dobije
+default filter. Tamo je voda dopuštena, ali skupa (cijena 20), pa izađe najkraćim putem.
+Lutanje i bijeg uz to odbacuju cilj nad morem (do 10 pokušaja).
+
+`voxel.mobwatertest` stavi igrača na najbližu obalu s plitkim morem. Kraj njega stvori
+6 ovaca, koje od igrača bježe prema moru, i jednu ovcu u moru. Test traje 60 s, a
+`[WATER] mob test GOTOVO ... -> OK` je prolaz. Kontrolni run s isključenim popravkom
+(`voxel.mobs.avoidwater 0`) daje FAIL: ovca ode u more sa stopalima 85 UU ispod plohe.
+S popravkom je rezultat 0 ovaca u moru, a ovca iz mora izađe nakon 3–5 s.
+
+## Odgođeno (za budućnost)
+
+Ovo se radi tek kad se odluči vratiti vodi:
+
+- **Zvuk pljuska:** kad igrač, mob ili drop uđe u vodu.
+- **Plivanje na površini:** lik brzo prelazi između plivanja i padanja, pa se malo trza.
+- **Stvorenja u kutiji vode:** mobovi u kutiji oko igrača također plivaju.
+- **Drop na valu:** drop pluta na ravnoj plohi, a ne prati val.
+- **Linija vode ispod površine:** maska pogleda ispod vode zanemaruje vodoravni pomak
+  Gerstnerovih valova i stišavanje uz obalu.
+- **Bacanje predmeta (Q):** ne postoji, a omogućilo bi da se drop baci u vodu.
+- **Mob u dubokom moru:** mob kojeg knockback baci u duboko more hoda po dnu do obale,
+  jer ne pliva.

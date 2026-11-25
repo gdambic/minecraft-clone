@@ -25,6 +25,9 @@ public:
 	AEnemyBase* GetControlledEnemy() const;
 
 protected:
+	/** Navigacijski filter prema tome je li pawn nad morem (VoxelNav::FilterFor) */
+	virtual void Tick(float DeltaSeconds) override;
+
 	virtual void OnPossess(APawn* InPawn) override;
 	virtual void OnUnPossess() override;
 

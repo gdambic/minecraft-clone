@@ -178,6 +178,9 @@ struct FVoxelChunk
 	/** Ploha mora nad stupcima s vodom (Docs/PLAN_Water.md); nullptr = chunk nema mora. Zivi kao InstanceSets. */
 	TObjectPtr<UProceduralMeshComponent> WaterMesh = nullptr;
 
+	/** Kutije koje stupce mora upisu u navmesh kao UNavArea_Water (faza 5). Zive kao WaterMesh. */
+	TArray<TObjectPtr<class UBoxComponent>> WaterNavBoxes;
+
 	/** Je li igrac mijenjao chunk - odreduje cuva li se sadrzaj pri unloadu (plan 3.1). */
 	bool bModified = false;
 

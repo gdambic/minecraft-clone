@@ -7,6 +7,8 @@
 #include "InventoryComponent.h"
 #include "Engine/Engine.h"
 #include "Block.h"
+#include "VoxelWorld.h"
+#include "VoxelChunk.h"
 #include "BlockType.h"
 #include "BlockRegistry.h"
 #include "Engine/StaticMesh.h"
@@ -54,6 +56,11 @@ AItemDrop::AItemDrop()
 	PickupReachVertical = 50.0f; // 0.5 bloka
 	FallSpeed = 400.0f; // 4 bloka po sekundi
 	bIsGrounded = false;
+	// Nije Minecraft (tamo drop pod vodom sporo plovi gore), nego uvjerljiv
+	// plovak: kocenje vode kao kod igraca (4.46 /s), uzgon 300 UU/s^2. Drop
+	// koji ude s 400 UU/s zaroni ~60 UU i izranja do 67 UU/s.
+	WaterBuoyancy = 300.0f;
+	WaterDrag = 4.46f;
 	CurrentLifetime = 0.0f;
 
 	// Pickup collision sphere (root)
@@ -76,6 +83,36 @@ AItemDrop::AItemDrop()
 	ExtrudedMeshComponent->SetupAttachment(RootComponent);
 	ExtrudedMeshComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	ExtrudedMeshComponent->SetVisibility(false);
+}
+
+void AItemDrop::BeginPlay()
+{
+	Super::BeginPlay();
+	VoxelWorld = Cast<AVoxelWorld>(UGameplayStatics::GetActorOfClass(GetWorld(), AVoxelWorld::StaticClass()));
+	VerticalVelocity = -FallSpeed;
+}
+
+void AItemDrop::UpdateWaterLog(float SurfaceZ)
+{
+	if (bLoggedSurfaced)
+	{
+		return;
+	}
+	if (WaterEnterLifetime < 0.0f)
+	{
+		WaterEnterLifetime = CurrentLifetime;
+		UE_LOG(LogTemp, Log, TEXT("[WATER] drop %s u vodi, ulazna brzina %.0f UU/s"),
+			*StaticEnum<EItemType>()->GetNameStringByValue((int64)ItemType), VerticalVelocity);
+	}
+	MaxWaterDepth = FMath::Max(MaxWaterDepth, SurfaceZ - GetActorLocation().Z);
+	// Izronio = sredina ce ovaj frame prijeci plohu prema gore
+	if (VerticalVelocity > 0.0f && GetActorLocation().Z + VerticalVelocity * GetWorld()->GetDeltaSeconds() >= SurfaceZ)
+	{
+		bLoggedSurfaced = true;
+		UE_LOG(LogTemp, Log, TEXT("[WATER] drop %s izronio nakon %.2f s, najdublje %.1f UU ispod plohe, brzina %.0f UU/s"),
+			*StaticEnum<EItemType>()->GetNameStringByValue((int64)ItemType),
+			CurrentLifetime - WaterEnterLifetime, MaxWaterDepth, VerticalVelocity);
+	}
 }
 
 void AItemDrop::Tick(float DeltaTime)
@@ -115,11 +152,32 @@ void AItemDrop::Tick(float DeltaTime)
 		}
 	}
 
+	// More: ispod plohe drop izranja, pa ga dno mora ne drzi
+	float WaterSurfaceZ = 0.0f;
+	const bool bSubmerged = VoxelWorld.IsValid() && VoxelWorld->GetSeaSurfaceAt(GetActorLocation(), WaterSurfaceZ)
+		&& GetActorLocation().Z < WaterSurfaceZ;
+	if (bSubmerged)
+	{
+		bIsGrounded = false;
+		VerticalVelocity += (WaterBuoyancy - WaterDrag * VerticalVelocity) * DeltaTime;
+		UpdateWaterLog(WaterSurfaceZ);
+	}
+	else if (!bIsGrounded)
+	{
+		// Na kopnu je brzina odmah FallSpeed; iznad vode (izronio) gravitacija
+		// ga vraca dolje, pa pluta oko plohe
+		VerticalVelocity = FMath::Max(VerticalVelocity + GetWorld()->GetGravityZ() * DeltaTime, -FallSpeed);
+	}
+
+	if (!bIsGrounded && VerticalVelocity > 0.0f)
+	{
+		AddActorWorldOffset(FVector(0.0f, 0.0f, VerticalVelocity * DeltaTime));
+	}
 	// Gravitacija - padaj dok ne udariš u tlo
-	if (!bIsGrounded)
+	else if (!bIsGrounded)
 	{
 		const float HoverHeight = HalfVisualHeight + GroundGap;
-		float FallDistance = FallSpeed * DeltaTime;
+		float FallDistance = -VerticalVelocity * DeltaTime;
 		FVector CurrentLocation = GetActorLocation();
 		FVector NewLocation = CurrentLocation - FVector(0.0f, 0.0f, FallDistance);
 
@@ -170,6 +228,7 @@ void AItemDrop::Tick(float DeltaTime)
 				{
 					SetActorLocation(FVector(CurrentLocation.X, CurrentLocation.Y, BlockTopZ + HoverHeight));
 					bIsGrounded = true;
+					VerticalVelocity = 0.0f;
 					UE_LOG(LogTemp, Log, TEXT("ItemDrop: %s sletio na %s (blok)"),
 						*StaticEnum<EItemType>()->GetNameStringByValue((int64)ItemType),
 						*GetActorLocation().ToCompactString());
@@ -188,6 +247,7 @@ void AItemDrop::Tick(float DeltaTime)
 				{
 					SetActorLocation(FVector(CurrentLocation.X, CurrentLocation.Y, SurfaceZ + HoverHeight));
 					bIsGrounded = true;
+					VerticalVelocity = 0.0f;
 					UE_LOG(LogTemp, Log, TEXT("ItemDrop: %s sletio na %s (povrsina: %s)"),
 						*StaticEnum<EItemType>()->GetNameStringByValue((int64)ItemType),
 						*GetActorLocation().ToCompactString(),
@@ -204,8 +264,8 @@ void AItemDrop::Tick(float DeltaTime)
 			// Nema ničega ispod, nastavi padati
 			SetActorLocation(NewLocation);
 
-			// Ako padne predaleko ispod svijeta, uništi
-			if (NewLocation.Z < -1000.0f)
+			// Ako padne ispod dna svijeta, uništi
+			if (NewLocation.Z < (VoxelGrid::WorldMinZ - 1) * ABlock::BlockSize)
 			{
 				UE_LOG(LogTemp, Warning, TEXT("ItemDrop: %s propao kroz svijet i unisten na %s"),
 					*StaticEnum<EItemType>()->GetNameStringByValue((int64)ItemType),
