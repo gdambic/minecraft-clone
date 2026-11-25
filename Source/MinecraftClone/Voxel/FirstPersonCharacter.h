@@ -20,6 +20,7 @@ class ACreatureBase;
 class UFirstPersonArmComponent;
 class UBlockOutlineComponent;
 class UBlockMiningComponent;
+class UMaceComponent;
 struct FInputActionValue;
 
 /** Delegate koji se broadcasta kada se promijeni odabrani item */
@@ -82,6 +83,10 @@ class MINECRAFTCLONE_API AFirstPersonCharacter : public ACharacter
 	/** Kopanje bloka u koji igrac gleda: progres, alat, zvuk i pukotine */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components", meta = (AllowPrivateAccess = "true"))
 	UBlockMiningComponent* MiningComponent;
+
+	/** Mace: kugla na lancu koja se vrti, baca i vraca (Terraria flail) */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components", meta = (AllowPrivateAccess = "true"))
+	UMaceComponent* MaceComponent;
 
 protected:
 	/** Jump Input Action */

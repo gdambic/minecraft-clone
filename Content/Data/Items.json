@@ -86,6 +86,11 @@
     "display": { "type": "sprite", "texture": "WoodenPickaxe" }
   },
   {
+    "itemType": "Mace",
+    "displayName": "Mace",
+    "display": { "type": "sprite", "texture": "Mace" }
+  },
+  {
     "itemType": "StoneSword",
     "displayName": "Stone Sword",
     "display": { "type": "none" }

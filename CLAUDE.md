@@ -86,6 +86,11 @@ moru, jedna ovca je stvorena u moru; `[WATER] mob test GOTOVO: ... najvise 0 ...
 = prolaz. `voxel.mobs.avoidwater 0` isključuje popravak za usporedbu. Svakih 10 s
 log ispiše `[WATER] stvorenja u moru: N od M`.
 
+Mace mjeri `voxel.macetest`: vrtnja i bacanje u stvorenje 5 blokova ispred igraca,
+pa bacanje s ponovnim pritiskom (kugla padne i lezi) i pustanje; `[MACE] t=... A -> B`
+su promjene stanja, `[MACE] test GOTOVO: ... -> OK` = prolaz. `voxel.mace.log 1`
+ispisuje stanja i pogotke u igri. Proces se nakon testa sam ugasi.
+
 Knockback se mjeri komandom `voxel.kbtest [jacina...]` (default `0.4 0.9`
 blokova/tick): odbaci stvorenje najbliže igraču i u log ispiše `[KB]` linije s
 jačinom, brzinom i dometom pri doskoku. U headless runu (`-ExecCmds="voxel.kbtest"`)
@@ -235,6 +240,7 @@ Detailed docs in Croatian available in `Docs/`:
 - `PLAN_BlockSounds.md` - Zvukovi kopanja i lomljenja blokova (sound grupe po materijalu, plan)
 - `PLAN_BlockDamage.md` - Pukotine pri kopanju (destroy_stage 0-9 iz Minecraft jara, kopanje odvojeno od prikaza, implementirano)
 - `PLAN_ItemNameHighlight.md` - Ime odabranog itema iznad hotbara (2 s + fade, `UHotbarWidget`, `[ITEMNAME]` u logu, implementirano)
+- `PLAN_Mace.md` - Mace: doslovni Terraria thrown flail (vrtnja, bacanje, drop) s drškom u ruci, kugla i lanac u svijetu (implementirano)
 - `PLAN_FirstPersonHand.md` - First-person hand/viewmodel system
 - `PLAN_HoldingDisplay.md` - Prikaz odabranog itema u ruci (sprite, implementirano)
 - `PLAN_ItemExtrusion.md` - 3D ekstrudirani item mesh iz 16x16 teksture (Minecraft stil, implementirano)

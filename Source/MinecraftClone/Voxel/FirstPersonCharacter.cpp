@@ -24,6 +24,7 @@
 #include "InputCoreTypes.h"
 #include "FirstPersonArmComponent.h"
 #include "ItemDrop.h"
+#include "MaceComponent.h"
 
 AFirstPersonCharacter::AFirstPersonCharacter()
 {
@@ -92,6 +93,8 @@ AFirstPersonCharacter::AFirstPersonCharacter()
 	BlockOutlineComponent->SetUsingAbsoluteScale(true);
 
 	MiningComponent = CreateDefaultSubobject<UBlockMiningComponent>(TEXT("BlockMining"));
+
+	MaceComponent = CreateDefaultSubobject<UMaceComponent>(TEXT("Mace"));
 }
 
 void AFirstPersonCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
@@ -235,6 +238,10 @@ void AFirstPersonCharacter::BeginPlay()
 	{
 		MiningComponent->SetVoxelWorld(VoxelWorld);
 	}
+	if (MaceComponent)
+	{
+		MaceComponent->SetVoxelWorld(VoxelWorld);
+	}
 
 	// Prati promjene sadržaja slotova - ruka se mora osvježiti i kad se
 	// odabrani slot isprazni/napuni bez promjene indeksa
@@ -254,6 +261,8 @@ void AFirstPersonCharacter::BeginPlay()
 		InventoryComponent->SetSlot(UInventoryComponent::HotbarStartIndex + 2, EItemType::OakLog, 10);
 		// Slot 31 = hotbar pozicija 4 (DiamondSword) - za testiranje
 		InventoryComponent->SetSlot(UInventoryComponent::HotbarStartIndex + 4, EItemType::DiamondSword, 1);
+		// Slot 32 = hotbar pozicija 5 (Mace) - za testiranje
+		InventoryComponent->SetSlot(UInventoryComponent::HotbarStartIndex + 5, EItemType::Mace, 1);
 	}
 
 	// WoodenSword se ne dobiva u startnom inventoryju nego kao drop u svijetu.
@@ -359,6 +368,11 @@ void AFirstPersonCharacter::Tick(float DeltaTime)
 		// Blok je nestao pod obrubom - ugasi ga do sljedeceg raycasta
 		HideBlockOutline();
 	}
+
+	if (MaceComponent)
+	{
+		MaceComponent->TickMace(DeltaTime, GetSelectedItemType());
+	}
 }
 
 void AFirstPersonCharacter::UpdateBlockLookAt()
@@ -456,6 +470,13 @@ void AFirstPersonCharacter::HideBlockOutline()
 
 void AFirstPersonCharacter::StartAttack()
 {
+	// Mace preuzima lijevu tipku: ne kopa i ne udara melee (Terraria noMelee)
+	if (MaceComponent && UMaceComponent::IsMace(GetSelectedItemType()))
+	{
+		MaceComponent->PressAttack();
+		return;
+	}
+
 	// Always play swing animation on attack input
 	if (FirstPersonArmComponent)
 	{
@@ -479,6 +500,11 @@ void AFirstPersonCharacter::StartAttack()
 
 void AFirstPersonCharacter::StopAttack()
 {
+	if (MaceComponent)
+	{
+		MaceComponent->ReleaseAttack();
+	}
+
 	// Pustena tipka resetira progres i brise pukotinu
 	if (MiningComponent)
 	{

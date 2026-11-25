@@ -31,6 +31,10 @@ const TMap<EItemType, FWeaponData>& UWeaponDataLibrary::GetWeaponRegistry()
 		// (bIsWeapon pali placeholder mac u ruci, pa ostaje false)
 		Registry.Add(EItemType::WoodenPickaxe, FWeaponData(2.0f, 1.2f, 1.0f, false));
 
+		// Mace - steta s Terraria tooltipa (stvarna osnovna je pola, let x2, vrtnja x1.2);
+		// useTime 45 tickova = 1.33 upotrebe/s. Napad vodi UMaceComponent, ne melee.
+		Registry.Add(EItemType::Mace, FWeaponData(6.0f, 60.0f / 45.0f, 1.0f, true));
+
 		// Visi tieri sjekira/krampa i lopate se dodaju kad dobiju unos u
 		// EItemType i Items.json (bez toga bi item pao na sivi fallback).
 	}

@@ -35,5 +35,7 @@ enum class EItemType : uint8
 	Porkchop,      // Svinjetina (od svinje)
 
 	Calcite,       // Kalcit
-	Gravel         // Šljunak
+	Gravel,        // Šljunak
+
+	Mace           // Buzdovan: kugla na lancu (Terraria flail, Docs/PLAN_Mace.md)
 };
