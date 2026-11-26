@@ -110,6 +110,14 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "HeadLook")
 	bool IsSuppressed() const { return bSuppressed; }
 
+	/**
+	 * Track this actor continuously, ignoring range, FOV and the glance
+	 * windows (a hostile mob keeps its eyes on its target). nullptr returns
+	 * to the normal glancing behavior.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "HeadLook")
+	void SetForcedTarget(AActor* InTarget) { ForcedTarget = InTarget; }
+
 protected:
 	virtual void BeginPlay() override;
 
@@ -127,6 +135,10 @@ private:
 
 	/** While true, tracking is disabled and the head returns to rest */
 	bool bSuppressed = false;
+
+	/** Actor tracked continuously instead of glancing at the player */
+	UPROPERTY()
+	TWeakObjectPtr<AActor> ForcedTarget;
 
 	/** True while the head is actively tracking the player */
 	bool bIsHeadTracking = false;

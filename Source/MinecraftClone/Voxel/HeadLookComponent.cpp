@@ -44,7 +44,19 @@ void UHeadLookComponent::TickComponent(float DeltaTime, ELevelTick TickType,
 	AActor* Owner = GetOwner();
 	APawn* Player = UGameplayStatics::GetPlayerPawn(this, 0);
 
-	if (Owner && Player)
+	if (Owner && ForcedTarget.IsValid() && !bSuppressed)
+	{
+		const APawn* TargetPawn = Cast<APawn>(ForcedTarget.Get());
+		const FVector TargetEyes = TargetPawn ? TargetPawn->GetPawnViewLocation() : ForcedTarget->GetActorLocation();
+		const FRotator DeltaRot = ((TargetEyes - GetHeadLocation()).Rotation() - Owner->GetActorRotation()).GetNormalized();
+
+		// The glance window restarts from scratch once the target is dropped
+		bIsHeadTracking = false;
+		TargetYaw = FMath::ClampAngle(DeltaRot.Yaw, -MaxHeadYaw, MaxHeadYaw);
+		TargetPitch = FMath::ClampAngle(DeltaRot.Pitch, -MaxHeadPitch, MaxHeadPitch);
+		TargetAlpha = 1.0f;
+	}
+	else if (Owner && Player)
 	{
 		const FVector HeadLocation = GetHeadLocation();
 		const FVector PlayerEyes = Player->GetPawnViewLocation();

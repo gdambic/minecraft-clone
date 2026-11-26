@@ -93,7 +93,9 @@ void ACreatureBase::Tick(float DeltaTime)
 
 bool ACreatureBase::CanBeHurt() const
 {
-	return GetWorld()->GetTimeSeconds() - LastHurtTime >= HurtImmunityTime;
+	// Mrtvo stvorenje (zombi dok se prevrce) se vise ne moze pogoditi
+	return CurrentHealth > 0.0f
+		&& GetWorld()->GetTimeSeconds() - LastHurtTime >= HurtImmunityTime;
 }
 
 bool ACreatureBase::TakeDamage(float DamageAmount)

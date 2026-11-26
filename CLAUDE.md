@@ -91,6 +91,13 @@ pa bacanje s ponovnim pritiskom (kugla padne i lezi) i pustanje; `[MACE] t=... A
 su promjene stanja, `[MACE] test GOTOVO: ... -> OK` = prolaz. `voxel.mace.log 1`
 ispisuje stanja i pogotke u igri. Proces se nakon testa sam ugasi.
 
+Zombija mjeri `voxel.zombietest`: prati zombija koji lovi igrača 14 s, pa ga
+ozlijedi i ubije. `[ZOMBIE] test: ... mesh=SK_Zombie anim=ABP_Zombie_C` potvrđuje
+assete; linije `lov/ozljeda/smrt` daju walkSpeed, agresivnost, napad, tint i kutove
+kostiju od rest poze (GetAngle 0..360, pa 360-x = x na drugu stranu): ruka ~120
+dok ima metu, noga do walk*80, root do 90 pri smrti; `GOTOVO: ... uklonjen -> OK`
+= prolaz. Proces se nakon testa sam ugasi.
+
 Knockback se mjeri komandom `voxel.kbtest [jacina...]` (default `0.4 0.9`
 blokova/tick): odbaci stvorenje najbliže igraču i u log ispiše `[KB]` linije s
 jačinom, brzinom i dometom pri doskoku. U headless runu (`-ExecCmds="voxel.kbtest"`)
@@ -247,5 +254,6 @@ Detailed docs in Croatian available in `Docs/`:
 - `IMPLEMENTACIJA_ItemExtrusion.md` - Detaljno objašnjenje izvedbe item ekstruzije, korak po korak
 - `BLOCK_TEXTURES_AND_MATERIALS.md` - Teksture i materijali blokova, rotacija
 - `TEXTURE_SPEC.md` - Popis PNG datoteka koje treba nacrtati
+- `PLAN_Zombie.md` - Minecraft zombi: model/tekstura/animacije iz vanilla formula kao asseti (Blender skripta + import), logika u C++
 - `sheep.md` - Sheep passive mob implementation
 - `Blokovi_Itemi_Minecraft.md` - Block/item reference table
