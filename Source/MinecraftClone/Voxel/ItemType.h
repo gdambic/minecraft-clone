@@ -1,6 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "UObject/ObjectMacros.h"
 
 UENUM(BlueprintType)
 enum class EItemType : uint8
@@ -37,5 +38,22 @@ enum class EItemType : uint8
 	Calcite,       // Kalcit
 	Gravel,        // Šljunak
 
-	Mace           // Buzdovan: kugla na lancu (Terraria flail, Docs/PLAN_Mace.md)
+	Mace,          // Buzdovan: kugla na lancu (Terraria flail, Docs/PLAN_Mace.md)
+
+	// Podzemlje (Docs/PLAN_Underground.md) - blokovi kamena i dropovi ruda
+	Cobblestone,
+	Deepslate,
+	CobbledDeepslate,
+	Granite,
+	Diorite,
+	Tuff,
+	Flint,
+	Coal,
+	RawIron,
+	RawCopper,
+	RawGold,
+	Redstone,
+	LapisLazuli,
+	Diamond,
+	Emerald
 };

@@ -45,7 +45,7 @@ struct MINECRAFTCLONE_API FBlockDefinition
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Block", meta = (ClampMin = "0.0", ClampMax = "1.0"))
 	float DropChance = 1.0f;
 
-	/** Vrijeme potrebno za uništenje bloka golom rukom (sekunde) */
+	/** Vrijeme potrebno za uništenje bloka golom rukom (sekunde); 0 ili manje = blok se ne može iskopati (Bedrock) */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Block")
 	float TimeToDestroy = 1.5f;
 
@@ -63,6 +63,31 @@ struct MINECRAFTCLONE_API FBlockDefinition
 	 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Block")
 	bool bRequiresTool = false;
+
+	/**
+	 * Najmanja razina alata koja ostavlja drop (JSON "requiredToolTier":
+	 * "Stone"/"Iron"/"Diamond"); vrijedi samo uz "requiresTool". None = bilo
+	 * koji alat prave klase.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Block")
+	EToolTier RequiredToolTier = EToolTier::None;
+
+	/** Koliko komada DropItemType ispadne: nasumicno izmedu Min i Max, ukljucivo (JSON "dropCountMin"/"dropCountMax"). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Block", meta = (ClampMin = "1"))
+	int32 DropCountMin = 1;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Block", meta = (ClampMin = "1"))
+	int32 DropCountMax = 1;
+
+	/**
+	 * Rijedak drop koji ZAMJENJUJE obicni (JSON "rareDropItemType" i
+	 * "rareDropChance") - Gravel u 10 % slucajeva ispusti Flint umjesto sebe.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Block")
+	EItemType RareDropItemType = EItemType::None;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Block", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	float RareDropChance = 0.0f;
 
 	/**
 	 * Sound grupa bloka (JSON "soundGroup": "stone"/"wood"/"gravel"/"grass"/

@@ -105,6 +105,25 @@ kasni li izgradnja chunkova, `[FLY] test GOTOVO: ... -> OK` = prolaz (očekivano
 dizanje 750, let 1089, sprint 2178 UU/s). `voxel.fly.allow 0` zabranjuje let.
 Proces se nakon testa sam ugasi.
 
+Špilje provjerava `voxel.cavetest`: generira 9×9 chunkova oko igrača i ispiše
+`[CAVE]` linije s udjelom šupljina po pojasevima visine, brojem otvora na površini
+i trajanjem generacije chunka sa špiljama i bez njih; `[CAVE] test GOTOVO: dodir mora
+i spilje 0 ..., stabla nad rupom 0 ... -> OK` = prolaz (provjerava i da upit za jednu
+točku daje isto što i generacija chunka, da je najdonji sloj Bedrock i da ispod Z −63
+nema Stonea). Linije `[CAVE] blok <ime> ... po chunku` daju broj blokova svakog tipa,
+uključujući rude. `voxel.slice` snimi okomiti presjek svijeta
+kroz igrača kao PNG u `Saved/VoxelSlices/` (512×256, piksel = blok; `voxel.slice y`
+za drugu os, `voxel.slice z -40` za vodoravni rez 512×512 na visini −40); putanja je u
+logu kao `[CAVE] presjek spremljen`. Obje komande rade i na neučitanim chunkovima, a
+proces se nakon njih sam ugasi. `[CAVE] konfiguracija` na startu ispiše pročitani
+`Underground.json`.
+
+Vizuale podzemlja provjerava `voxel.deeptest`: igrača spusti u najbližu špilju, pa
+vrati na površinu; `[DEEP] u spilji: ... bez vizuala 0 ... predalekih odsjecaka 0` i
+`[DEEP] test GOTOVO: vizuali u spilji potpuni, uklanjanje radi -> OK` = prolaz. Soak
+test na kraju ispiše `[PERF] vizuali u streamingu` (prosjek ms i instanci po chunku) i
+`[PERF] vizuali podzemlja` (broj i trajanje odsječaka). Proces se nakon testa sam ugasi.
+
 Knockback se mjeri komandom `voxel.kbtest [jacina...]` (default `0.4 0.9`
 blokova/tick): odbaci stvorenje najbliže igraču i u log ispiše `[KB]` linije s
 jačinom, brzinom i dometom pri doskoku. U headless runu (`-ExecCmds="voxel.kbtest"`)
@@ -122,7 +141,9 @@ proces se nakon testova sam ugasi da se log flusha.
 |-------|---------|
 | `AVoxelWorld` | World manager: chunk streaming (beskonačan svijet), per-chunk ISM vizuali, async generacija |
 | `FVoxelChunk` / `VoxelGrid` | Chunk 16×16×256, Z −128..127 (flat array, Air=0) + koordinatni helperi (`VoxelChunk.h`) |
-| `FChunkGenerator` | Čista, thread-safe generacija podataka chunka (teren+stabla+showcase, `ChunkGenerator.h`) |
+| `FChunkGenerator` | Čista, thread-safe generacija podataka chunka (teren+špilje+stabla+showcase, `ChunkGenerator.h`) |
+| `FCaveGenerator` | Špilje po Minecraftovim formulama (dvorane, tuneli, uski prolazi, ulazi); čista funkcija seeda i koordinata (`CaveGenerator.h`) |
+| `FUndergroundGenerator` | Slojevi kamena (Bedrock, Deepslate) i nakupine kamena i ruda - port Minecraftovog `OreFeature` (`UndergroundGenerator.h`) |
 | `ABlock` | Individual voxel actor with mesh, destruction system, drop spawning |
 | `AItemDrop` | Physics-enabled dropped items with auto-pickup |
 | `UInventoryComponent` | Slot-based player inventory (36 slots: 27 main + 9 hotbar) |
@@ -132,8 +153,13 @@ proces se nakon testova sam ugasi da se log flusha.
 ### Key Enums
 
 ```cpp
-// EBlockType: Air, Dirt, Stone, Grass, OakLog, BirchLog, OakLeaves, BirchLeaves
-// EItemType: None, Dirt, Stone, Grass, OakLog, BirchLog, OakSapling, BirchSapling
+// EBlockType: Air, Dirt, Stone, Grass, OakLog, BirchLog, OakLeaves, BirchLeaves, ...
+//   podzemlje: Cobblestone, Deepslate, CobbledDeepslate, Bedrock, Granite, Diorite, Tuff,
+//   pa po dvije inacice svake rude: CoalOre/DeepslateCoalOre, Iron, Copper, Gold, Redstone, Lapis, Diamond, Emerald
+// EItemType: None, Dirt, Stone, Grass, OakLog, BirchLog, OakSapling, BirchSapling, ...
+//   podzemlje: Cobblestone, Deepslate, CobbledDeepslate, Granite, Diorite, Tuff, Flint, Coal,
+//   RawIron, RawCopper, RawGold, Redstone, LapisLazuli, Diamond, Emerald
+// Nove vrijednosti se dodaju NA KRAJ enuma.
 ```
 
 ### Block Interaction Flow
@@ -157,6 +183,8 @@ Source/MinecraftClone/
 ## Content Organization
 
 - `Content/Data/Blocks.json`, `Items.json` - definicije blokova/itema; učitava ih `UBlockRegistry` (enum vrijednost bez JSON unosa dobije fallback: siva kocka + Error u logu)
+- `Content/Data/WorldGen/Underground.json` - podzemlje: `caves` (uključivanje po vrsti, pragovi, veličina, zaštita mora), `layers` (Bedrock, Deepslate) i `features` (nakupine kamena i rude: blok, što zamjenjuje, pokušaja po chunku, veličina, raspon visine, biomi). Čita ga `FUndergroundConfig::Load`. `layers` i `features` iz Minecraft jara upisuje `python Scripts/build_underground_config.py`; nova ruda = blok u `Blocks.json`, predmet u `Items.json` i unos u `features`
+- Teksture blokova i predmeta podzemlja uvozi Tools > MinecraftClone > Import Underground Blocks (`Scripts/import_underground_assets.py`, izvlači ih iz jara i gradi materijale i ikone)
 - `Content/Data/Recipes/` - crafting recepti (JSON, file-per-recipe)
 - `Content/Data/BlockSounds.json` - sampleovi po sound grupi; assetovi u `Content/Audio/Blocks/` (uvozi ih `Scripts/import_block_sounds.py`)
 - `Content/Blueprints/Blocks/` - Block blueprints (BP_Dirt, BP_Stone, etc.)
@@ -177,12 +205,18 @@ Configured in `MinecraftClone.Build.cs`:
 // generacija na worker threadu; teren = ISM instance PO CHUNKU; ABlock actor
 // postoji samo za fokusirani blok; izmjene prežive unload u RAM-u, ne restart.
 // Streaming properties: VisualRadius (6), ChunkApplyBudgetMs (3 ms po frameu), BootstrapRadius.
+// Vizuali i kolizija blokova ispod povrsine (spilje) postoje SAMO u kocki od
+// UndergroundVisualRadius (2) odsjecaka po 16 blokova oko igraca; povrsina je sve do
+// SurfaceVisualDepth (8) blokova ispod najnize tocke stupca i 4 susjeda.
 // Vidi Docs/PLAN_Chunks.md.)
 EBlockType GetBlockTypeAt(FIntVector GridPosition);   // tip na poziciji (izvor istine)
 ABlock* GetBlock(int32 X, int32 Y, int32 Z);          // SAMO promovirani (fokusirani) blok
 void SetBlockType(int32 X, int32 Y, int32 Z, EBlockType Type);
 bool PlaceBlockAt(FIntVector GridPosition, EBlockType Type);
 FVector GridToWorld(int32 X, int32 Y, int32 Z);
+int32 GetTerrainHeightAt(int32 X, int32 Y);           // povrsina PRIJE spilja (more, pretrage kopna)
+int32 GetGroundHeightAt(int32 X, int32 Y);            // najvisi cvrsti blok - za postavljanje igraca/mobova
+bool IsCaveCellAt(FIntVector GridPosition);           // je li generirana celija izdubljena spiljom
 bool ResolveHitToGrid(const FHitResult& Hit, FIntVector& OutPos, EBlockType& OutType);
 ABlock* PromoteToActor(FIntVector Pos);               // instanca -> actor (fokus)
 void DemoteToInstance(FIntVector Pos);                // actor -> instanca (fokus otisao)
@@ -216,6 +250,13 @@ USoundBase* UBlockRegistry::GetRandomBlockSound(EBlockType Type, EBlockSoundEven
 // Stimanje: voxel.crack.opacity, voxel.crack.inflate, voxel.crack.stage N.
 void AVoxelWorld::SetBlockCrack(uint32 BreakerId, FIntVector Pos, int32 Stage);  // -1 brise
 void AVoxelWorld::DestroyBlockAt(FIntVector Pos, bool bDropItems = true);
+
+// Drop i alat (Blocks.json): "requiresTool" + "requiredToolTier" (Stone/Iron/Diamond) =
+// slabijim alatom se blok razbije bez dropa; "dropCountMin"/"dropCountMax" = broj komada;
+// "rareDropItemType" + "rareDropChance" = rijedak drop umjesto obicnog (Gravel -> Flint);
+// "timeToDestroy" <= 0 = blok se ne moze iskopati (Bedrock). Razine alata su u ToolData.cpp.
+static bool UToolDataLibrary::CanHarvest(EItemType Item, EToolClass BlockToolClass,
+                                         bool bBlockRequiresTool, EToolTier RequiredTier);
 
 // Letenje (Docs/PLAN_Flying.md): dvostruki Space pali/gasi let, Space gore,
 // Shift dolje, Ctrl sprint (i na tlu). UVoxelCharacterMovement u letu racuna
@@ -255,6 +296,7 @@ Detailed docs in Croatian available in `Docs/`:
 - `PLAN_StonyPeaks.md` - Treći biom Stony Peaks (noise planina, viši svijet, kamena površina s kalcitom, plan)
 - `PLAN_Oceans.md` - Razina mora (Z=0) i noise kontinentalnosti: oceani, obala, dno mora, spawn na kopnu (implementirano)
 - `PLAN_Water.md` - Realistična voda: vlastita ploha po chunku sa Single Layer Water materijalom, valovi, pogled ispod vode, plivanje, plutanje dropova, mobovi izvan mora (zatvoreno; ostatak odgođen)
+- `PLAN_Underground.md` - Podzemlje po Minecraftu: špilje iz šuma (dvorane, tuneli, uski prolazi), pravi Minecraftovi blokovi kamena i rude, konfiguracija u Underground.json (implementirano: špilje, slojevi kamena, nakupine i rude; kamena i željezna krampa još ne postoje)
 - `PLAN_Chunks.md` - Chunk sustav i beskonačan svijet (streaming oko igrača, async generacija)
 - `PLAN_BlockOutline.md` - Minecraft obrub fokusiranog bloka (screen-space linije u vlastitom scene proxyju)
 - `PLAN_BlockSounds.md` - Zvukovi kopanja i lomljenja blokova (sound grupe po materijalu, plan)

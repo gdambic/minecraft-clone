@@ -80,6 +80,21 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "World|Streaming", meta = (ClampMin = "1", ClampMax = "4"))
 	int32 BootstrapRadius;
 
+	/**
+	 * Vizuali podzemlja (blokovi spilja) grade se samo u kocki oko igraca: ovoliko
+	 * odsjecaka od 16 blokova u svakom smjeru, i vodoravno i po visini. Dalje od
+	 * toga spilje ostaju samo podaci. 2 = igrac vidi i dodiruje najmanje 32 bloka.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "World|Streaming", meta = (ClampMin = "1", ClampMax = "6"))
+	int32 UndergroundVisualRadius;
+
+	/**
+	 * Koliko blokova ispod povrsine (najnize od stupca i 4 susjeda) se jos gradi
+	 * zajedno s povrsinom - pokriva litice i gornji dio ulaza u spilje.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "World|Streaming", meta = (ClampMin = "1", ClampMax = "64"))
+	int32 SurfaceVisualDepth;
+
 	// === WATER (Docs/PLAN_Water.md) ===
 
 	/** Materijal plohe mora: MI_Water (instanca M_Water) iz Scripts/build_water_material.py. */
@@ -309,9 +324,45 @@ public:
 	UFUNCTION(BlueprintPure, Category = "World")
 	EBlockType GetBlockTypeAt(FIntVector GridPosition) const;
 
-	/** Visina površine (Z najvišeg čvrstog bloka) na stupcu (X,Y) - FChunkGenerator::GetTerrainHeight nad CachedGenParams. Valjana nakon GenerateWorld. */
+	/**
+	 * Visina površine na stupcu (X,Y) PRIJE špilja - FChunkGenerator::GetTerrainHeight
+	 * nad CachedGenParams. Jeftina; za more i pretrage kopna. Valjana nakon GenerateWorld.
+	 */
 	UFUNCTION(BlueprintPure, Category = "World")
 	int32 GetTerrainHeightAt(int32 X, int32 Y) const;
+
+	/**
+	 * Z najvišeg čvrstog generiranog bloka stupca (X,Y) - na mjestu ulaza u
+	 * špilju niže od GetTerrainHeightAt. Za postavljanje igrača i mobova na tlo.
+	 */
+	UFUNCTION(BlueprintPure, Category = "World")
+	int32 GetGroundHeightAt(int32 X, int32 Y) const;
+
+	/** Je li generirana ćelija izdubljena špiljom (FChunkGenerator::IsCaveCell). */
+	bool IsCaveCellAt(FIntVector GridPosition) const;
+
+	/**
+	 * Provjera špilja ([CAVE] u logu, Docs/PLAN_Underground.md): generira 9x9
+	 * chunkova oko igrača i mjeri udio šupljina po dubini, otvore na površini,
+	 * dodire mora i špilja (mora biti 0), stabla nad rupom (0) te slaganje
+	 * upita za točku s generacijom chunka.
+	 */
+	void RunCaveTest();
+
+	/**
+	 * Provjera vizuala podzemlja ([DEEP] u logu): igrač se spusti u najbližu
+	 * špilju, pa se provjeri da svaki izloženi blok u krugu 24 bloka ima vizual
+	 * i da daleki odsječci nisu izgrađeni; zatim se vrati na površinu i provjeri
+	 * da su odsječci oko špilje uklonjeni. Vraća trajanje testa u sekundama.
+	 */
+	float RunDeepVisualTest();
+
+	/**
+	 * Snimi presjek svijeta kroz igrača kao PNG u Saved/VoxelSlices (jedan
+	 * piksel = jedan blok). Axis 'x' ili 'y' = okomiti rez duž te osi (512x256),
+	 * 'z' = vodoravni rez na visini Level (512x512). Vraća putanju ili prazno.
+	 */
+	FString SaveSlice(TCHAR Axis, int32 Level);
 
 	/** Indeks bioma stupca (X,Y) u registry listi - iz ucitanog chunka (zapisao ga generator), inace FChunkGenerator::GetBiomeIndex. */
 	UFUNCTION(BlueprintPure, Category = "World")
@@ -414,8 +465,41 @@ private:
 	/** Snapshot parametara generacije - kopira se po vrijednosti u (buduci) worker task. */
 	FChunkGenParams MakeChunkGenParams() const;
 
-	/** Izgradi ISM instance za sve izlozene blokove chunka (podaci moraju postojati, i susjedni). */
+	/**
+	 * Izgradi ISM instance izlozenih blokova POVRSINE chunka (podaci moraju
+	 * postojati, i susjedni) i izracuna DeepThreshold. Podzemlje grade
+	 * BuildDeepSection pozivi iz UpdateDeepVisuals.
+	 */
 	void ApplyChunkVisuals(FVoxelChunk& Chunk);
+
+	/** Izgradi vizuale podzemlja jednog odsjecka chunka (chunk mora imati vizuale povrsine). */
+	void BuildDeepSection(FVoxelChunk& Chunk, int32 Section);
+
+	/** Ukloni vizuale podzemlja jednog odsjecka (unisti njegove ISM komponente). */
+	void RemoveDeepSection(FVoxelChunk& Chunk, int32 Section);
+
+	/**
+	 * Odrzava vizuale podzemlja oko igraca: uklanja odsjecke izvan
+	 * UndergroundVisualRadius + 1 i gradi one unutar radijusa, najblize prve,
+	 * dok ne istekne BudgetEnd. MaxDistance ogranicava prolaz na najblize
+	 * odsjecke (prioritet ispred vizuala povrsine).
+	 */
+	void UpdateDeepVisuals(const FIntVector& PlayerGrid, double BudgetEnd, int32 MaxDistance);
+
+	/** Pripada li blok vizualima podzemlja (ispod DeepThreshold svog stupca). */
+	bool IsDeepVisualCell(const FVoxelChunk& Chunk, const FIntVector& Pos) const;
+
+	/** Ima li blok na poziciji ISM instancu (povrsinsku ili podzemnu). */
+	bool HasBlockInstance(FIntVector Pos) const;
+
+	/** Broj ISM instanci chunka: povrsina + podzemlje. */
+	static int32 CountChunkInstances(const FVoxelChunk& Chunk, bool bSurface, bool bDeep);
+
+	/** Statistika vizuala podzemlja od starta ([PERF] u soak sazetku). */
+	int32 DeepSectionBuildCount = 0;
+	double DeepSectionBuildMsTotal = 0.0;
+	double DeepSectionBuildMsMax = 0.0;
+	int32 DeepSectionRemoveCount = 0;
 
 	/**
 	 * Izgradi plohu mora chunka: mreza na razini mora samo nad stupcima koje
@@ -607,6 +691,14 @@ private:
 	/** Najsporija izgradnja vizuala jednog chunka od starta ([PERF] u soak sazetku). */
 	double MaxChunkApplyMs = 0.0;
 	FIntPoint MaxChunkApplyCoord = FIntPoint::ZeroValue;
+	int32 MaxChunkApplyInstances = 0;
+
+	/** Statistika izgradnje vizuala u streamingu: broj, zbroj ms i instanci, broj sporijih od SlowChunkApplyMs. */
+	static constexpr double SlowChunkApplyMs = 8.0;
+	int32 ChunkApplyCount = 0;
+	double ChunkApplyMsTotal = 0.0;
+	int64 ChunkApplyInstancesTotal = 0;
+	int32 ChunkApplySlowCount = 0;
 
 	/** Najblizi stupac bioma Biome oko ishodista (pretraga ±1024, korak 8); false = nema ga ili Biome < 0. */
 	bool FindNearestBiomeColumn(int32 Biome, FIntPoint& OutColumn) const;
@@ -619,6 +711,9 @@ private:
 
 	/** Je li stupac kopno - povrsina na ili iznad razine mora (spawn igraca i mobova). */
 	bool IsLandColumn(int32 X, int32 Y) const;
+
+	/** Kopno cija povrsina nije izdubljena ulazom u spilju - na takav stupac se smije postaviti igrac ili mob. */
+	bool IsOpenGroundColumn(int32 X, int32 Y) const;
 
 	/**
 	 * Tint bioma na poziciji za zadani tip tinta (Grass/Foliage); bijelo za
@@ -643,13 +738,13 @@ private:
 	 * Dohvati/kreiraj instance set tipa u chunku (lazy: ISM komponenta nastaje
 	 * kad chunk prvi put dobije blok tog tipa). nullptr ako tip nema mesh.
 	 */
-	FChunkInstanceSet* EnsureChunkInstanceSet(FVoxelChunk& Chunk, EBlockType Type);
+	FChunkInstanceSet* EnsureChunkInstanceSet(FVoxelChunk& Chunk, EBlockType Type, int32 DeepSection = INDEX_NONE);
 
 	/** Dodaj instancu za poziciju (no-op ako vec postoji, chunk nije ucitan ili tip nema mesh). */
 	void AddBlockInstance(FIntVector Pos, EBlockType Type);
 
 	/** Batch dodavanje instanci jednog tipa u jedan chunk (jedan AddInstances poziv) - za generaciju. */
-	void AddChunkInstancesBatch(FVoxelChunk& Chunk, EBlockType Type, const TArray<FIntVector>& Positions);
+	void AddChunkInstancesBatch(FVoxelChunk& Chunk, EBlockType Type, const TArray<FIntVector>& Positions, int32 DeepSection = INDEX_NONE);
 
 	/** Ukloni instancu za poziciju (no-op ako ne postoji). Odrzava swap bookkeeping. */
 	void RemoveBlockInstance(FIntVector Pos);

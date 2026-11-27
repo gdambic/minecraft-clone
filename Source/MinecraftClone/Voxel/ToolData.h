@@ -20,6 +20,21 @@ enum class EToolClass : uint8
 };
 
 /**
+ * Razina materijala alata. Blok u Blocks.json moze traziti najmanju razinu
+ * ("requiredToolTier") - slabijim alatom se razbije, ali ne ostavi drop
+ * (Minecraft tagovi needs_stone_tool / needs_iron_tool / needs_diamond_tool).
+ */
+UENUM(BlueprintType)
+enum class EToolTier : uint8
+{
+	None,
+	Wood,
+	Stone,
+	Iron,
+	Diamond
+};
+
+/**
  * Podaci alata za kopanje blokova.
  * Mining speed prati Minecraft tablicu po materijalu alata:
  * gola ruka 1, drvo 2, kamen 4, zeljezo 6, dijamant 8.
@@ -37,15 +52,20 @@ struct FToolData
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly)
 	float MiningSpeed = 1.0f;
 
+	/** Razina materijala alata (None = item nije alat) */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly)
+	EToolTier Tier = EToolTier::None;
+
 	/** Default konstruktor (nije alat) */
 	FToolData()
 		: ToolClass(EToolClass::None)
 		, MiningSpeed(1.0f)
 	{}
 
-	FToolData(EToolClass InToolClass, float InMiningSpeed)
+	FToolData(EToolClass InToolClass, float InMiningSpeed, EToolTier InTier)
 		: ToolClass(InToolClass)
 		, MiningSpeed(InMiningSpeed)
+		, Tier(InTier)
 	{}
 };
 
@@ -66,6 +86,12 @@ public:
 	/** Je li item u ruci pravi alat za blok koji preferira BlockToolClass */
 	UFUNCTION(BlueprintPure, Category = "Tools")
 	static bool IsCorrectTool(EItemType ItemType, EToolClass BlockToolClass);
+
+	/**
+	 * Ostavlja li blok drop kad se iskopa ovim itemom: blok koji ne zahtijeva
+	 * alat uvijek, inace samo alatom prave klase i barem trazene razine.
+	 */
+	static bool CanHarvest(EItemType ItemType, EToolClass BlockToolClass, bool bBlockRequiresTool, EToolTier RequiredTier);
 
 	/** Mining speed itema na bloku: pravi alat svoj multiplier, inace 1 */
 	UFUNCTION(BlueprintPure, Category = "Tools")

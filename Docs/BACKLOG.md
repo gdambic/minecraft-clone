@@ -32,6 +32,18 @@ provjereno u 1.21.11 jaru), što vrijedi za skok i za let u survivalu. Naš
 `UBlockMiningComponent` to pravilo nema, pa se iz zraka kopa jednako brzo kao
 sa tla. Odgođeno iz `PLAN_Flying.md` (letenje bez creative moda).
 
+## 0e. Vizuali podzemlja postoje samo oko igrača
+
+Riješeno 2026-11-27 (`PLAN_Underground.md`, točka 8): blokovi špilja dobivaju vizual i
+koliziju samo u kocki od `UndergroundVisualRadius` odsječaka (po 16 blokova) oko igrača.
+Ostalo iz toga:
+
+- Mob ili drop koji daleko od igrača upadne u ulaz dublji od `SurfaceVisualDepth` (8)
+  blokova nema na što pasti i propada kroz svijet. Mobovi se zasad stvaraju samo oko
+  spawna, pa se to ne događa; postat će važno uz per-chunk mob spawn (točka 0).
+- Nije provjereno u editoru vidi li se s površine rupa kad se gleda u ulaz dublji od
+  32 bloka (iza neizgrađenih zidova nema ničega).
+
 ## 1. NavMeshBoundsVolume u leveli je divovski
 
 **Problem:** NavMeshBoundsVolume u `Lvl_ThirdPerson` je višestruko veći od

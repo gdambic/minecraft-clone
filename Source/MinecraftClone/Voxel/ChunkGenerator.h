@@ -4,6 +4,8 @@
 #include "BlockType.h"
 #include "TreeGenerator.h"
 #include "VoxelChunk.h"
+#include "CaveGenerator.h"
+#include "UndergroundGenerator.h"
 
 /** Polja jednog bioma koja generacija cita - kopija iz FBiomeDefinition (worker ne cita registry). */
 struct FBiomeGenData
@@ -83,7 +85,13 @@ struct FChunkGenParams
 	int32 TreeAttemptsPerChunk = 1;
 	float TreeChancePerChunk = 0.25f;
 
-	/** Showcase red za chunk (0,0): po jedan blok svake registrirane definicije. Prazno = bez showcasea. */
+	/** Spilje (Docs/PLAN_Underground.md): postavke + noiseovi; prazno = svijet bez spilja. Nepromjenjivo, dijele ga workeri. */
+	TSharedPtr<const FCaveGenData, ESPMode::ThreadSafe> Caves;
+
+	/** Slojevi kamena i nakupine (Docs/PLAN_Underground.md); prazno = samo Stone. Nepromjenjivo, dijele ga workeri. */
+	TSharedPtr<const FUndergroundGenData, ESPMode::ThreadSafe> Underground;
+
+	/** Showcase za chunk (0,0): po jedan blok svake registrirane definicije, u redovima po 16. Prazno = bez showcasea. */
 	TArray<EBlockType> ShowcaseBlocks;
 };
 
@@ -96,7 +104,8 @@ struct FTreeCandidate
 };
 
 /**
- * Cista generacija podataka jednog chunka: teren + showcase + stabla.
+ * Cista generacija podataka jednog chunka: teren + spilje + slojevi kamena i
+ * nakupine + showcase + stabla.
  * Thread-safe (nista od UObjecta, nista od globalnog RNG-a) - isti ulazi
  * uvijek daju isti izlaz, neovisno o redoslijedu generiranja chunkova.
  *
@@ -118,10 +127,25 @@ public:
 	static TArray<uint8> GenerateChunkBiomes(const FChunkGenParams& Params, const FIntPoint& Coord);
 
 	/**
-	 * Visina povrsine stupca - JEDINA formula visine: koriste je generacija,
-	 * spawn i teleport (AVoxelWorld::GetTerrainHeightAt).
+	 * Visina povrsine stupca PRIJE spilja - JEDINA formula visine: koriste je
+	 * generacija, more i pretrage kopna (AVoxelWorld::GetTerrainHeightAt). Na
+	 * mjestu ulaza u spilju najgornji blokovi su izdubljeni - za postavljanje
+	 * igraca i mobova koristiti GetGroundHeight.
 	 */
 	static int32 GetTerrainHeight(const FChunkGenParams& Params, int32 X, int32 Y);
+
+	/**
+	 * Je li celija izdubljena spiljom: unutar terena je (Z <= GetTerrainHeight),
+	 * a generacija je ostavlja praznom. JEDINO pravilo gdje su spilje - isti
+	 * odgovor daje i generacija chunka i upit za jednu tocku.
+	 */
+	static bool IsCaveCell(const FChunkGenParams& Params, int32 X, int32 Y, int32 Z);
+
+	/** Z najviseg cvrstog generiranog bloka stupca: GetTerrainHeight spusten kroz izdubljene celije. */
+	static int32 GetGroundHeight(const FChunkGenParams& Params, int32 X, int32 Y);
+
+	/** Najniza povrsina u krugu SeaGuardRadius stupaca - ulaz za zastitu mora (FCaveGenerator::IsSeaProtected). */
+	static int32 GetMinNearbyHeight(const FChunkGenParams& Params, int32 X, int32 Y);
 
 	/** Indeks bioma stupca - JEDINA formula bioma (generacija i AVoxelWorld::GetBiomeIndexAt). */
 	static int32 GetBiomeIndex(const FChunkGenParams& Params, int32 X, int32 Y);

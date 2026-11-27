@@ -42,6 +42,19 @@ namespace VoxelGrid
 
 	constexpr int32 BlocksPerChunk = ChunkSize * ChunkSize * WorldHeight;
 
+	/**
+	 * Odsjecak chunka po visini za vizuale podzemlja (AVoxelWorld, BACKLOG 0e):
+	 * 16 blokova, kao stranica chunka, pa je odsjecak kocka 16x16x16.
+	 */
+	constexpr int32 SectionSizeLog2 = 4;
+	constexpr int32 SectionsPerChunk = WorldHeight >> SectionSizeLog2;   // 16
+
+	/** Indeks odsjecka (0 = dno svijeta) za grid Z. */
+	FORCEINLINE int32 SectionIndex(int32 Z)
+	{
+		return (Z - WorldMinZ) >> SectionSizeLog2;
+	}
+
 	/** Broj stupaca (X,Y) u chunku - velicina per-stupac podataka poput bioma. */
 	constexpr int32 ColumnsPerChunk = ChunkSize * ChunkSize;
 
@@ -172,8 +185,29 @@ struct FVoxelChunk
 	 */
 	TArray<uint8> Biomes;
 
-	/** Vizuali - ISM set SAMO za tipove prisutne u chunku (lazy kreiranje). */
+	/**
+	 * Vizuali povrsine - ISM set SAMO za tipove prisutne u chunku (lazy
+	 * kreiranje). Sadrze izlozene blokove na ili iznad DeepThreshold stupca.
+	 */
 	TMap<EBlockType, FChunkInstanceSet> InstanceSets;
+
+	/**
+	 * Vizuali podzemlja po odsjeccima visine (SectionsPerChunk elemenata, prazno
+	 * dok nijedan nije izgraden): izlozeni blokovi ISPOD DeepThreshold stupca.
+	 * Odsjecak se gradi tek kad mu se igrac priblizi i uklanja kad se udalji,
+	 * jer se spilja daleko od igraca ne moze ni vidjeti ni dotaknuti.
+	 */
+	TArray<TMap<EBlockType, FChunkInstanceSet>> DeepSets;
+
+	/** Bit po odsjecku: jesu li njegovi vizuali podzemlja izgradeni. */
+	uint32 DeepBuiltMask = 0;
+
+	/**
+	 * Po stupcu (ColumnIndex): Z ispod kojeg je blok "podzemlje" = najniza
+	 * povrsina stupca i njegova 4 susjeda umanjena za SurfaceVisualDepth.
+	 * Racuna se pri izgradnji vizuala povrsine; prazno prije toga.
+	 */
+	TArray<int16> DeepThreshold;
 
 	/** Ploha mora nad stupcima s vodom (Docs/PLAN_Water.md); nullptr = chunk nema mora. Zivi kao InstanceSets. */
 	TObjectPtr<UProceduralMeshComponent> WaterMesh = nullptr;

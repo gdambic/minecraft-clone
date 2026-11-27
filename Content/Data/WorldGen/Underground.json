@@ -1,0 +1,751 @@
+{
+  "caves": {
+    "enabled": true,
+    "sizeScale": 1.0,
+    "surfaceFactor": 5.47,
+    "chambers": {
+      "enabled": true,
+      "offset": 0.27,
+      "pillars": true
+    },
+    "tunnels": {
+      "enabled": true
+    },
+    "noodles": {
+      "enabled": true
+    },
+    "entrances": {
+      "enabled": true,
+      "offset": 0.37
+    },
+    "seaCrustDepth": 6,
+    "seaGuardRadius": 2
+  },
+  "layers": {
+    "bedrock": {
+      "block": "Bedrock",
+      "layers": 5
+    },
+    "deepslate": {
+      "block": "Deepslate",
+      "replaces": "Stone",
+      "fullAtAndBelow": -63,
+      "noneAtAndAbove": -55
+    }
+  },
+  "features": [
+    {
+      "name": "ore_dirt",
+      "attempts": 7,
+      "height": {
+        "type": "uniform",
+        "min": -63,
+        "max": 97
+      },
+      "size": 33,
+      "discardOnAirExposure": 0.0,
+      "targets": [
+        {
+          "replace": [
+            "Stone",
+            "Granite",
+            "Diorite",
+            "Andesite",
+            "Tuff",
+            "Deepslate"
+          ],
+          "block": "Dirt"
+        }
+      ]
+    },
+    {
+      "name": "ore_gravel",
+      "attempts": 14,
+      "height": {
+        "type": "uniform",
+        "min": -127,
+        "max": 256
+      },
+      "size": 33,
+      "discardOnAirExposure": 0.0,
+      "targets": [
+        {
+          "replace": [
+            "Stone",
+            "Granite",
+            "Diorite",
+            "Andesite",
+            "Tuff",
+            "Deepslate"
+          ],
+          "block": "Gravel"
+        }
+      ]
+    },
+    {
+      "name": "ore_granite_upper",
+      "oneInChunks": 6,
+      "height": {
+        "type": "uniform",
+        "min": 1,
+        "max": 65
+      },
+      "size": 64,
+      "discardOnAirExposure": 0.0,
+      "targets": [
+        {
+          "replace": [
+            "Stone",
+            "Granite",
+            "Diorite",
+            "Andesite",
+            "Tuff",
+            "Deepslate"
+          ],
+          "block": "Granite"
+        }
+      ]
+    },
+    {
+      "name": "ore_granite_lower",
+      "attempts": 2,
+      "height": {
+        "type": "uniform",
+        "min": -63,
+        "max": -3
+      },
+      "size": 64,
+      "discardOnAirExposure": 0.0,
+      "targets": [
+        {
+          "replace": [
+            "Stone",
+            "Granite",
+            "Diorite",
+            "Andesite",
+            "Tuff",
+            "Deepslate"
+          ],
+          "block": "Granite"
+        }
+      ]
+    },
+    {
+      "name": "ore_diorite_upper",
+      "oneInChunks": 6,
+      "height": {
+        "type": "uniform",
+        "min": 1,
+        "max": 65
+      },
+      "size": 64,
+      "discardOnAirExposure": 0.0,
+      "targets": [
+        {
+          "replace": [
+            "Stone",
+            "Granite",
+            "Diorite",
+            "Andesite",
+            "Tuff",
+            "Deepslate"
+          ],
+          "block": "Diorite"
+        }
+      ]
+    },
+    {
+      "name": "ore_diorite_lower",
+      "attempts": 2,
+      "height": {
+        "type": "uniform",
+        "min": -63,
+        "max": -3
+      },
+      "size": 64,
+      "discardOnAirExposure": 0.0,
+      "targets": [
+        {
+          "replace": [
+            "Stone",
+            "Granite",
+            "Diorite",
+            "Andesite",
+            "Tuff",
+            "Deepslate"
+          ],
+          "block": "Diorite"
+        }
+      ]
+    },
+    {
+      "name": "ore_andesite_upper",
+      "oneInChunks": 6,
+      "height": {
+        "type": "uniform",
+        "min": 1,
+        "max": 65
+      },
+      "size": 64,
+      "discardOnAirExposure": 0.0,
+      "targets": [
+        {
+          "replace": [
+            "Stone",
+            "Granite",
+            "Diorite",
+            "Andesite",
+            "Tuff",
+            "Deepslate"
+          ],
+          "block": "Andesite"
+        }
+      ]
+    },
+    {
+      "name": "ore_andesite_lower",
+      "attempts": 2,
+      "height": {
+        "type": "uniform",
+        "min": -63,
+        "max": -3
+      },
+      "size": 64,
+      "discardOnAirExposure": 0.0,
+      "targets": [
+        {
+          "replace": [
+            "Stone",
+            "Granite",
+            "Diorite",
+            "Andesite",
+            "Tuff",
+            "Deepslate"
+          ],
+          "block": "Andesite"
+        }
+      ]
+    },
+    {
+      "name": "ore_tuff",
+      "attempts": 2,
+      "height": {
+        "type": "uniform",
+        "min": -127,
+        "max": -63
+      },
+      "size": 64,
+      "discardOnAirExposure": 0.0,
+      "targets": [
+        {
+          "replace": [
+            "Stone",
+            "Granite",
+            "Diorite",
+            "Andesite",
+            "Tuff",
+            "Deepslate"
+          ],
+          "block": "Tuff"
+        }
+      ]
+    },
+    {
+      "name": "ore_coal_upper",
+      "attempts": 30,
+      "height": {
+        "type": "uniform",
+        "min": 73,
+        "max": 256
+      },
+      "size": 17,
+      "discardOnAirExposure": 0.0,
+      "targets": [
+        {
+          "replace": [
+            "Stone",
+            "Granite",
+            "Diorite",
+            "Andesite"
+          ],
+          "block": "CoalOre"
+        },
+        {
+          "replace": [
+            "Deepslate",
+            "Tuff"
+          ],
+          "block": "DeepslateCoalOre"
+        }
+      ]
+    },
+    {
+      "name": "ore_coal_lower",
+      "attempts": 20,
+      "height": {
+        "type": "triangle",
+        "min": -63,
+        "max": 129
+      },
+      "size": 17,
+      "discardOnAirExposure": 0.5,
+      "targets": [
+        {
+          "replace": [
+            "Stone",
+            "Granite",
+            "Diorite",
+            "Andesite"
+          ],
+          "block": "CoalOre"
+        },
+        {
+          "replace": [
+            "Deepslate",
+            "Tuff"
+          ],
+          "block": "DeepslateCoalOre"
+        }
+      ]
+    },
+    {
+      "name": "ore_iron_upper",
+      "attempts": 90,
+      "height": {
+        "type": "triangle",
+        "min": 17,
+        "max": 321
+      },
+      "size": 9,
+      "discardOnAirExposure": 0.0,
+      "targets": [
+        {
+          "replace": [
+            "Stone",
+            "Granite",
+            "Diorite",
+            "Andesite"
+          ],
+          "block": "IronOre"
+        },
+        {
+          "replace": [
+            "Deepslate",
+            "Tuff"
+          ],
+          "block": "DeepslateIronOre"
+        }
+      ]
+    },
+    {
+      "name": "ore_iron_middle",
+      "attempts": 10,
+      "height": {
+        "type": "triangle",
+        "min": -87,
+        "max": -7
+      },
+      "size": 9,
+      "discardOnAirExposure": 0.0,
+      "targets": [
+        {
+          "replace": [
+            "Stone",
+            "Granite",
+            "Diorite",
+            "Andesite"
+          ],
+          "block": "IronOre"
+        },
+        {
+          "replace": [
+            "Deepslate",
+            "Tuff"
+          ],
+          "block": "DeepslateIronOre"
+        }
+      ]
+    },
+    {
+      "name": "ore_iron_small",
+      "attempts": 10,
+      "height": {
+        "type": "uniform",
+        "min": -127,
+        "max": 9
+      },
+      "size": 4,
+      "discardOnAirExposure": 0.0,
+      "targets": [
+        {
+          "replace": [
+            "Stone",
+            "Granite",
+            "Diorite",
+            "Andesite"
+          ],
+          "block": "IronOre"
+        },
+        {
+          "replace": [
+            "Deepslate",
+            "Tuff"
+          ],
+          "block": "DeepslateIronOre"
+        }
+      ]
+    },
+    {
+      "name": "ore_gold",
+      "attempts": 4,
+      "height": {
+        "type": "triangle",
+        "min": -127,
+        "max": -31
+      },
+      "size": 9,
+      "discardOnAirExposure": 0.5,
+      "targets": [
+        {
+          "replace": [
+            "Stone",
+            "Granite",
+            "Diorite",
+            "Andesite"
+          ],
+          "block": "GoldOre"
+        },
+        {
+          "replace": [
+            "Deepslate",
+            "Tuff"
+          ],
+          "block": "DeepslateGoldOre"
+        }
+      ]
+    },
+    {
+      "name": "ore_gold_lower",
+      "attemptsMin": 0,
+      "attemptsMax": 1,
+      "height": {
+        "type": "uniform",
+        "min": -127,
+        "max": -111
+      },
+      "size": 9,
+      "discardOnAirExposure": 0.5,
+      "targets": [
+        {
+          "replace": [
+            "Stone",
+            "Granite",
+            "Diorite",
+            "Andesite"
+          ],
+          "block": "GoldOre"
+        },
+        {
+          "replace": [
+            "Deepslate",
+            "Tuff"
+          ],
+          "block": "DeepslateGoldOre"
+        }
+      ]
+    },
+    {
+      "name": "ore_redstone",
+      "attempts": 4,
+      "height": {
+        "type": "uniform",
+        "min": -127,
+        "max": -48
+      },
+      "size": 8,
+      "discardOnAirExposure": 0.0,
+      "targets": [
+        {
+          "replace": [
+            "Stone",
+            "Granite",
+            "Diorite",
+            "Andesite"
+          ],
+          "block": "RedstoneOre"
+        },
+        {
+          "replace": [
+            "Deepslate",
+            "Tuff"
+          ],
+          "block": "DeepslateRedstoneOre"
+        }
+      ]
+    },
+    {
+      "name": "ore_redstone_lower",
+      "attempts": 8,
+      "height": {
+        "type": "triangle",
+        "min": -159,
+        "max": -95
+      },
+      "size": 8,
+      "discardOnAirExposure": 0.0,
+      "targets": [
+        {
+          "replace": [
+            "Stone",
+            "Granite",
+            "Diorite",
+            "Andesite"
+          ],
+          "block": "RedstoneOre"
+        },
+        {
+          "replace": [
+            "Deepslate",
+            "Tuff"
+          ],
+          "block": "DeepslateRedstoneOre"
+        }
+      ]
+    },
+    {
+      "name": "ore_diamond",
+      "attempts": 7,
+      "height": {
+        "type": "triangle",
+        "min": -207,
+        "max": -47
+      },
+      "size": 4,
+      "discardOnAirExposure": 0.5,
+      "targets": [
+        {
+          "replace": [
+            "Stone",
+            "Granite",
+            "Diorite",
+            "Andesite"
+          ],
+          "block": "DiamondOre"
+        },
+        {
+          "replace": [
+            "Deepslate",
+            "Tuff"
+          ],
+          "block": "DeepslateDiamondOre"
+        }
+      ]
+    },
+    {
+      "name": "ore_diamond_medium",
+      "attempts": 2,
+      "height": {
+        "type": "uniform",
+        "min": -127,
+        "max": -67
+      },
+      "size": 8,
+      "discardOnAirExposure": 0.5,
+      "targets": [
+        {
+          "replace": [
+            "Stone",
+            "Granite",
+            "Diorite",
+            "Andesite"
+          ],
+          "block": "DiamondOre"
+        },
+        {
+          "replace": [
+            "Deepslate",
+            "Tuff"
+          ],
+          "block": "DeepslateDiamondOre"
+        }
+      ]
+    },
+    {
+      "name": "ore_diamond_large",
+      "oneInChunks": 9,
+      "height": {
+        "type": "triangle",
+        "min": -207,
+        "max": -47
+      },
+      "size": 12,
+      "discardOnAirExposure": 0.7,
+      "targets": [
+        {
+          "replace": [
+            "Stone",
+            "Granite",
+            "Diorite",
+            "Andesite"
+          ],
+          "block": "DiamondOre"
+        },
+        {
+          "replace": [
+            "Deepslate",
+            "Tuff"
+          ],
+          "block": "DeepslateDiamondOre"
+        }
+      ]
+    },
+    {
+      "name": "ore_diamond_buried",
+      "attempts": 4,
+      "height": {
+        "type": "triangle",
+        "min": -207,
+        "max": -47
+      },
+      "size": 8,
+      "discardOnAirExposure": 1.0,
+      "targets": [
+        {
+          "replace": [
+            "Stone",
+            "Granite",
+            "Diorite",
+            "Andesite"
+          ],
+          "block": "DiamondOre"
+        },
+        {
+          "replace": [
+            "Deepslate",
+            "Tuff"
+          ],
+          "block": "DeepslateDiamondOre"
+        }
+      ]
+    },
+    {
+      "name": "ore_lapis",
+      "attempts": 2,
+      "height": {
+        "type": "triangle",
+        "min": -95,
+        "max": -31
+      },
+      "size": 7,
+      "discardOnAirExposure": 0.0,
+      "targets": [
+        {
+          "replace": [
+            "Stone",
+            "Granite",
+            "Diorite",
+            "Andesite"
+          ],
+          "block": "LapisOre"
+        },
+        {
+          "replace": [
+            "Deepslate",
+            "Tuff"
+          ],
+          "block": "DeepslateLapisOre"
+        }
+      ]
+    },
+    {
+      "name": "ore_lapis_buried",
+      "attempts": 4,
+      "height": {
+        "type": "uniform",
+        "min": -127,
+        "max": 1
+      },
+      "size": 7,
+      "discardOnAirExposure": 1.0,
+      "targets": [
+        {
+          "replace": [
+            "Stone",
+            "Granite",
+            "Diorite",
+            "Andesite"
+          ],
+          "block": "LapisOre"
+        },
+        {
+          "replace": [
+            "Deepslate",
+            "Tuff"
+          ],
+          "block": "DeepslateLapisOre"
+        }
+      ]
+    },
+    {
+      "name": "ore_copper",
+      "attempts": 16,
+      "height": {
+        "type": "triangle",
+        "min": -79,
+        "max": 49
+      },
+      "size": 10,
+      "discardOnAirExposure": 0.0,
+      "targets": [
+        {
+          "replace": [
+            "Stone",
+            "Granite",
+            "Diorite",
+            "Andesite"
+          ],
+          "block": "CopperOre"
+        },
+        {
+          "replace": [
+            "Deepslate",
+            "Tuff"
+          ],
+          "block": "DeepslateCopperOre"
+        }
+      ]
+    },
+    {
+      "name": "ore_emerald",
+      "attempts": 100,
+      "height": {
+        "type": "triangle",
+        "min": -79,
+        "max": 417
+      },
+      "size": 3,
+      "discardOnAirExposure": 0.0,
+      "targets": [
+        {
+          "replace": [
+            "Stone",
+            "Granite",
+            "Diorite",
+            "Andesite"
+          ],
+          "block": "EmeraldOre"
+        },
+        {
+          "replace": [
+            "Deepslate",
+            "Tuff"
+          ],
+          "block": "DeepslateEmeraldOre"
+        }
+      ],
+      "biomes": [
+        "StonyPeaks"
+      ]
+    }
+  ]
+}

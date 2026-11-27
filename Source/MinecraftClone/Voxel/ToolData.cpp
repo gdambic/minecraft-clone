@@ -9,10 +9,10 @@ const TMap<EItemType, FToolData>& UToolDataLibrary::GetToolRegistry()
 	{
 		// Minecraft mining speed po materijalu alata:
 		// drvo 2, kamen 4, zeljezo 6, dijamant 8
-		// Format: ToolClass, MiningSpeed
-		Registry.Add(EItemType::WoodenAxe, FToolData(EToolClass::Axe, 2.0f));
+		// Format: ToolClass, MiningSpeed, Tier
+		Registry.Add(EItemType::WoodenAxe, FToolData(EToolClass::Axe, 2.0f, EToolTier::Wood));
 
-		Registry.Add(EItemType::WoodenPickaxe, FToolData(EToolClass::Pickaxe, 2.0f));
+		Registry.Add(EItemType::WoodenPickaxe, FToolData(EToolClass::Pickaxe, 2.0f, EToolTier::Wood));
 	}
 
 	return Registry;
@@ -29,6 +29,15 @@ bool UToolDataLibrary::IsCorrectTool(EItemType ItemType, EToolClass BlockToolCla
 	// Blok bez preferirane klase (None) ne moze imati "pravi" alat
 	return BlockToolClass != EToolClass::None
 		&& GetToolData(ItemType).ToolClass == BlockToolClass;
+}
+
+bool UToolDataLibrary::CanHarvest(EItemType ItemType, EToolClass BlockToolClass, bool bBlockRequiresTool, EToolTier RequiredTier)
+{
+	if (!bBlockRequiresTool)
+	{
+		return true;
+	}
+	return IsCorrectTool(ItemType, BlockToolClass) && GetToolData(ItemType).Tier >= RequiredTier;
 }
 
 float UToolDataLibrary::GetMiningSpeed(EItemType ItemType, EToolClass BlockToolClass)

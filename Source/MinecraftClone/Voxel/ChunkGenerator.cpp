@@ -105,6 +105,52 @@ int32 FChunkGenerator::GetTerrainHeight(const FChunkGenParams& Params, int32 X, 
 	return FMath::Max(Height, VoxelGrid::WorldMinZ + 1);
 }
 
+int32 FChunkGenerator::GetMinNearbyHeight(const FChunkGenParams& Params, int32 X, int32 Y)
+{
+	const int32 Radius = Params.Caves ? Params.Caves->Config.SeaGuardRadius : 0;
+	int32 MinHeight = MAX_int32;
+	for (int32 DY = -Radius; DY <= Radius; DY++)
+	{
+		for (int32 DX = -Radius; DX <= Radius; DX++)
+		{
+			MinHeight = FMath::Min(MinHeight, GetTerrainHeight(Params, X + DX, Y + DY));
+		}
+	}
+	return MinHeight;
+}
+
+bool FChunkGenerator::IsCaveCell(const FChunkGenParams& Params, int32 X, int32 Y, int32 Z)
+{
+	if (!Params.Caves || !Params.Caves->Config.bEnabled)
+	{
+		return false;
+	}
+	const int32 Height = GetTerrainHeight(Params, X, Y);
+	if (Z > Height || FCaveGenerator::IsSeaProtected(*Params.Caves, Z, GetMinNearbyHeight(Params, X, Y)))
+	{
+		return false;
+	}
+	return FCaveGenerator::IsCarvedAt(*Params.Caves, X, Y, Z, Height - Z);
+}
+
+int32 FChunkGenerator::GetGroundHeight(const FChunkGenParams& Params, int32 X, int32 Y)
+{
+	const int32 Height = GetTerrainHeight(Params, X, Y);
+	if (!Params.Caves || !Params.Caves->Config.bEnabled)
+	{
+		return Height;
+	}
+
+	const int32 MinNearby = GetMinNearbyHeight(Params, X, Y);
+	int32 Z = FMath::Min(Height, VoxelGrid::WorldMaxZ);
+	while (Z > VoxelGrid::WorldMinZ && !FCaveGenerator::IsSeaProtected(*Params.Caves, Z, MinNearby)
+		&& FCaveGenerator::IsCarvedAt(*Params.Caves, X, Y, Z, Height - Z))
+	{
+		Z--;
+	}
+	return Z;
+}
+
 int32 FChunkGenerator::GetBiomeIndex(const FChunkGenParams& Params, int32 X, int32 Y)
 {
 	// Ocean bira ista kontinentalnost koja spusta teren - biom i dubina se ne razilaze
@@ -161,15 +207,36 @@ TArray<EBlockType> FChunkGenerator::GenerateChunkData(const FChunkGenParams& Par
 	// --- 0. Biomi stupaca (prvi, jer o njima ovisi sve ispod) ---
 	OutBiomes = GenerateChunkBiomes(Params, Coord);
 
-	// --- 1. Teren: height-map po stupcu, povrsinski sloj iz bioma stupca, stone dublje ---
+	// Visine stupaca chunka i ruba sirine SeaGuardRadius oko njega - rub treba
+	// zastita mora (spilja ne smije dotaknuti more u susjednom stupcu)
 	const FIntVector Origin = ChunkOrigin(Coord);
+	const bool bCaves = Params.Caves && Params.Caves->Config.bEnabled;
+	const int32 Margin = bCaves ? Params.Caves->Config.SeaGuardRadius : 0;
+	const int32 HeightsSize = ChunkSize + 2 * Margin;
+	TArray<int32> Heights;
+	Heights.SetNumUninitialized(HeightsSize * HeightsSize);
+	for (int32 HY = 0; HY < HeightsSize; HY++)
+	{
+		for (int32 HX = 0; HX < HeightsSize; HX++)
+		{
+			Heights[HY * HeightsSize + HX] = GetTerrainHeight(Params, Origin.X + HX - Margin, Origin.Y + HY - Margin);
+		}
+	}
+	const auto HeightAt = [&Heights, HeightsSize, Margin](int32 LocalX, int32 LocalY)
+	{
+		return Heights[(LocalY + Margin) * HeightsSize + LocalX + Margin];
+	};
+
+	// --- 1. Teren: height-map po stupcu, povrsinski sloj iz bioma stupca, stone dublje ---
+	int32 MaxHeight = WorldMinZ;
 	for (int32 LocalX = 0; LocalX < ChunkSize; LocalX++)
 	{
 		for (int32 LocalY = 0; LocalY < ChunkSize; LocalY++)
 		{
 			const int32 X = Origin.X + LocalX;
 			const int32 Y = Origin.Y + LocalY;
-			const int32 Height = FMath::Min(GetTerrainHeight(Params, X, Y), WorldMaxZ);
+			const int32 Height = FMath::Min(HeightAt(LocalX, LocalY), WorldMaxZ);
+			MaxHeight = FMath::Max(MaxHeight, Height);
 			const FBiomeGenData& Surface = Height < Params.SeaLevel
 				? GetUnderwaterGenData(Params, Height)
 				: GetBiomeGenData(Params, OutBiomes[ColumnIndex(LocalX, LocalY)]);
@@ -181,19 +248,61 @@ TArray<EBlockType> FChunkGenerator::GenerateChunkData(const FChunkGenParams& Par
 		}
 	}
 
-	// --- 2. Showcase red (samo chunk (0,0)): po jedan blok svake definicije na (i, 0, h+1) ---
+	// --- 1b. Spilje: isprazni izdubljene celije (isto pravilo kao IsCaveCell) ---
+	if (bCaves)
+	{
+		const FCaveGenData& Caves = *Params.Caves;
+		const FCaveLattice Lattice(Caves, Origin, MaxHeight);
+		for (int32 LocalY = 0; LocalY < ChunkSize; LocalY++)
+		{
+			for (int32 LocalX = 0; LocalX < ChunkSize; LocalX++)
+			{
+				const int32 RawHeight = HeightAt(LocalX, LocalY);
+				int32 MinNearby = RawHeight;
+				for (int32 DY = -Margin; DY <= Margin; DY++)
+				{
+					for (int32 DX = -Margin; DX <= Margin; DX++)
+					{
+						MinNearby = FMath::Min(MinNearby, HeightAt(LocalX + DX, LocalY + DY));
+					}
+				}
+
+				for (int32 Z = FMath::Min(RawHeight, WorldMaxZ); Z > WorldMinZ; Z--)
+				{
+					if (!FCaveGenerator::IsSeaProtected(Caves, Z, MinNearby)
+						&& Lattice.IsCarved(LocalX, LocalY, Z, RawHeight - Z))
+					{
+						Blocks[LocalIndex(FIntVector(LocalX, LocalY, Z))] = EBlockType::Air;
+					}
+				}
+			}
+		}
+	}
+
+	// --- 1c. Slojevi kamena (Bedrock, Deepslate) pa nakupine kamena i rude ---
+	if (Params.Underground)
+	{
+		FUndergroundGenerator::ApplyLayers(Params, Coord, Blocks);
+		FUndergroundGenerator::ApplyFeatures(Params, Coord, Blocks, MaxHeight);
+	}
+
+	// --- 2. Showcase (samo chunk (0,0)): po jedan blok svake definicije, 16 u
+	// redu, redovi na svakom drugom stupcu po Y da se blokovi vide sa strane ---
 	if (Coord == FIntPoint::ZeroValue)
 	{
-		const int32 Count = FMath::Min(Params.ShowcaseBlocks.Num(), ChunkSize);
+		constexpr int32 MaxShowcase = ChunkSize * (ChunkSize / 2);
+		const int32 Count = FMath::Min(Params.ShowcaseBlocks.Num(), MaxShowcase);
 		for (int32 i = 0; i < Count; i++)
 		{
-			const int32 Z = GetTerrainHeight(Params, i, 0) + 1;
-			WriteBlockIfAir(Blocks, Coord, FIntVector(i, 0, Z), Params.ShowcaseBlocks[i]);
+			const int32 X = i % ChunkSize;
+			const int32 Y = (i / ChunkSize) * 2;
+			const int32 Z = GetTerrainHeight(Params, X, Y) + 1;
+			WriteBlockIfAir(Blocks, Coord, FIntVector(X, Y, Z), Params.ShowcaseBlocks[i]);
 		}
-		if (Params.ShowcaseBlocks.Num() > ChunkSize)
+		if (Params.ShowcaseBlocks.Num() > MaxShowcase)
 		{
-			UE_LOG(LogTemp, Warning, TEXT("ChunkGenerator: showcase red ima %d definicija, stane %d - preskacem ostatak"),
-				Params.ShowcaseBlocks.Num(), ChunkSize);
+			UE_LOG(LogTemp, Warning, TEXT("ChunkGenerator: showcase ima %d definicija, stane %d - preskacem ostatak"),
+				Params.ShowcaseBlocks.Num(), MaxShowcase);
 		}
 	}
 
@@ -253,6 +362,10 @@ void FChunkGenerator::GetTreeCandidates(const FChunkGenParams& Params, const FIn
 		if (GroundZ < Params.SeaLevel)
 		{
 			continue;   // stablo bi stajalo u moru
+		}
+		if (IsCaveCell(Params, X, Y, GroundZ))
+		{
+			continue;   // tlo je izdubljeno - ulaz u spilju
 		}
 
 		FTreeCandidate Tree;

@@ -3,141 +3,335 @@
     "itemType": "Dirt",
     "displayName": "Dirt",
     "material": "/Game/Blocks/Materials/MI_Dirt.MI_Dirt",
-    "display": { "type": "block", "block": "Dirt" }
+    "display": {
+      "type": "block",
+      "block": "Dirt"
+    }
   },
   {
     "itemType": "Stone",
     "displayName": "Stone",
     "material": "/Game/Blocks/Materials/MI_Stone.MI_Stone",
-    "display": { "type": "block", "block": "Stone" }
+    "display": {
+      "type": "block",
+      "block": "Stone"
+    }
   },
   {
     "itemType": "Grass",
     "displayName": "Grass",
     "material": "/Game/Blocks/Materials/MI_Grass.MI_Grass",
-    "display": { "type": "block", "block": "Grass" }
+    "display": {
+      "type": "block",
+      "block": "Grass"
+    }
   },
   {
     "itemType": "OakLog",
     "displayName": "Oak Log",
     "material": "/Game/Blocks/Materials/MI_OakLog.MI_OakLog",
-    "display": { "type": "block", "block": "OakLog" }
+    "display": {
+      "type": "block",
+      "block": "OakLog"
+    }
   },
   {
     "itemType": "BirchLog",
     "displayName": "Birch Log",
     "material": "/Game/Blocks/Materials/MI_BirchLog.MI_BirchLog",
-    "display": { "type": "block", "block": "BirchLog" }
+    "display": {
+      "type": "block",
+      "block": "BirchLog"
+    }
   },
   {
     "itemType": "OakSapling",
     "displayName": "Oak Sapling",
     "material": "/Game/Blocks/Materials/MI_OakLeaves.MI_OakLeaves",
-    "display": { "type": "none" }
+    "display": {
+      "type": "none"
+    }
   },
   {
     "itemType": "BirchSapling",
     "displayName": "Birch Sapling",
     "material": "/Game/Blocks/Materials/MI_BirchLeaves.MI_BirchLeaves",
-    "display": { "type": "none" }
+    "display": {
+      "type": "none"
+    }
   },
   {
     "itemType": "OakPlanks",
     "displayName": "Oak Planks",
     "material": "/Game/Blocks/Materials/MI_OakPlanks.MI_OakPlanks",
-    "display": { "type": "block", "block": "OakPlanks" }
+    "display": {
+      "type": "block",
+      "block": "OakPlanks"
+    }
   },
   {
     "itemType": "BirchPlanks",
     "displayName": "Birch Planks",
     "material": "/Game/Blocks/Materials/MI_BirchPlanks.MI_BirchPlanks",
-    "display": { "type": "block", "block": "BirchPlanks" }
+    "display": {
+      "type": "block",
+      "block": "BirchPlanks"
+    }
   },
   {
     "itemType": "Stick",
     "displayName": "Stick",
     "material": "/Game/Blocks/Materials/MI_OakLog.MI_OakLog",
-    "display": { "type": "sprite", "texture": "Stick" }
+    "display": {
+      "type": "sprite",
+      "texture": "Stick"
+    }
   },
   {
     "itemType": "CraftingTable",
     "displayName": "Crafting Table",
     "material": "/Game/Blocks/Materials/MI_CraftingTable.MI_CraftingTable",
-    "display": { "type": "block", "block": "CraftingTable" }
+    "display": {
+      "type": "block",
+      "block": "CraftingTable"
+    }
   },
   {
     "itemType": "Wool",
     "displayName": "Wool",
-    "display": { "type": "none" }
+    "display": {
+      "type": "none"
+    }
   },
   {
     "itemType": "WoodenSword",
     "displayName": "Wooden Sword",
-    "display": { "type": "sprite", "texture": "WoodenSword" }
+    "display": {
+      "type": "sprite",
+      "texture": "WoodenSword"
+    }
   },
   {
     "itemType": "WoodenAxe",
     "displayName": "Wooden Axe",
-    "display": { "type": "sprite", "texture": "WoodenAxe" }
+    "display": {
+      "type": "sprite",
+      "texture": "WoodenAxe"
+    }
   },
   {
     "itemType": "WoodenPickaxe",
     "displayName": "Wooden Pickaxe",
-    "display": { "type": "sprite", "texture": "WoodenPickaxe" }
+    "display": {
+      "type": "sprite",
+      "texture": "WoodenPickaxe"
+    }
   },
   {
     "itemType": "Mace",
     "displayName": "Mace",
-    "display": { "type": "sprite", "texture": "Mace" }
+    "display": {
+      "type": "sprite",
+      "texture": "Mace"
+    }
   },
   {
     "itemType": "StoneSword",
     "displayName": "Stone Sword",
-    "display": { "type": "none" }
+    "display": {
+      "type": "none"
+    }
   },
   {
     "itemType": "IronSword",
     "displayName": "Iron Sword",
-    "display": { "type": "none" }
+    "display": {
+      "type": "none"
+    }
   },
   {
     "itemType": "DiamondSword",
     "displayName": "Diamond Sword",
-    "display": { "type": "none" }
+    "display": {
+      "type": "none"
+    }
   },
   {
     "itemType": "Porkchop",
     "displayName": "Porkchop",
-    "display": { "type": "none" }
+    "display": {
+      "type": "none"
+    }
   },
   {
     "itemType": "Andesite",
     "displayName": "Andesite",
     "material": "/Game/Blocks/Materials/MI_Andesite.MI_Andesite",
-    "display": { "type": "block", "block": "Andesite" }
+    "display": {
+      "type": "block",
+      "block": "Andesite"
+    }
   },
   {
     "itemType": "Basalt",
     "displayName": "Basalt",
     "material": "/Game/Blocks/Materials/MI_Basalt.MI_Basalt",
-    "display": { "type": "block", "block": "Basalt" }
+    "display": {
+      "type": "block",
+      "block": "Basalt"
+    }
   },
   {
     "itemType": "Limestone",
     "displayName": "Limestone",
     "material": "/Game/Blocks/Materials/MI_Limestone.MI_Limestone",
-    "display": { "type": "block", "block": "Limestone" }
+    "display": {
+      "type": "block",
+      "block": "Limestone"
+    }
   },
   {
     "itemType": "Calcite",
     "displayName": "Calcite",
     "material": "/Game/Blocks/Materials/MI_Calcite.MI_Calcite",
-    "display": { "type": "block", "block": "Calcite" }
+    "display": {
+      "type": "block",
+      "block": "Calcite"
+    }
   },
   {
     "itemType": "Gravel",
     "displayName": "Gravel",
     "material": "/Game/Blocks/Materials/MI_Gravel.MI_Gravel",
-    "display": { "type": "block", "block": "Gravel" }
+    "display": {
+      "type": "block",
+      "block": "Gravel"
+    }
+  },
+  {
+    "itemType": "Cobblestone",
+    "displayName": "Cobblestone",
+    "material": "/Game/Blocks/Materials/MI_Cobblestone.MI_Cobblestone",
+    "display": {
+      "type": "block",
+      "block": "Cobblestone"
+    }
+  },
+  {
+    "itemType": "Deepslate",
+    "displayName": "Deepslate",
+    "material": "/Game/Blocks/Materials/MI_Deepslate.MI_Deepslate",
+    "display": {
+      "type": "block",
+      "block": "Deepslate"
+    }
+  },
+  {
+    "itemType": "CobbledDeepslate",
+    "displayName": "Cobbled Deepslate",
+    "material": "/Game/Blocks/Materials/MI_CobbledDeepslate.MI_CobbledDeepslate",
+    "display": {
+      "type": "block",
+      "block": "CobbledDeepslate"
+    }
+  },
+  {
+    "itemType": "Granite",
+    "displayName": "Granite",
+    "material": "/Game/Blocks/Materials/MI_Granite.MI_Granite",
+    "display": {
+      "type": "block",
+      "block": "Granite"
+    }
+  },
+  {
+    "itemType": "Diorite",
+    "displayName": "Diorite",
+    "material": "/Game/Blocks/Materials/MI_Diorite.MI_Diorite",
+    "display": {
+      "type": "block",
+      "block": "Diorite"
+    }
+  },
+  {
+    "itemType": "Tuff",
+    "displayName": "Tuff",
+    "material": "/Game/Blocks/Materials/MI_Tuff.MI_Tuff",
+    "display": {
+      "type": "block",
+      "block": "Tuff"
+    }
+  },
+  {
+    "itemType": "Flint",
+    "displayName": "Flint",
+    "display": {
+      "type": "sprite",
+      "texture": "Flint"
+    }
+  },
+  {
+    "itemType": "Coal",
+    "displayName": "Coal",
+    "display": {
+      "type": "sprite",
+      "texture": "Coal"
+    }
+  },
+  {
+    "itemType": "RawIron",
+    "displayName": "Raw Iron",
+    "display": {
+      "type": "sprite",
+      "texture": "RawIron"
+    }
+  },
+  {
+    "itemType": "RawCopper",
+    "displayName": "Raw Copper",
+    "display": {
+      "type": "sprite",
+      "texture": "RawCopper"
+    }
+  },
+  {
+    "itemType": "RawGold",
+    "displayName": "Raw Gold",
+    "display": {
+      "type": "sprite",
+      "texture": "RawGold"
+    }
+  },
+  {
+    "itemType": "Redstone",
+    "displayName": "Redstone Dust",
+    "display": {
+      "type": "sprite",
+      "texture": "Redstone"
+    }
+  },
+  {
+    "itemType": "LapisLazuli",
+    "displayName": "Lapis Lazuli",
+    "display": {
+      "type": "sprite",
+      "texture": "LapisLazuli"
+    }
+  },
+  {
+    "itemType": "Diamond",
+    "displayName": "Diamond",
+    "display": {
+      "type": "sprite",
+      "texture": "Diamond"
+    }
+  },
+  {
+    "itemType": "Emerald",
+    "displayName": "Emerald",
+    "display": {
+      "type": "sprite",
+      "texture": "Emerald"
+    }
   }
 ]

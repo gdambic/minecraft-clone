@@ -9,6 +9,7 @@ Registrira stavke:
 - **Tools > MinecraftClone > Generate Items Sprites** - pokrece Scripts/generate_item_sprites.py
 - **Tools > MinecraftClone > Import Block Sounds** - pokrece Scripts/import_block_sounds.py
 - **Tools > MinecraftClone > Import Block Cracks** - pokrece Scripts/import_block_cracks.py
+- **Tools > MinecraftClone > Import Underground Blocks** - pokrece Scripts/import_underground_assets.py
 - **Tools > MinecraftClone > Build Water Material** - pokrece Scripts/build_water_material.py
 - **Tools > MinecraftClone > Import Zombie** - pokrece Scripts/import_zombie.py
 
@@ -39,6 +40,9 @@ SCRIPT_PATH_WATER_MATERIAL = unreal.Paths.convert_relative_path_to_full(
 
 SCRIPT_PATH_ZOMBIE = unreal.Paths.convert_relative_path_to_full(
     unreal.Paths.project_dir() + "Scripts/import_zombie.py")
+
+SCRIPT_PATH_UNDERGROUND = unreal.Paths.convert_relative_path_to_full(
+    unreal.Paths.project_dir() + "Scripts/import_underground_assets.py")
 
 
 def _register_menu():
@@ -128,13 +132,25 @@ def _register_menu():
         'exec(open(r"{0}").read())'.format(SCRIPT_PATH_ZOMBIE))
     menu.add_menu_entry(SECTION_NAME, entry_zombie)
 
+    entry_underground = unreal.ToolMenuEntry(
+        name="ImportUndergroundBlocks",
+        type=unreal.MultiBlockType.MENU_ENTRY)
+    entry_underground.set_label("Import Underground Blocks")
+    entry_underground.set_tool_tip(
+        "Izvuci teksture kamena, ruda i njihovih dropova iz Minecraft jara, "
+        "uvezi ih i izgradi materijale i ikone (Docs/PLAN_Underground.md)")
+    entry_underground.set_string_command(
+        unreal.ToolMenuStringCommandType.PYTHON, "",
+        'exec(open(r"{0}").read())'.format(SCRIPT_PATH_UNDERGROUND))
+    menu.add_menu_entry(SECTION_NAME, entry_underground)
+
     menus.refresh_all_widgets()
     return True
 
 
 try:
     if _register_menu():
-        unreal.log("[MinecraftClone] Tools > MinecraftClone > Build Block Materials / Generate Items Sprites / Import Block Sounds / Import Block Cracks / Build Water Material / Import Zombie registrirano")
+        unreal.log("[MinecraftClone] Tools > MinecraftClone > Build Block Materials / Generate Items Sprites / Import Block Sounds / Import Block Cracks / Build Water Material / Import Zombie / Import Underground Blocks registrirano")
     else:
         unreal.log("[MinecraftClone] ToolMenus nedostupan (headless) - izbornik preskocen")
 except Exception as error:

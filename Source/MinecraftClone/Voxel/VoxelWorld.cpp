@@ -2,6 +2,7 @@
 #include "Block.h"
 #include "ItemDrop.h"
 #include "ChunkGenerator.h"
+#include "UndergroundConfig.h"
 #include "TimerManager.h"
 #include "Zombie.h"
 #include "MobBase.h"
@@ -63,7 +64,7 @@ static FAutoConsoleCommandWithWorldAndArgs GVoxelTeleportCmd(
 		}
 		const int32 GX = FCString::Atoi(*Args[0]);
 		const int32 GY = FCString::Atoi(*Args[1]);
-		const int32 GZ = VoxelWorld->GetTerrainHeightAt(GX, GY) + 3;
+		const int32 GZ = VoxelWorld->GetGroundHeightAt(GX, GY) + 3;
 		Player->SetActorLocation(
 			VoxelWorld->GridToWorld(GX, GY, GZ) + FVector(50.f, 50.f, 0.f),
 			false, nullptr, ETeleportType::TeleportPhysics);
@@ -162,6 +163,8 @@ AVoxelWorld::AVoxelWorld()
 	ChunkApplyBudgetMs = 3.0f;
 	StreamingIntervalSeconds = 0.25f;
 	BootstrapRadius = 2;
+	UndergroundVisualRadius = 2;
+	SurfaceVisualDepth = 8;
 	WaterMaterial = TSoftObjectPtr<UMaterialInterface>(FSoftObjectPath(TEXT("/Game/Water/MI_Water.MI_Water")));
 	WaterSubdivisions = 2;
 	WaterSurfaceHeight = 0.875f;
@@ -457,6 +460,38 @@ FChunkGenParams AVoxelWorld::MakeChunkGenParams() const
 	Params.TreeAttemptsPerChunk = TreeAttemptsPerChunk;
 	Params.TreeChancePerChunk = TreeChancePerChunk;
 
+	// Podzemlje: postavke iz Content/Data/WorldGen/Underground.json, noiseovi iz seeda
+	const FUndergroundConfig Underground = FUndergroundConfig::Load();
+	Params.Caves = FCaveGenerator::Build(WorldSeed, SeaLevel, Underground.Caves);
+
+	TSharedPtr<FUndergroundGenData, ESPMode::ThreadSafe> UndergroundData = MakeShared<FUndergroundGenData, ESPMode::ThreadSafe>();
+	UndergroundData->Layers = Underground.Layers;
+	UndergroundData->Features = Underground.Features;
+	UBlockRegistry* BiomeRegistry = UBlockRegistry::Get(this);
+	for (FOreFeature& Feature : UndergroundData->Features)
+	{
+		// Imena bioma -> indeksi u registryju; nakupina s nepoznatim biomom se nigdje ne pojavljuje
+		for (const FName& BiomeName : Feature.BiomeNames)
+		{
+			int32 Found = INDEX_NONE;
+			for (int32 Index = 0; BiomeRegistry && Index < BiomeRegistry->GetBiomeCount(); Index++)
+			{
+				if (BiomeRegistry->GetBiome(Index).Name == BiomeName)
+				{
+					Found = Index;
+					break;
+				}
+			}
+			if (Found == INDEX_NONE)
+			{
+				UE_LOG(LogTemp, Error, TEXT("[CAVE] Underground.json: nakupina '%s' trazi nepoznat biom '%s'"),
+					*Feature.Name, *BiomeName.ToString());
+			}
+			Feature.Biomes.Add(Found);
+		}
+	}
+	Params.Underground = UndergroundData;
+
 	// Showcase red za chunk (0,0) - po jedan blok svake definicije,
 	// sortirano po enum vrijednosti (TMap redoslijed nije garantiran)
 	if (UBlockRegistry* Registry = UBlockRegistry::Get(this))
@@ -569,6 +604,31 @@ void AVoxelWorld::GenerateWorld()
 				SpawnGrid.X, SpawnGrid.Y);
 		}
 	}
+	// Spawn nad ulazom u spilju: igrac bi propao u rupu, pa krece s najblizeg cijelog tla
+	if (IsLandColumn(SpawnGrid.X, SpawnGrid.Y) && !IsOpenGroundColumn(SpawnGrid.X, SpawnGrid.Y))
+	{
+		bool bFound = false;
+		for (int32 Radius = 1; Radius <= 24 && !bFound; Radius++)
+		{
+			for (int32 DY = -Radius; DY <= Radius && !bFound; DY++)
+			{
+				for (int32 DX = -Radius; DX <= Radius && !bFound; DX++)
+				{
+					// Samo rub kvadrata - unutrasnjost su pregledali manji radijusi
+					if (FMath::Max(FMath::Abs(DX), FMath::Abs(DY)) == Radius
+						&& IsOpenGroundColumn(SpawnGrid.X + DX, SpawnGrid.Y + DY))
+					{
+						UE_LOG(LogTemp, Warning, TEXT("[CAVE] spawn (%d,%d) je nad ulazom u spilju -> najblize cijelo tlo (%d,%d)"),
+							SpawnGrid.X, SpawnGrid.Y, SpawnGrid.X + DX, SpawnGrid.Y + DY);
+						SpawnGrid = FIntVector(SpawnGrid.X + DX, SpawnGrid.Y + DY, SpawnGrid.Z);
+						SpawnLandColumn = FIntPoint(SpawnGrid.X, SpawnGrid.Y);
+						bSpawnMovedToLand = true;
+						bFound = true;
+					}
+				}
+			}
+		}
+	}
 	SpawnCenterChunk = GridToChunk(SpawnGrid);
 
 	for (int32 DY = -BootstrapRadius - 1; DY <= BootstrapRadius + 1; DY++)
@@ -599,10 +659,7 @@ void AVoxelWorld::GenerateWorld()
 	int32 TotalInstances = 0;
 	for (const TPair<FIntPoint, TUniquePtr<FVoxelChunk>>& Pair : Chunks)
 	{
-		for (const TPair<EBlockType, FChunkInstanceSet>& SetPair : Pair.Value->InstanceSets)
-		{
-			TotalInstances += SetPair.Value.InstanceToGrid.Num();
-		}
+		TotalInstances += CountChunkInstances(*Pair.Value, true, true);
 	}
 	UE_LOG(LogTemp, Warning, TEXT("[PERF] 3/4 Vizuali    %8.1f ms   %6d instanci"),
 		(T3 - T2) * 1000.0, TotalInstances);
@@ -654,7 +711,7 @@ void AVoxelWorld::GenerateWorld()
 		// Iskopaj jedan blok na spawnu - na kraju testa (nakon unload + reload
 		// spawn podrucja) mora i dalje biti Air (retained-modified put)
 		const FIntVector Base = ChunkOrigin(SpawnCenterChunk);
-		SoakDigPos = FIntVector(Base.X + 3, Base.Y + 3, GetTerrainHeightAt(Base.X + 3, Base.Y + 3));
+		SoakDigPos = FIntVector(Base.X + 3, Base.Y + 3, GetGroundHeightAt(Base.X + 3, Base.Y + 3));
 		DestroyBlockAt(SoakDigPos);
 		UE_LOG(LogTemp, Warning, TEXT("[SOAK] pokrecem soak test (hop svakih 12 s); iskopan blok na (%d,%d,%d)"),
 			SoakDigPos.X, SoakDigPos.Y, SoakDigPos.Z);
@@ -712,8 +769,14 @@ void AVoxelWorld::SoakTestHop()
 		UE_LOG(LogTemp, Warning, TEXT("[SOAK] RETAINED %s: iskopani blok (%d,%d,%d) je %s"),
 			bRetainedOk ? TEXT("OK") : TEXT("FAIL"),
 			SoakDigPos.X, SoakDigPos.Y, SoakDigPos.Z, bRetainedOk ? TEXT("Air") : TEXT("regeneriran!"));
-		UE_LOG(LogTemp, Warning, TEXT("[PERF] najsporiji vizual chunka u streamingu: %.2f ms, chunk (%d,%d) (budzet %.1f ms)"),
-			MaxChunkApplyMs, MaxChunkApplyCoord.X, MaxChunkApplyCoord.Y, ChunkApplyBudgetMs);
+		UE_LOG(LogTemp, Warning, TEXT("[PERF] najsporiji vizual chunka u streamingu: %.2f ms, chunk (%d,%d), %d instanci (budzet %.1f ms)"),
+			MaxChunkApplyMs, MaxChunkApplyCoord.X, MaxChunkApplyCoord.Y, MaxChunkApplyInstances, ChunkApplyBudgetMs);
+		UE_LOG(LogTemp, Warning, TEXT("[PERF] vizuali u streamingu: %d chunkova, prosjek %.2f ms i %d instanci po chunku, sporijih od %.0f ms: %d"),
+			ChunkApplyCount, ChunkApplyCount > 0 ? ChunkApplyMsTotal / ChunkApplyCount : 0.0,
+			ChunkApplyCount > 0 ? (int32)(ChunkApplyInstancesTotal / ChunkApplyCount) : 0, SlowChunkApplyMs, ChunkApplySlowCount);
+		UE_LOG(LogTemp, Warning, TEXT("[PERF] vizuali podzemlja: izgradeno %d odsjecaka (prosjek %.2f ms, najsporiji %.2f ms), uklonjeno %d"),
+			DeepSectionBuildCount, DeepSectionBuildCount > 0 ? DeepSectionBuildMsTotal / DeepSectionBuildCount : 0.0,
+			DeepSectionBuildMsMax, DeepSectionRemoveCount);
 		UE_LOG(LogTemp, Warning, TEXT("[SOAK] GOTOVO: rehash OK=%d, FAIL=%d, hashirano %d chunkova, ucitano %d, zadrzano %d"),
 			SoakRehashOk, SoakRehashFail, SoakChunkHashes.Num(), Chunks.Num(), RetainedModifiedChunks.Num());
 		GetWorld()->GetTimerManager().ClearTimer(SoakTimerHandle);
@@ -743,7 +806,7 @@ void AVoxelWorld::SoakTestHop()
 	}
 	default: break;
 	}
-	const int32 GZ = GetTerrainHeightAt(GX, GY) + 3;
+	const int32 GZ = GetGroundHeightAt(GX, GY) + 3;
 
 	Player->SetActorLocation(GridToWorld(GX, GY, GZ) + FVector(50.f, 50.f, 0.f),
 		false, nullptr, ETeleportType::TeleportPhysics);
@@ -764,7 +827,7 @@ void AVoxelWorld::SoakSnapPlayerToGround()
 	}
 
 	const FIntVector Grid = WorldToGrid(Player->GetActorLocation());
-	const int32 GZ = GetTerrainHeightAt(Grid.X, Grid.Y) + 2;
+	const int32 GZ = GetGroundHeightAt(Grid.X, Grid.Y) + 2;
 	Player->SetActorLocation(GridToWorld(Grid.X, Grid.Y, GZ) + FVector(50.f, 50.f, 0.f),
 		false, nullptr, ETeleportType::TeleportPhysics);
 	if (UPawnMovementComponent* Movement = Player->GetMovementComponent())
@@ -928,6 +991,10 @@ void AVoxelWorld::UnloadChunk(const FIntPoint& Coord)
 			Pair.Value.Component->DestroyComponent();
 		}
 	}
+	for (int32 Section = 0; Section < Chunk->DeepSets.Num(); Section++)
+	{
+		RemoveDeepSection(*Chunk, Section);
+	}
 
 	// Decay provjere za pozicije koje vise nisu ucitane su bespredmetne
 	LeavesToCheck.RemoveAll([&Coord](const FIntVector& P) { return GridToChunk(P) == Coord; });
@@ -957,11 +1024,11 @@ void AVoxelWorld::UpdateStreaming()
 		{
 			// Bootstrap je generiran oko kopna, a ne oko PlayerStarta u oceanu
 			Player->SetActorLocation(GridToWorld(SpawnLandColumn.X, SpawnLandColumn.Y,
-				GetTerrainHeightAt(SpawnLandColumn.X, SpawnLandColumn.Y) + 2) + FVector(50.f, 50.f, 0.f),
+				GetGroundHeightAt(SpawnLandColumn.X, SpawnLandColumn.Y) + 2) + FVector(50.f, 50.f, 0.f),
 				false, nullptr, ETeleportType::TeleportPhysics);
 		}
 		const FIntVector Grid = WorldToGrid(Player->GetActorLocation());
-		const int32 SurfaceZ = GetTerrainHeightAt(Grid.X, Grid.Y);
+		const int32 SurfaceZ = GetGroundHeightAt(Grid.X, Grid.Y);
 		if (Grid.Z <= SurfaceZ)
 		{
 			Player->SetActorLocation(GridToWorld(Grid.X, Grid.Y, SurfaceZ + 2) + FVector(50.f, 50.f, 0.f),
@@ -1048,7 +1115,13 @@ void AVoxelWorld::ApplyPendingChunkVisuals()
 	{
 		return;
 	}
-	const FIntPoint PlayerChunk = GridToChunk(WorldToGrid(Player->GetActorLocation()));
+	const FIntVector PlayerGrid = WorldToGrid(Player->GetActorLocation());
+	const FIntPoint PlayerChunk = GridToChunk(PlayerGrid);
+	const double BudgetEnd = FPlatformTime::Seconds() + ChunkApplyBudgetMs / 1000.0;
+
+	// Podzemlje tik uz igraca ide prvo: bez njega bi igrac koji ulazi u spilju
+	// propao kroz zidove koji jos nemaju koliziju
+	UpdateDeepVisuals(PlayerGrid, BudgetEnd, 1);
 
 	// Izgradnja instanci je skupa (~4 ms/chunk) pa ide s vremenskim budzetom
 	// po frameu, najblizi chunkovi prvi. Uvjet su podaci sva 4 bocna susjeda -
@@ -1072,16 +1145,21 @@ void AVoxelWorld::ApplyPendingChunkVisuals()
 		return ChunkDistance(A.Coord, PlayerChunk) < ChunkDistance(B.Coord, PlayerChunk);
 	});
 
-	const double BudgetEnd = FPlatformTime::Seconds() + ChunkApplyBudgetMs / 1000.0;
 	for (FVoxelChunk* Chunk : PendingVisuals)
 	{
 		const double ApplyStart = FPlatformTime::Seconds();
 		ApplyChunkVisuals(*Chunk);
 		const double ApplyMs = (FPlatformTime::Seconds() - ApplyStart) * 1000.0;
+		const int32 ChunkInstances = CountChunkInstances(*Chunk, true, false);
+		ChunkApplyCount++;
+		ChunkApplyMsTotal += ApplyMs;
+		ChunkApplyInstancesTotal += ChunkInstances;
+		ChunkApplySlowCount += ApplyMs > SlowChunkApplyMs ? 1 : 0;
 		if (ApplyMs > MaxChunkApplyMs)
 		{
 			MaxChunkApplyMs = ApplyMs;
 			MaxChunkApplyCoord = Chunk->Coord;
+			MaxChunkApplyInstances = ChunkInstances;
 		}
 		AppliedVisualsSinceLog++;
 		if (FPlatformTime::Seconds() >= BudgetEnd)
@@ -1089,6 +1167,191 @@ void AVoxelWorld::ApplyPendingChunkVisuals()
 			break;
 		}
 	}
+
+	// Ostatak podzemlja u radijusu, ako je od budzeta ista ostalo
+	UpdateDeepVisuals(PlayerGrid, BudgetEnd, UndergroundVisualRadius);
+}
+
+int32 AVoxelWorld::CountChunkInstances(const FVoxelChunk& Chunk, bool bSurface, bool bDeep)
+{
+	int32 Count = 0;
+	if (bSurface)
+	{
+		for (const TPair<EBlockType, FChunkInstanceSet>& Pair : Chunk.InstanceSets)
+		{
+			Count += Pair.Value.InstanceToGrid.Num();
+		}
+	}
+	if (bDeep)
+	{
+		for (const TMap<EBlockType, FChunkInstanceSet>& Sets : Chunk.DeepSets)
+		{
+			for (const TPair<EBlockType, FChunkInstanceSet>& Pair : Sets)
+			{
+				Count += Pair.Value.InstanceToGrid.Num();
+			}
+		}
+	}
+	return Count;
+}
+
+bool AVoxelWorld::IsDeepVisualCell(const FVoxelChunk& Chunk, const FIntVector& Pos) const
+{
+	if (Chunk.DeepThreshold.Num() != ColumnsPerChunk)
+	{
+		return false;
+	}
+	const FIntVector Local = GridToLocal(Pos);
+	return Pos.Z < Chunk.DeepThreshold[ColumnIndex(Local.X, Local.Y)];
+}
+
+bool AVoxelWorld::HasBlockInstance(FIntVector Pos) const
+{
+	const FVoxelChunk* Chunk = FindChunk(GridToChunk(Pos));
+	if (!Chunk || !IsValidZ(Pos.Z))
+	{
+		return false;
+	}
+	for (const TPair<EBlockType, FChunkInstanceSet>& Pair : Chunk->InstanceSets)
+	{
+		if (Pair.Value.GridToInstance.Contains(Pos))
+		{
+			return true;
+		}
+	}
+	const int32 Section = SectionIndex(Pos.Z);
+	if (Chunk->DeepSets.IsValidIndex(Section))
+	{
+		for (const TPair<EBlockType, FChunkInstanceSet>& Pair : Chunk->DeepSets[Section])
+		{
+			if (Pair.Value.GridToInstance.Contains(Pos))
+			{
+				return true;
+			}
+		}
+	}
+	return false;
+}
+
+void AVoxelWorld::UpdateDeepVisuals(const FIntVector& PlayerGrid, double BudgetEnd, int32 MaxDistance)
+{
+	const FIntPoint PlayerChunk = GridToChunk(PlayerGrid);
+	const int32 PlayerSection = SectionIndex(FMath::Clamp(PlayerGrid.Z, WorldMinZ, WorldMaxZ));
+	const int32 Radius = FMath::Min(UndergroundVisualRadius, VisualRadius);
+
+	// 1. Uklanjanje: odsjecak dalji od Radius + 1 (histereza kao kod unloada chunkova)
+	for (const TPair<FIntPoint, TUniquePtr<FVoxelChunk>>& Pair : Chunks)
+	{
+		FVoxelChunk& Chunk = *Pair.Value;
+		if (Chunk.DeepBuiltMask == 0)
+		{
+			continue;
+		}
+		const int32 ChunkDist = ChunkDistance(Chunk.Coord, PlayerChunk);
+		for (int32 Section = 0; Section < SectionsPerChunk; Section++)
+		{
+			if ((Chunk.DeepBuiltMask & (1u << Section))
+				&& FMath::Max(ChunkDist, FMath::Abs(Section - PlayerSection)) > Radius + 1)
+			{
+				RemoveDeepSection(Chunk, Section);
+				DeepSectionRemoveCount++;
+			}
+		}
+	}
+
+	// 2. Izgradnja: prsten po prsten od igraca, dok ima budzeta
+	for (int32 Distance = 0; Distance <= FMath::Min(MaxDistance, Radius); Distance++)
+	{
+		for (int32 DY = -Distance; DY <= Distance; DY++)
+		{
+			for (int32 DX = -Distance; DX <= Distance; DX++)
+			{
+				const FIntPoint Coord = PlayerChunk + FIntPoint(DX, DY);
+				FVoxelChunk* Chunk = FindChunk(Coord);
+				if (!Chunk || !Chunk->bVisualsBuilt || !AreNeighborsDataReady(Coord))
+				{
+					continue;
+				}
+				const int32 ChunkDist = FMath::Max(FMath::Abs(DX), FMath::Abs(DY));
+				for (int32 DS = -Distance; DS <= Distance; DS++)
+				{
+					// Samo ljuska kocke - unutrasnjost su obradili manji Distance
+					const int32 Section = PlayerSection + DS;
+					if (FMath::Max(ChunkDist, FMath::Abs(DS)) != Distance || Section < 0 || Section >= SectionsPerChunk
+						|| (Chunk->DeepBuiltMask & (1u << Section)))
+					{
+						continue;
+					}
+					if (FPlatformTime::Seconds() >= BudgetEnd)
+					{
+						return;
+					}
+					const double Start = FPlatformTime::Seconds();
+					BuildDeepSection(*Chunk, Section);
+					const double Ms = (FPlatformTime::Seconds() - Start) * 1000.0;
+					DeepSectionBuildCount++;
+					DeepSectionBuildMsTotal += Ms;
+					DeepSectionBuildMsMax = FMath::Max(DeepSectionBuildMsMax, Ms);
+				}
+			}
+		}
+	}
+}
+
+void AVoxelWorld::BuildDeepSection(FVoxelChunk& Chunk, int32 Section)
+{
+	if (Chunk.DeepThreshold.Num() != ColumnsPerChunk || Section < 0 || Section >= SectionsPerChunk)
+	{
+		return;
+	}
+	Chunk.DeepBuiltMask |= 1u << Section;
+
+	const FIntVector Origin = ChunkOrigin(Chunk.Coord);
+	const int32 MinZ = WorldMinZ + (Section << SectionSizeLog2);
+	const int32 MaxZ = MinZ + (1 << SectionSizeLog2) - 1;
+	TMap<EBlockType, TArray<FIntVector>> ExposedByType;
+
+	for (int32 LocalY = 0; LocalY < ChunkSize; LocalY++)
+	{
+		for (int32 LocalX = 0; LocalX < ChunkSize; LocalX++)
+		{
+			// Podzemlje je samo ispod praga stupca
+			const int32 Top = FMath::Min(MaxZ, Chunk.DeepThreshold[ColumnIndex(LocalX, LocalY)] - 1);
+			for (int32 Z = MinZ; Z <= Top; Z++)
+			{
+				const FIntVector Local(LocalX, LocalY, Z);
+				const EBlockType Type = Chunk.Blocks[LocalIndex(Local)];
+				// Promovirani actor vec predstavlja svoj blok (instanca i actor nikad zajedno)
+				if (Type != EBlockType::Air && IsBlockExposedInChunk(Chunk, Local) && !Blocks.Contains(Origin + Local))
+				{
+					ExposedByType.FindOrAdd(Type).Add(Origin + Local);
+				}
+			}
+		}
+	}
+
+	for (const TPair<EBlockType, TArray<FIntVector>>& Pair : ExposedByType)
+	{
+		AddChunkInstancesBatch(Chunk, Pair.Key, Pair.Value, Section);
+	}
+}
+
+void AVoxelWorld::RemoveDeepSection(FVoxelChunk& Chunk, int32 Section)
+{
+	Chunk.DeepBuiltMask &= ~(1u << Section);
+	if (!Chunk.DeepSets.IsValidIndex(Section))
+	{
+		return;
+	}
+	for (TPair<EBlockType, FChunkInstanceSet>& Pair : Chunk.DeepSets[Section])
+	{
+		if (Pair.Value.Component)
+		{
+			ComponentToChunk.Remove(Pair.Value.Component);
+			Pair.Value.Component->DestroyComponent();
+		}
+	}
+	Chunk.DeepSets[Section].Reset();
 }
 
 void AVoxelWorld::DespawnFarCreatures(const FIntPoint& PlayerChunk)
@@ -1169,16 +1432,44 @@ void AVoxelWorld::ApplyChunkVisuals(FVoxelChunk& Chunk)
 		return;
 	}
 
+	const FIntVector Origin = ChunkOrigin(Chunk.Coord);
+
+	// Prag podzemlja po stupcu: najniza povrsina stupca i 4 susjeda (blok
+	// litice je bocno izlozen zraku nad nizim susjedom) umanjena za
+	// SurfaceVisualDepth. Sve na pragu i iznad gradi se ovdje, sve ispod tek
+	// kad se igrac priblizi (UpdateDeepVisuals).
+	constexpr int32 HeightsSize = ChunkSize + 2;
+	int32 Heights[HeightsSize * HeightsSize];
+	for (int32 HY = 0; HY < HeightsSize; HY++)
+	{
+		for (int32 HX = 0; HX < HeightsSize; HX++)
+		{
+			Heights[HY * HeightsSize + HX] = GetTerrainHeightAt(Origin.X + HX - 1, Origin.Y + HY - 1);
+		}
+	}
+	Chunk.DeepThreshold.SetNumUninitialized(ColumnsPerChunk);
+	for (int32 LocalY = 0; LocalY < ChunkSize; LocalY++)
+	{
+		for (int32 LocalX = 0; LocalX < ChunkSize; LocalX++)
+		{
+			const int32 Center = (LocalY + 1) * HeightsSize + LocalX + 1;
+			const int32 MinHeight = FMath::Min3(Heights[Center],
+				FMath::Min(Heights[Center - 1], Heights[Center + 1]),
+				FMath::Min(Heights[Center - HeightsSize], Heights[Center + HeightsSize]));
+			Chunk.DeepThreshold[ColumnIndex(LocalX, LocalY)] =
+				(int16)FMath::Clamp(MinHeight - SurfaceVisualDepth, WorldMinZ, WorldMaxZ + 1);
+		}
+	}
+
 	// ISM instance SAMO za izlozene blokove (zakopani ostaju samo podaci).
 	// Batch AddInstances po tipu - jedan poziv umjesto tisuca.
-	const FIntVector Origin = ChunkOrigin(Chunk.Coord);
 	TMap<EBlockType, TArray<FIntVector>> ExposedByType;
 
-	for (int32 Z = WorldMinZ; Z <= WorldMaxZ; Z++)
+	for (int32 LocalY = 0; LocalY < ChunkSize; LocalY++)
 	{
-		for (int32 LocalY = 0; LocalY < ChunkSize; LocalY++)
+		for (int32 LocalX = 0; LocalX < ChunkSize; LocalX++)
 		{
-			for (int32 LocalX = 0; LocalX < ChunkSize; LocalX++)
+			for (int32 Z = Chunk.DeepThreshold[ColumnIndex(LocalX, LocalY)]; Z <= WorldMaxZ; Z++)
 			{
 				const EBlockType Type = Chunk.Blocks[LocalIndex(FIntVector(LocalX, LocalY, Z))];
 				if (Type == EBlockType::Air)
@@ -1766,7 +2057,7 @@ float AVoxelWorld::RunMobWaterTest()
 
 	// Igrac 4 bloka u kopno: ovce od njega bjeze prema moru
 	const FIntPoint PlayerCol = Shore - SeaDir * 4;
-	Player->SetActorLocation(GridToWorld(PlayerCol.X, PlayerCol.Y, GetTerrainHeightAt(PlayerCol.X, PlayerCol.Y) + 2),
+	Player->SetActorLocation(GridToWorld(PlayerCol.X, PlayerCol.Y, GetGroundHeightAt(PlayerCol.X, PlayerCol.Y) + 2),
 		false, nullptr, ETeleportType::TeleportPhysics);
 	const FIntPoint SeaCol = Shore + SeaDir * 2;
 	UE_LOG(LogTemp, Log, TEXT("[WATER] mob test: obala (%d,%d), more prema (%d,%d), igrac (%d,%d), ovca u moru (%d,%d) dno Z=%d"),
@@ -1808,7 +2099,7 @@ float AVoxelWorld::RunMobWaterTest()
 			{
 				continue;
 			}
-			const FVector Pos = World->GridToWorld(Col.X, Col.Y, World->GetTerrainHeightAt(Col.X, Col.Y) + 1) + FVector(0.f, 0.f, 50.f);
+			const FVector Pos = World->GridToWorld(Col.X, Col.Y, World->GetGroundHeightAt(Col.X, Col.Y) + 1) + FVector(0.f, 0.f, 50.f);
 			State->LandMobs.Add(World->GetWorld()->SpawnActor<AMobBase>(MobClass, Pos, FRotator::ZeroRotator, Params));
 		}
 		const FVector SeaPos = World->GridToWorld(SeaCol.X, SeaCol.Y, World->GetTerrainHeightAt(SeaCol.X, SeaCol.Y) + 1) + FVector(0.f, 0.f, 50.f);
@@ -1957,8 +2248,9 @@ void AVoxelWorld::UpdateUnderwater()
 void AVoxelWorld::LogWaterDiagnostics() const
 {
 	// Neovisna provjera mesha: stupac ima more ako je u PODACIMA chunka najvisi
-	// blok ispod razine mora (stabla u moru ne rastu). Izmijenjeni chunkovi se
-	// preskacu - njihovi podaci vise nisu generirani teren.
+	// blok ispod razine mora (stabla u moru ne rastu), a celija na razini mora
+	// nije izdubljena spiljom (okno ulaza koje se spusta ispod mora nije more).
+	// Izmijenjeni chunkovi se preskacu - njihovi podaci vise nisu generirani teren.
 	int32 MeshChunks = 0;
 	int32 MeshQuads = 0;
 	int32 MeshVertices = 0;
@@ -1987,7 +2279,7 @@ void AVoxelWorld::LogWaterDiagnostics() const
 			for (int32 LocalX = 0; LocalX < ChunkSize; LocalX++)
 			{
 				int32 Top = WorldMinZ - 1;
-				for (int32 Z = SeaLevel; Z >= WorldMinZ; Z--)
+				for (int32 Z = WorldMaxZ; Z >= WorldMinZ; Z--)
 				{
 					if (Chunk->Blocks[LocalIndex(FIntVector(LocalX, LocalY, Z))] != EBlockType::Air)
 					{
@@ -1995,7 +2287,11 @@ void AVoxelWorld::LogWaterDiagnostics() const
 						break;
 					}
 				}
-				DataColumns += Top < SeaLevel ? 1 : 0;
+				if (Top < SeaLevel)
+				{
+					const FIntVector Origin = ChunkOrigin(Chunk->Coord);
+					DataColumns += IsCaveCellAt(FIntVector(Origin.X + LocalX, Origin.Y + LocalY, SeaLevel)) ? 0 : 1;
+				}
 			}
 		}
 	}
@@ -2210,9 +2506,16 @@ void AVoxelWorld::DemoteToInstance(FIntVector Pos)
 
 // === ISM INSTANCE ===
 
-FChunkInstanceSet* AVoxelWorld::EnsureChunkInstanceSet(FVoxelChunk& Chunk, EBlockType Type)
+FChunkInstanceSet* AVoxelWorld::EnsureChunkInstanceSet(FVoxelChunk& Chunk, EBlockType Type, int32 DeepSection)
 {
-	if (FChunkInstanceSet* Existing = Chunk.InstanceSets.Find(Type))
+	// Povrsina ima jedan set po tipu, podzemlje jedan po tipu i odsjecku
+	if (DeepSection != INDEX_NONE && Chunk.DeepSets.Num() != SectionsPerChunk)
+	{
+		Chunk.DeepSets.SetNum(SectionsPerChunk);
+	}
+	TMap<EBlockType, FChunkInstanceSet>& Sets = DeepSection != INDEX_NONE ? Chunk.DeepSets[DeepSection] : Chunk.InstanceSets;
+
+	if (FChunkInstanceSet* Existing = Sets.Find(Type))
 	{
 		// Component == nullptr je cache-irani negativni rezultat (tip bez mesha)
 		return Existing->Component ? Existing : nullptr;
@@ -2226,15 +2529,16 @@ FChunkInstanceSet* AVoxelWorld::EnsureChunkInstanceSet(FVoxelChunk& Chunk, EBloc
 	if (!Assets || !Assets->Mesh || !Def)
 	{
 		UE_LOG(LogTemp, Error, TEXT("EnsureChunkInstanceSet: tip %d nema mesh/definiciju - bez vizuala"), (int32)Type);
-		Chunk.InstanceSets.Add(Type);   // marker da ne pokusavamo ponovno
+		Sets.Add(Type);   // marker da ne pokusavamo ponovno
 		return nullptr;
 	}
 
 	// Lazy kreiranje: ISM komponenta nastaje kad chunk prvi put dobije blok
 	// ovog tipa. MakeUniqueObjectName jer ime unistene komponente ostaje
 	// zauzeto do GC-a (unload pa brzi reload istog chunka).
-	const FString BaseName = FString::Printf(TEXT("ISM_%s_%d_%d"),
-		*StaticEnum<EBlockType>()->GetNameStringByValue((int64)Type), Chunk.Coord.X, Chunk.Coord.Y);
+	const FString BaseName = FString::Printf(TEXT("ISM_%s_%d_%d%s"),
+		*StaticEnum<EBlockType>()->GetNameStringByValue((int64)Type), Chunk.Coord.X, Chunk.Coord.Y,
+		DeepSection != INDEX_NONE ? *FString::Printf(TEXT("_S%d"), DeepSection) : TEXT(""));
 	UInstancedStaticMeshComponent* ISM = NewObject<UInstancedStaticMeshComponent>(
 		this, MakeUniqueObjectName(this, UInstancedStaticMeshComponent::StaticClass(), FName(*BaseName)));
 	ISM->SetStaticMesh(Assets->Mesh);
@@ -2261,7 +2565,7 @@ FChunkInstanceSet* AVoxelWorld::EnsureChunkInstanceSet(FVoxelChunk& Chunk, EBloc
 	ISM->SetupAttachment(GetRootComponent());
 	ISM->RegisterComponent();
 
-	FChunkInstanceSet& NewSet = Chunk.InstanceSets.Add(Type);
+	FChunkInstanceSet& NewSet = Sets.Add(Type);
 	NewSet.Component = ISM;
 	NewSet.BiomeTint = Def->BiomeTint;
 	ComponentToChunk.Add(ISM, TPair<FIntPoint, EBlockType>(Chunk.Coord, Type));
@@ -2276,7 +2580,19 @@ void AVoxelWorld::AddBlockInstance(FIntVector Pos, EBlockType Type)
 		return;
 	}
 
-	FChunkInstanceSet* Set = EnsureChunkInstanceSet(*Chunk, Type);
+	// Blok podzemlja dobiva instancu samo ako je njegov odsjecak izgraden;
+	// inace ce ga pokupiti BuildDeepSection kad se igrac priblizi
+	int32 DeepSection = INDEX_NONE;
+	if (IsValidZ(Pos.Z) && IsDeepVisualCell(*Chunk, Pos))
+	{
+		DeepSection = SectionIndex(Pos.Z);
+		if (!(Chunk->DeepBuiltMask & (1u << DeepSection)))
+		{
+			return;
+		}
+	}
+
+	FChunkInstanceSet* Set = EnsureChunkInstanceSet(*Chunk, Type, DeepSection);
 	if (!Set || Set->GridToInstance.Contains(Pos))
 	{
 		return;
@@ -2304,14 +2620,14 @@ void AVoxelWorld::AddBlockInstance(FIntVector Pos, EBlockType Type)
 	Set->InstanceToGrid.Add(Pos);
 }
 
-void AVoxelWorld::AddChunkInstancesBatch(FVoxelChunk& Chunk, EBlockType Type, const TArray<FIntVector>& Positions)
+void AVoxelWorld::AddChunkInstancesBatch(FVoxelChunk& Chunk, EBlockType Type, const TArray<FIntVector>& Positions, int32 DeepSection)
 {
 	if (Positions.Num() == 0)
 	{
 		return;
 	}
 
-	FChunkInstanceSet* Set = EnsureChunkInstanceSet(Chunk, Type);
+	FChunkInstanceSet* Set = EnsureChunkInstanceSet(Chunk, Type, DeepSection);
 	if (!Set)
 	{
 		return;
@@ -2367,30 +2683,40 @@ void AVoxelWorld::RemoveBlockInstance(FIntVector Pos)
 		return;
 	}
 
-	for (TPair<EBlockType, FChunkInstanceSet>& Pair : Chunk->InstanceSets)
+	const auto RemoveFrom = [&Pos](TMap<EBlockType, FChunkInstanceSet>& Sets)
 	{
-		FChunkInstanceSet& Set = Pair.Value;
-		const int32* Found = Set.GridToInstance.Find(Pos);
-		if (!Found || !Set.Component)
+		for (TPair<EBlockType, FChunkInstanceSet>& Pair : Sets)
 		{
-			continue;
+			FChunkInstanceSet& Set = Pair.Value;
+			const int32* Found = Set.GridToInstance.Find(Pos);
+			if (!Found || !Set.Component)
+			{
+				continue;
+			}
+
+			const int32 Removed = *Found;
+			const int32 Last = Set.InstanceToGrid.Num() - 1;
+
+			// Komponenta ima SetRemoveSwap(): zadnja instanca preuzima indeks Removed
+			Set.Component->RemoveInstance(Removed);
+
+			if (Removed != Last)
+			{
+				const FIntVector MovedPos = Set.InstanceToGrid[Last];
+				Set.InstanceToGrid[Removed] = MovedPos;
+				Set.GridToInstance[MovedPos] = Removed;
+			}
+			Set.InstanceToGrid.RemoveAt(Last);
+			Set.GridToInstance.Remove(Pos);
+			return true;
 		}
+		return false;
+	};
 
-		const int32 Removed = *Found;
-		const int32 Last = Set.InstanceToGrid.Num() - 1;
-
-		// Komponenta ima SetRemoveSwap(): zadnja instanca preuzima indeks Removed
-		Set.Component->RemoveInstance(Removed);
-
-		if (Removed != Last)
-		{
-			const FIntVector MovedPos = Set.InstanceToGrid[Last];
-			Set.InstanceToGrid[Removed] = MovedPos;
-			Set.GridToInstance[MovedPos] = Removed;
-		}
-		Set.InstanceToGrid.RemoveAt(Last);
-		Set.GridToInstance.Remove(Pos);
-		return;
+	// Povrsinski setovi, pa odsjecak podzemlja na visini bloka
+	if (!RemoveFrom(Chunk->InstanceSets) && IsValidZ(Pos.Z) && Chunk->DeepSets.IsValidIndex(SectionIndex(Pos.Z)))
+	{
+		RemoveFrom(Chunk->DeepSets[SectionIndex(Pos.Z)]);
 	}
 }
 
@@ -2429,7 +2755,21 @@ bool AVoxelWorld::ResolveHitToGrid(const FHitResult& Hit, FIntVector& OutPos, EB
 		return false;
 	}
 
+	// Pogodena komponenta je ili povrsinski set tipa ili set nekog odsjecka podzemlja
 	const FChunkInstanceSet* Set = Chunk->InstanceSets.Find(Key->Value);
+	if (!Set || Set->Component.Get() != Hit.GetComponent())
+	{
+		Set = nullptr;
+		for (const TMap<EBlockType, FChunkInstanceSet>& Sets : Chunk->DeepSets)
+		{
+			const FChunkInstanceSet* DeepSet = Sets.Find(Key->Value);
+			if (DeepSet && DeepSet->Component.Get() == Hit.GetComponent())
+			{
+				Set = DeepSet;
+				break;
+			}
+		}
+	}
 	if (!Set || !Set->InstanceToGrid.IsValidIndex(Hit.Item))
 	{
 		return false;
@@ -2453,14 +2793,22 @@ void AVoxelWorld::DestroyBlockAt(FIntVector Pos, bool bDropItems)
 	const FBlockDefinition* Def = Registry ? Registry->GetBlockDefinition(Type) : nullptr;
 	if (bDropItems && Def && Def->DropItemType != EItemType::None && FMath::FRand() < Def->DropChance)
 	{
+		// Rijedak drop zamjenjuje obicni (Gravel -> Flint); inace DropCountMin..Max komada
+		const bool bRare = Def->RareDropItemType != EItemType::None && FMath::FRand() < Def->RareDropChance;
+		const EItemType DropType = bRare ? Def->RareDropItemType : Def->DropItemType;
+		const int32 DropCount = bRare ? 1 : FMath::RandRange(Def->DropCountMin, FMath::Max(Def->DropCountMin, Def->DropCountMax));
+
 		// GridToWorld je srediste bloka (kocka centrirana na pivotu). Kao u
 		// Minecraftu (Block.popResource) drop dobije pomak do ±0.25 bloka po osi.
 		const float Jitter = BlockSize * 0.25f;
-		const FVector DropLocation = GridToWorld(Pos.X, Pos.Y, Pos.Z)
-			+ FVector(FMath::FRandRange(-Jitter, Jitter),
-			          FMath::FRandRange(-Jitter, Jitter),
-			          FMath::FRandRange(-Jitter, Jitter));
-		AItemDrop::SpawnItemDrop(this, Def->DropItemType, DropLocation);
+		for (int32 i = 0; i < DropCount; i++)
+		{
+			const FVector DropLocation = GridToWorld(Pos.X, Pos.Y, Pos.Z)
+				+ FVector(FMath::FRandRange(-Jitter, Jitter),
+				          FMath::FRandRange(-Jitter, Jitter),
+				          FMath::FRandRange(-Jitter, Jitter));
+			AItemDrop::SpawnItemDrop(this, DropType, DropLocation);
+		}
 	}
 
 	NotifyBlockDestroyed(Pos, Type);
@@ -2530,6 +2878,16 @@ ABlock* AVoxelWorld::GetBlock(int32 X, int32 Y, int32 Z)
 int32 AVoxelWorld::GetTerrainHeightAt(int32 X, int32 Y) const
 {
 	return FChunkGenerator::GetTerrainHeight(CachedGenParams, X, Y);
+}
+
+int32 AVoxelWorld::GetGroundHeightAt(int32 X, int32 Y) const
+{
+	return FChunkGenerator::GetGroundHeight(CachedGenParams, X, Y);
+}
+
+bool AVoxelWorld::IsCaveCellAt(FIntVector GridPosition) const
+{
+	return FChunkGenerator::IsCaveCell(CachedGenParams, GridPosition.X, GridPosition.Y, GridPosition.Z);
 }
 
 int32 AVoxelWorld::GetBiomeIndexAt(int32 X, int32 Y) const
@@ -2923,6 +3281,12 @@ bool AVoxelWorld::IsLandColumn(int32 X, int32 Y) const
 	return GetTerrainHeightAt(X, Y) >= SeaLevel;
 }
 
+bool AVoxelWorld::IsOpenGroundColumn(int32 X, int32 Y) const
+{
+	const int32 Height = GetTerrainHeightAt(X, Y);
+	return Height >= SeaLevel && !FChunkGenerator::IsCaveCell(CachedGenParams, X, Y, Height);
+}
+
 // === [PERF] DIJAGNOSTIKA ===
 
 void AVoxelWorld::BuildBlockAssetCache()
@@ -3029,17 +3393,17 @@ void AVoxelWorld::SpawnEnemies()
 	{
 		RandX = SpawnCenter.X + FMath::RandRange(-20, 20);
 		RandY = SpawnCenter.Y + FMath::RandRange(-20, 20);
-		if (IsLandColumn(RandX, RandY))
+		if (IsOpenGroundColumn(RandX, RandY))
 		{
 			break;
 		}
 	}
-	if (!IsLandColumn(RandX, RandY))
+	if (!IsOpenGroundColumn(RandX, RandY))
 	{
 		UE_LOG(LogTemp, Warning, TEXT("VoxelWorld: nema kopna za zombija oko spawna - preskacem"));
 		return;
 	}
-	int32 SpawnZ = GetTerrainHeightAt(RandX, RandY) + 1;
+	int32 SpawnZ = GetGroundHeightAt(RandX, RandY) + 1;
 
 	FVector WorldPos = GridToWorld(RandX, RandY, SpawnZ);
 	// Podignuti malo iznad površine da izbjegnemo collision
@@ -3086,16 +3450,16 @@ void AVoxelWorld::SpawnMobs()
 			{
 				RandX = SpawnCenter.X + FMath::RandRange(-20, 20);
 				RandY = SpawnCenter.Y + FMath::RandRange(-20, 20);
-				if (IsLandColumn(RandX, RandY))
+				if (IsOpenGroundColumn(RandX, RandY))
 				{
 					break;
 				}
 			}
-			if (!IsLandColumn(RandX, RandY))
+			if (!IsOpenGroundColumn(RandX, RandY))
 			{
 				continue;
 			}
-			int32 SpawnZ = GetTerrainHeightAt(RandX, RandY) + 1;
+			int32 SpawnZ = GetGroundHeightAt(RandX, RandY) + 1;
 
 			FVector WorldPos = GridToWorld(RandX, RandY, SpawnZ);
 			// Podignuti iznad površine da izbjegnemo collision

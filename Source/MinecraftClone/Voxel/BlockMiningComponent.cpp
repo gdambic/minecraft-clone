@@ -107,7 +107,7 @@ float UBlockMiningComponent::GetBreakTime(FIntVector GridPos, EItemType HeldItem
 	// Minecraft model: pravi alat kopa brze za svoj mining speed, a blok koji
 	// alat zahtijeva bez njega traje dulje i ne ostavlja drop (canHarvest).
 	const bool bCorrectTool = UToolDataLibrary::IsCorrectTool(HeldItem, Def->ToolClass);
-	const bool bCanHarvest = bCorrectTool || !Def->bRequiresTool;
+	const bool bCanHarvest = UToolDataLibrary::CanHarvest(HeldItem, Def->ToolClass, Def->bRequiresTool, Def->RequiredToolTier);
 	const float MiningSpeed = bCorrectTool ? UToolDataLibrary::GetToolData(HeldItem).MiningSpeed : 1.0f;
 	if (bOutCanHarvest)
 	{
