@@ -21,6 +21,7 @@ class UFirstPersonArmComponent;
 class UBlockOutlineComponent;
 class UBlockMiningComponent;
 class UMaceComponent;
+class UVoxelCharacterMovement;
 struct FInputActionValue;
 
 /** Delegate koji se broadcasta kada se promijeni odabrani item */
@@ -129,7 +130,8 @@ protected:
 	UInputAction* SprintAction;
 
 public:
-	AFirstPersonCharacter();
+	/** Zamjenjuje movement komponentu s UVoxelCharacterMovement (Minecraft let) */
+	AFirstPersonCharacter(const FObjectInitializer& ObjectInitializer);
 
 	virtual void Tick(float DeltaTime) override;
 
@@ -198,6 +200,18 @@ public:
 	/** Testovi (voxel.swimtest): pritisni ili pusti skok kao da je igrac drzi tipku */
 	void SetJumpInputForTest(bool bPressed) { bPressed ? DoJumpStart() : DoJumpEnd(); }
 
+	/** Testovi (voxel.flytest): Shift, Ctrl i WASD kao da ih igrac drzi */
+	void SetDescendInputForTest(bool bPressed) { bPressed ? StartDescend() : StopDescend(); }
+	void SetSprintInputForTest(bool bPressed) { bPressed ? StartSprint() : StopSprint(); }
+	void SetMoveInputForTest(FVector2D RightForward) { TestMoveInput = RightForward; }
+
+	/** Leti li igrac (Minecraft let, Docs/PLAN_Flying.md) */
+	UFUNCTION(BlueprintCallable, Category = "Movement")
+	bool IsCreativeFlying() const { return bIsFlying; }
+
+	/** Ukljuci/iskljuci let; ukljucivanje trazi voxel.fly.allow 1 i da igrac ne pliva */
+	void SetCreativeFlying(bool bFly);
+
 protected:
 	virtual void BeginPlay() override;
 
@@ -233,8 +247,38 @@ protected:
 	UPROPERTY(BlueprintReadOnly, Category = "Movement")
 	bool bIsSprinting = false;
 
-	/** Drzi li se tipka skoka - u vodi znaci plivanje prema gore (Tick) */
+	/** Drzi li se tipka skoka - u vodi znaci plivanje prema gore (Tick), u letu dizanje */
 	bool bJumpHeld = false;
+
+	// === LETENJE (Docs/PLAN_Flying.md) ===
+
+	/** Leti li igrac; ukljucuje se dvostrukim skokom, gasi dvostrukim skokom, tlom ili vodom */
+	bool bIsFlying = false;
+
+	/** Drzi li se Shift - u letu spustanje (kasnije sneak na tlu) */
+	bool bDescendHeld = false;
+
+	/** Vrijeme prvog pritiska skoka koji jos ceka drugi (vanilla prozor 7 tickova) */
+	double LastJumpPressTime = -1.0;
+
+	/** Vanilla jumpTriggerTime: 7 tickova = 0.35 s izmedu dva pritiska skoka */
+	static constexpr double FlyToggleWindow = 0.35;
+
+	/** FOV kamere bez leta (BeginPlay) i trenutni mnozitelj (vanilla x1.1 u letu) */
+	float BaseFieldOfView = 0.0f;
+	float FieldOfViewModifier = 1.0f;
+
+	/** Kretanje koje zadaje voxel.flytest (Right, Forward); primjenjuje se u Ticku */
+	FVector2D TestMoveInput = FVector2D::ZeroVector;
+
+	void StartDescend();
+	void StopDescend();
+
+	/** Posalji skok/Shift/sprint komponenti kretanja (racuna brzinu leta) */
+	void SyncFlyInput();
+
+	/** Glatko FOV prema x1.1 u letu (vanilla: pola razlike po ticku) */
+	void UpdateFlyFieldOfView(float DeltaTime);
 
 	/** MaxWalkSpeed prije sprinta - vraca se na njega pri prekidu */
 	float BaseWalkSpeed = 0.0f;

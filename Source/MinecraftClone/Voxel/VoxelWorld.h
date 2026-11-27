@@ -68,7 +68,7 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "World|Streaming", meta = (ClampMin = "2", ClampMax = "16"))
 	int32 VisualRadius;
 
-	/** Vremenski budzet (ms) izgradnje vizuala chunkova po streaming ticku - sprjecava stucanje pri hodanju. */
+	/** Vremenski budzet (ms) izgradnje vizuala chunkova po frameu - sprjecava stucanje, a prati i sprint-let (~18 chunkova/s). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "World|Streaming", meta = (ClampMin = "1.0"))
 	float ChunkApplyBudgetMs;
 
@@ -356,6 +356,14 @@ public:
 	float RunMobWaterTest();
 
 	/**
+	 * Mjerenje leta ([FLY] u logu, Docs/PLAN_Flying.md): dvostruki skok,
+	 * dizanje, lebdenje, let i sprint-let, klizanje nakon pustanja, 20 s
+	 * sprint-leta uz provjeru streaminga, slijetanje Shiftom i prekid leta u
+	 * moru. Vraca trajanje testa u sekundama.
+	 */
+	float RunFlyTest();
+
+	/**
 	 * Je li stupac ispod WorldLocation more (FChunkGenerator::IsSeaWater, isto
 	 * pravilo kao ploha). OutSurfaceZ = Z plohe mora prije valova.
 	 */
@@ -472,6 +480,12 @@ private:
 
 	/** Periodicka petlja (plan 3.3): unload dalekih, despawn mobova, load podataka, apply vizuala s budzetom. */
 	void UpdateStreaming();
+
+	/** Izgradi vizuale chunkova u VisualRadius kojima su podaci gotovi, unutar ChunkApplyBudgetMs (svaki frame). */
+	void ApplyPendingChunkVisuals();
+
+	/** Broj izgradenih vizuala od zadnjeg streaming loga ("+N vizuala") */
+	int32 AppliedVisualsSinceLog = 0;
 
 	/** SINKRONO ucitaj podatke chunka: vrati sacuvane izmijenjene (pobjeduju!) ili generiraj iz seeda. Za bootstrap i retained. */
 	FVoxelChunk& LoadChunkData(const FIntPoint& Coord);
@@ -599,6 +613,9 @@ private:
 
 	/** Najblizi stupac kopna (povrsina na ili iznad SeaLevel) oko Center (pretraga ±1024, korak 4). */
 	bool FindNearestLandColumn(const FIntPoint& Center, FIntPoint& OutColumn) const;
+
+	/** Najblizi stupac mora s dnom barem MinDepth ispod SeaLevel oko Center (pretraga ±512, korak 4). */
+	bool FindNearestSeaColumn(const FIntPoint& Center, int32 MinDepth, FIntPoint& OutColumn) const;
 
 	/** Je li stupac kopno - povrsina na ili iznad razine mora (spawn igraca i mobova). */
 	bool IsLandColumn(int32 X, int32 Y) const;

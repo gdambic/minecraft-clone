@@ -98,6 +98,13 @@ kostiju od rest poze (GetAngle 0..360, pa 360-x = x na drugu stranu): ruka ~120
 dok ima metu, noga do walk*80, root do 90 pri smrti; `GOTOVO: ... uklonjen -> OK`
 = prolaz. Proces se nakon testa sam ugasi.
 
+Let mjeri `voxel.flytest`: dvostruki skok, dizanje, lebdenje, let i sprint-let,
+klizanje nakon puštanja, 20 s sprint-leta uz provjeru streaminga, slijetanje
+Shiftom i prekid leta u moru; `[FLY] stream ... nedovrseno u radijusu` prati
+kasni li izgradnja chunkova, `[FLY] test GOTOVO: ... -> OK` = prolaz (očekivano
+dizanje 750, let 1089, sprint 2178 UU/s). `voxel.fly.allow 0` zabranjuje let.
+Proces se nakon testa sam ugasi.
+
 Knockback se mjeri komandom `voxel.kbtest [jacina...]` (default `0.4 0.9`
 blokova/tick): odbaci stvorenje najbliže igraču i u log ispiše `[KB]` linije s
 jačinom, brzinom i dometom pri doskoku. U headless runu (`-ExecCmds="voxel.kbtest"`)
@@ -169,7 +176,7 @@ Configured in `MinecraftClone.Build.cs`:
 // VoxelWorld (beskonačan svijet: chunkovi 16×16×256 streamaju se oko igrača,
 // generacija na worker threadu; teren = ISM instance PO CHUNKU; ABlock actor
 // postoji samo za fokusirani blok; izmjene prežive unload u RAM-u, ne restart.
-// Streaming properties: VisualRadius (6), ChunkApplyBudgetMs, BootstrapRadius.
+// Streaming properties: VisualRadius (6), ChunkApplyBudgetMs (3 ms po frameu), BootstrapRadius.
 // Vidi Docs/PLAN_Chunks.md.)
 EBlockType GetBlockTypeAt(FIntVector GridPosition);   // tip na poziciji (izvor istine)
 ABlock* GetBlock(int32 X, int32 Y, int32 Z);          // SAMO promovirani (fokusirani) blok
@@ -210,6 +217,12 @@ USoundBase* UBlockRegistry::GetRandomBlockSound(EBlockType Type, EBlockSoundEven
 void AVoxelWorld::SetBlockCrack(uint32 BreakerId, FIntVector Pos, int32 Stage);  // -1 brise
 void AVoxelWorld::DestroyBlockAt(FIntVector Pos, bool bDropItems = true);
 
+// Letenje (Docs/PLAN_Flying.md): dvostruki Space pali/gasi let, Space gore,
+// Shift dolje, Ctrl sprint (i na tlu). UVoxelCharacterMovement u letu racuna
+// vanilla brzinu i gasi let pri dodiru tla; ulazak u more prekida let.
+void AFirstPersonCharacter::SetCreativeFlying(bool bFly);   // voxel.fly.allow
+bool AFirstPersonCharacter::IsCreativeFlying() const;
+
 // Knockback (vanilla formula, jacina u blokovima/tick; Docs/PLAN_Knockback.md)
 static bool UCombatLibrary::ApplyKnockback(ACharacter* Victim, FVector HorizontalDir,
                                            float StrengthBlocksPerTick, float KnockbackResistance);
@@ -248,6 +261,7 @@ Detailed docs in Croatian available in `Docs/`:
 - `PLAN_BlockDamage.md` - Pukotine pri kopanju (destroy_stage 0-9 iz Minecraft jara, kopanje odvojeno od prikaza, implementirano)
 - `PLAN_ItemNameHighlight.md` - Ime odabranog itema iznad hotbara (2 s + fade, `UHotbarWidget`, `[ITEMNAME]` u logu, implementirano)
 - `PLAN_Mace.md` - Mace: doslovni Terraria thrown flail (vrtnja, bacanje, drop) s drškom u ruci, kugla i lanac u svijetu (implementirano)
+- `PLAN_Flying.md` - Letenje kao u Minecraft creativeu (dvostruki skok, vanilla brzine leta, slijetanje, Ctrl sprint), bez creative moda (implementirano)
 - `PLAN_FirstPersonHand.md` - First-person hand/viewmodel system
 - `PLAN_HoldingDisplay.md` - Prikaz odabranog itema u ruci (sprite, implementirano)
 - `PLAN_ItemExtrusion.md` - 3D ekstrudirani item mesh iz 16x16 teksture (Minecraft stil, implementirano)

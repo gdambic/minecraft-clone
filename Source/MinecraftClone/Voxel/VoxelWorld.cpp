@@ -124,16 +124,42 @@ static FAutoConsoleCommandWithWorldAndArgs GVoxelMobWaterTestCmd(
 			}
 		}));
 
+/**
+ * voxel.flytest - izmjeri let ([FLY] u logu, Docs/PLAN_Flying.md). Headless
+ * run se nakon testa sam ugasi.
+ */
+static FAutoConsoleCommandWithWorldAndArgs GVoxelFlyTestCmd(
+	TEXT("voxel.flytest"),
+	TEXT("Izmjeri let: dvostruki skok, brzine leta, streaming, slijetanje, more."),
+	FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
+		{
+			if (!World)
+			{
+				return;
+			}
+			for (TActorIterator<AVoxelWorld> It(World); It; ++It)
+			{
+				const float Duration = It->RunFlyTest();
+				if (!GIsEditor && Duration > 0.f)
+				{
+					FTimerHandle QuitHandle;
+					World->GetTimerManager().SetTimer(QuitHandle, FTimerDelegate::CreateLambda(
+						[]() { FPlatformMisc::RequestExit(false); }), Duration + 2.0f, false);
+				}
+				break;
+			}
+		}));
+
 AVoxelWorld::AVoxelWorld()
 {
-	// Tick samo za pogled ispod vode (UpdateUnderwater); nakon kamere da prati njen frame
+	// Tick: vizuali chunkova po budzetu i pogled ispod vode (UpdateUnderwater); nakon kamere da prati njen frame
 	PrimaryActorTick.bCanEverTick = true;
 	PrimaryActorTick.TickGroup = TG_PostUpdateWork;
 
 	// Default vrijednosti - mogu se override-ati u BP_VoxelWorld
 	BlockSize = 100.0f;
 	VisualRadius = 6;
-	ChunkApplyBudgetMs = 8.0f;
+	ChunkApplyBudgetMs = 3.0f;
 	StreamingIntervalSeconds = 0.25f;
 	BootstrapRadius = 2;
 	WaterMaterial = TSoftObjectPtr<UMaterialInterface>(FSoftObjectPath(TEXT("/Game/Water/MI_Water.MI_Water")));
@@ -191,6 +217,7 @@ void AVoxelWorld::BeginPlay()
 void AVoxelWorld::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
+	ApplyPendingChunkVisuals();
 	UpdateWaterVolume();
 	UpdateUnderwater();
 	LogCreaturesInSea(DeltaSeconds);
@@ -999,10 +1026,33 @@ void AVoxelWorld::UpdateStreaming()
 		}
 	}
 
-	// 5. Visual ring: izgradnja instanci je skupa (~4 ms/chunk) pa ide s
-	// vremenskim budzetom, najblizi chunkovi prvi. Uvjet su podaci sva 4
-	// bocna susjeda - inace bi exposure na rubu vidio Air i ostavio trajno
-	// visak instanci na granici.
+	// 5. Visual ring gradi Tick svaki frame (ApplyPendingChunkVisuals): uz
+	// samo ovaj timer stizalo je ~8 chunkova/s, a sprint-let treba ~18/s
+	const int32 Applied = AppliedVisualsSinceLog;
+	AppliedVisualsSinceLog = 0;
+
+	if (Unloaded > 0 || Applied > 0)
+	{
+		UE_LOG(LogTemp, Log, TEXT("VoxelWorld streaming: igrac u chunku (%d,%d), +%d vizuala, -%d unload, %d ucitano (%d zadrzano)"),
+			PlayerChunk.X, PlayerChunk.Y, Applied, Unloaded, Chunks.Num(), RetainedModifiedChunks.Num());
+	}
+
+	LastPlayerChunk = PlayerChunk;
+	bHasLastPlayerChunk = true;
+}
+
+void AVoxelWorld::ApplyPendingChunkVisuals()
+{
+	APawn* Player = UGameplayStatics::GetPlayerPawn(GetWorld(), 0);
+	if (!Player || !bHasLastPlayerChunk)
+	{
+		return;
+	}
+	const FIntPoint PlayerChunk = GridToChunk(WorldToGrid(Player->GetActorLocation()));
+
+	// Izgradnja instanci je skupa (~4 ms/chunk) pa ide s vremenskim budzetom
+	// po frameu, najblizi chunkovi prvi. Uvjet su podaci sva 4 bocna susjeda -
+	// inace bi exposure na rubu vidio Air i ostavio trajno visak instanci na granici.
 	TArray<FVoxelChunk*> PendingVisuals;
 	for (int32 DY = -VisualRadius; DY <= VisualRadius; DY++)
 	{
@@ -1022,7 +1072,6 @@ void AVoxelWorld::UpdateStreaming()
 		return ChunkDistance(A.Coord, PlayerChunk) < ChunkDistance(B.Coord, PlayerChunk);
 	});
 
-	int32 Applied = 0;
 	const double BudgetEnd = FPlatformTime::Seconds() + ChunkApplyBudgetMs / 1000.0;
 	for (FVoxelChunk* Chunk : PendingVisuals)
 	{
@@ -1034,21 +1083,12 @@ void AVoxelWorld::UpdateStreaming()
 			MaxChunkApplyMs = ApplyMs;
 			MaxChunkApplyCoord = Chunk->Coord;
 		}
-		Applied++;
+		AppliedVisualsSinceLog++;
 		if (FPlatformTime::Seconds() >= BudgetEnd)
 		{
 			break;
 		}
 	}
-
-	if (Unloaded > 0 || Applied > 0)
-	{
-		UE_LOG(LogTemp, Log, TEXT("VoxelWorld streaming: igrac u chunku (%d,%d), +%d vizuala, -%d unload, %d ucitano (%d zadrzano)"),
-			PlayerChunk.X, PlayerChunk.Y, Applied, Unloaded, Chunks.Num(), RetainedModifiedChunks.Num());
-	}
-
-	LastPlayerChunk = PlayerChunk;
-	bHasLastPlayerChunk = true;
 }
 
 void AVoxelWorld::DespawnFarCreatures(const FIntPoint& PlayerChunk)
@@ -1354,6 +1394,26 @@ void AVoxelWorld::BuildChunkWater(FVoxelChunk& Chunk)
 	WaterBuildCount++;
 }
 
+bool AVoxelWorld::FindNearestSeaColumn(const FIntPoint& Center, int32 MinDepth, FIntPoint& OutColumn) const
+{
+	constexpr int32 SearchHalf = 512;
+	constexpr int32 Step = 4;
+	int64 BestDistSq = TNumericLimits<int64>::Max();
+	for (int32 DY = -SearchHalf; DY <= SearchHalf; DY += Step)
+	{
+		for (int32 DX = -SearchHalf; DX <= SearchHalf; DX += Step)
+		{
+			const int64 DistSq = (int64)DX * DX + (int64)DY * DY;
+			if (DistSq < BestDistSq && GetTerrainHeightAt(Center.X + DX, Center.Y + DY) <= SeaLevel - MinDepth)
+			{
+				BestDistSq = DistSq;
+				OutColumn = FIntPoint(Center.X + DX, Center.Y + DY);
+			}
+		}
+	}
+	return BestDistSq != TNumericLimits<int64>::Max();
+}
+
 float AVoxelWorld::RunSwimTest()
 {
 	ACharacter* Player = Cast<ACharacter>(UGameplayStatics::GetPlayerPawn(this, 0));
@@ -1367,25 +1427,10 @@ float AVoxelWorld::RunSwimTest()
 	// Najblize more dublje od 8 blokova (dovoljno za tonjenje bez dna)
 	const FIntVector PlayerGrid = WorldToGrid(Player->GetActorLocation());
 	constexpr int32 MinDepth = 8;
-	constexpr int32 SearchHalf = 512;
-	constexpr int32 Step = 4;
 	FIntPoint Target;
-	int64 BestDistSq = TNumericLimits<int64>::Max();
-	for (int32 DY = -SearchHalf; DY <= SearchHalf; DY += Step)
+	if (!FindNearestSeaColumn(FIntPoint(PlayerGrid.X, PlayerGrid.Y), MinDepth, Target))
 	{
-		for (int32 DX = -SearchHalf; DX <= SearchHalf; DX += Step)
-		{
-			const int64 DistSq = (int64)DX * DX + (int64)DY * DY;
-			if (DistSq < BestDistSq && GetTerrainHeightAt(PlayerGrid.X + DX, PlayerGrid.Y + DY) <= SeaLevel - MinDepth)
-			{
-				BestDistSq = DistSq;
-				Target = FIntPoint(PlayerGrid.X + DX, PlayerGrid.Y + DY);
-			}
-		}
-	}
-	if (BestDistSq == TNumericLimits<int64>::Max())
-	{
-		UE_LOG(LogTemp, Warning, TEXT("[WATER] swim: nema mora dubljeg od %d blokova u krugu %d"), MinDepth, SearchHalf);
+		UE_LOG(LogTemp, Warning, TEXT("[WATER] swim: nema mora dubljeg od %d blokova u krugu 512"), MinDepth);
 		return 0.f;
 	}
 
@@ -1467,6 +1512,207 @@ float AVoxelWorld::RunSwimTest()
 				P->GetActorLocation().Z - SurfaceZ, M->Velocity.Z, M->Velocity.Size2D());
 		});
 	}
+	return EndAt;
+}
+
+float AVoxelWorld::RunFlyTest()
+{
+	AFirstPersonCharacter* Player = Cast<AFirstPersonCharacter>(UGameplayStatics::GetPlayerPawn(this, 0));
+	if (!Player)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[FLY] test: nema igraca"));
+		return 0.f;
+	}
+
+	// Izmjerene vrijednosti za presudu na kraju testa
+	struct FFlyTestResult
+	{
+		bool bToggledOn = false;
+		float UpSpeed = 0.f;
+		float HoverVZ = 0.f;
+		float FlySpeed = 0.f;
+		float SprintSpeed = 0.f;
+		float GlideRatio = 0.f;
+		int32 StreamSamples = 0;
+		int32 StreamMissing = 0;
+		int32 MaxUnbuilt = 0;
+		float LandedAt = -1.f;
+		bool bWaterSwimming = false;
+	};
+	TSharedRef<FFlyTestResult> R = MakeShared<FFlyTestResult>();
+	TWeakObjectPtr<AFirstPersonCharacter> WeakPlayer = Player;
+
+	auto Schedule = [this](float Delay, TFunction<void()> Fn)
+	{
+		FTimerHandle Handle;
+		GetWorldTimerManager().SetTimer(Handle, FTimerDelegate::CreateLambda(MoveTemp(Fn)), Delay, false);
+	};
+	auto Input = [WeakPlayer](TFunction<void(AFirstPersonCharacter&)> Fn) -> TFunction<void()>
+	{
+		return [WeakPlayer, Fn]() { if (AFirstPersonCharacter* P = WeakPlayer.Get()) { Fn(*P); } };
+	};
+	auto DoubleTap = [&Schedule, &Input](float At)
+	{
+		Schedule(At, Input([](AFirstPersonCharacter& P) { P.SetJumpInputForTest(true); }));
+		Schedule(At + 0.05f, Input([](AFirstPersonCharacter& P) { P.SetJumpInputForTest(false); }));
+		Schedule(At + 0.15f, Input([](AFirstPersonCharacter& P) { P.SetJumpInputForTest(true); }));
+	};
+
+	// Faze (s): 2 dvostruki skok i dizanje 4 s, 6.15 lebdi, 7 naprijed, 10
+	// sprint, 13 pusti (klizanje), 15-35 sprint-let preko chunkova, 35.5 iznad
+	// kopna, 37.5 Shift do tla, 57 ponovno let iznad mora, 60.3 Shift u more
+	constexpr float EndAt = 65.f;
+	DoubleTap(2.0f);
+	Schedule(2.25f, [WeakPlayer, R]()
+	{
+		if (AFirstPersonCharacter* P = WeakPlayer.Get())
+		{
+			R->bToggledOn = P->IsCreativeFlying();
+		}
+	});
+	Schedule(4.1f, [WeakPlayer, R]() { if (ACharacter* P = WeakPlayer.Get()) { R->UpSpeed = P->GetVelocity().Z; } });
+	Schedule(6.15f, Input([](AFirstPersonCharacter& P) { P.SetJumpInputForTest(false); }));
+	Schedule(6.65f, [WeakPlayer, R]() { if (ACharacter* P = WeakPlayer.Get()) { R->HoverVZ = P->GetVelocity().Z; } });
+	Schedule(7.0f, Input([](AFirstPersonCharacter& P) { P.SetMoveInputForTest(FVector2D(0.f, 1.f)); }));
+	Schedule(10.0f, [WeakPlayer, R]() { if (ACharacter* P = WeakPlayer.Get()) { R->FlySpeed = P->GetVelocity().Size2D(); } });
+	Schedule(10.01f, Input([](AFirstPersonCharacter& P) { P.SetSprintInputForTest(true); }));
+	Schedule(13.0f, [WeakPlayer, R]() { if (ACharacter* P = WeakPlayer.Get()) { R->SprintSpeed = P->GetVelocity().Size2D(); } });
+	Schedule(13.01f, Input([](AFirstPersonCharacter& P) { P.SetSprintInputForTest(false); P.SetMoveInputForTest(FVector2D::ZeroVector); }));
+	// Vanilla 0.91^(20*0.53 s) = 0.37 brzine
+	Schedule(13.54f, [WeakPlayer, R]()
+	{
+		if (ACharacter* P = WeakPlayer.Get())
+		{
+			R->GlideRatio = R->SprintSpeed > 0.f ? P->GetVelocity().Size2D() / R->SprintSpeed : 0.f;
+		}
+	});
+
+	// Streaming: chunk ispod igraca mora imati vizuale, a nedovrseni chunkovi
+	// u VisualRadius pokazuju koliko generacija kasni za letom
+	Schedule(15.0f, Input([](AFirstPersonCharacter& P) { P.SetMoveInputForTest(FVector2D(0.f, 1.f)); P.SetSprintInputForTest(true); }));
+	for (int32 S = 1; S <= 20; ++S)
+	{
+		Schedule(15.0f + S, [this, WeakPlayer, R, S]()
+		{
+			ACharacter* P = WeakPlayer.Get();
+			if (!P)
+			{
+				return;
+			}
+			const FIntPoint Center = GridToChunk(WorldToGrid(P->GetActorLocation()));
+			const FVoxelChunk* Under = FindChunk(Center);
+			const bool bUnderBuilt = Under && Under->bVisualsBuilt;
+			int32 Unbuilt = 0;
+			for (int32 DY = -VisualRadius; DY <= VisualRadius; ++DY)
+			{
+				for (int32 DX = -VisualRadius; DX <= VisualRadius; ++DX)
+				{
+					const FVoxelChunk* C = FindChunk(Center + FIntPoint(DX, DY));
+					Unbuilt += (C && C->bVisualsBuilt) ? 0 : 1;
+				}
+			}
+			R->StreamSamples++;
+			R->StreamMissing += bUnderBuilt ? 0 : 1;
+			R->MaxUnbuilt = FMath::Max(R->MaxUnbuilt, Unbuilt);
+			UE_LOG(LogTemp, Log, TEXT("[FLY] stream t=%2d s chunk (%d,%d) ispod: %s, nedovrseno u radijusu %d: %d od %d, vXY=%.0f Z=%.0f"),
+				S, Center.X, Center.Y, bUnderBuilt ? TEXT("gotov") : TEXT("NEMA"), VisualRadius, Unbuilt,
+				FMath::Square(2 * VisualRadius + 1), P->GetVelocity().Size2D(), P->GetActorLocation().Z);
+		});
+	}
+	Schedule(35.0f, Input([](AFirstPersonCharacter& P) { P.SetSprintInputForTest(false); P.SetMoveInputForTest(FVector2D::ZeroVector); }));
+
+	// Slijetanje: iznad najblizeg kopna 20 blokova, pa Shift do dodira tla
+	Schedule(35.5f, [this, WeakPlayer]()
+	{
+		ACharacter* P = WeakPlayer.Get();
+		FIntPoint Land;
+		const FIntVector Grid = P ? WorldToGrid(P->GetActorLocation()) : FIntVector::ZeroValue;
+		if (P && FindNearestLandColumn(FIntPoint(Grid.X, Grid.Y), Land))
+		{
+			P->SetActorLocation(GridToWorld(Land.X, Land.Y, GetTerrainHeightAt(Land.X, Land.Y) + 20) + FVector(50.f, 50.f, 0.f),
+				false, nullptr, ETeleportType::TeleportPhysics);
+			P->GetCharacterMovement()->Velocity = FVector::ZeroVector;
+			UE_LOG(LogTemp, Log, TEXT("[FLY] iznad kopna (%d,%d), teren Z=%d"), Land.X, Land.Y, GetTerrainHeightAt(Land.X, Land.Y));
+		}
+	});
+	Schedule(37.5f, Input([](AFirstPersonCharacter& P) { P.SetDescendInputForTest(true); }));
+	for (float T = 37.75f; T <= 56.5f; T += 0.25f)
+	{
+		Schedule(T, [WeakPlayer, R, T]()
+		{
+			AFirstPersonCharacter* P = WeakPlayer.Get();
+			if (P && R->LandedAt < 0.f && !P->IsCreativeFlying() && P->GetCharacterMovement()->IsMovingOnGround())
+			{
+				R->LandedAt = T - 37.5f;
+				UE_LOG(LogTemp, Log, TEXT("[FLY] sletio nakon %.2f s Shifta, Z=%.0f"), R->LandedAt, P->GetActorLocation().Z);
+			}
+		});
+	}
+	Schedule(56.5f, Input([](AFirstPersonCharacter& P) { P.SetDescendInputForTest(false); }));
+
+	// More: let pa Shift u vodu - UE prebaci u plivanje, let se gasi
+	DoubleTap(57.0f);
+	Schedule(57.3f, [this, WeakPlayer]()
+	{
+		AFirstPersonCharacter* P = WeakPlayer.Get();
+		if (!P)
+		{
+			return;
+		}
+		P->SetJumpInputForTest(false);
+		FIntPoint Sea;
+		const FIntVector Grid = WorldToGrid(P->GetActorLocation());
+		if (FindNearestSeaColumn(FIntPoint(Grid.X, Grid.Y), 4, Sea))
+		{
+			P->SetActorLocation(GridToWorld(Sea.X, Sea.Y, SeaLevel + 3) + FVector(50.f, 50.f, 0.f),
+				false, nullptr, ETeleportType::TeleportPhysics);
+			P->GetCharacterMovement()->Velocity = FVector::ZeroVector;
+			UE_LOG(LogTemp, Log, TEXT("[FLY] iznad mora (%d,%d), let=%s"), Sea.X, Sea.Y, P->IsCreativeFlying() ? TEXT("da") : TEXT("NE"));
+		}
+	});
+	Schedule(60.3f, Input([](AFirstPersonCharacter& P) { P.SetDescendInputForTest(true); }));
+	Schedule(64.3f, [WeakPlayer, R]()
+	{
+		if (AFirstPersonCharacter* P = WeakPlayer.Get())
+		{
+			R->bWaterSwimming = P->GetCharacterMovement()->IsSwimming() && !P->IsCreativeFlying();
+			P->SetDescendInputForTest(false);
+		}
+	});
+
+	for (float T = 2.0f; T < EndAt; T += 0.25f)
+	{
+		if (T > 15.0f && T < 35.0f)
+		{
+			continue;  // streaming faza ima vlastite linije
+		}
+		Schedule(T + 0.01f, [WeakPlayer, T]()
+		{
+			AFirstPersonCharacter* P = WeakPlayer.Get();
+			if (!P)
+			{
+				return;
+			}
+			const UCharacterMovementComponent* M = P->GetCharacterMovement();
+			UE_LOG(LogTemp, Log, TEXT("[FLY] t=%5.2f mod=%-9s let=%-2s vXY=%6.0f vZ=%6.0f Z=%6.0f"),
+				T, *StaticEnum<EMovementMode>()->GetNameStringByValue(M->MovementMode).RightChop(5),
+				P->IsCreativeFlying() ? TEXT("da") : TEXT("ne"), M->Velocity.Size2D(), M->Velocity.Z, P->GetActorLocation().Z);
+		});
+	}
+
+	Schedule(EndAt, [R]()
+	{
+		auto Near = [](float Value, float Expected) { return FMath::Abs(Value - Expected) <= Expected * 0.05f; };
+		const bool bOk = R->bToggledOn && Near(R->UpSpeed, 750.f) && FMath::Abs(R->HoverVZ) < 20.f
+			&& Near(R->FlySpeed, 1088.9f) && Near(R->SprintSpeed, 2177.8f)
+			&& R->GlideRatio > 0.32f && R->GlideRatio < 0.42f
+			&& R->StreamMissing == 0 && R->LandedAt >= 0.f && R->bWaterSwimming;
+		const FString Landed = R->LandedAt >= 0.f ? FString::Printf(TEXT("%.2f s"), R->LandedAt) : FString(TEXT("NE"));
+		UE_LOG(LogTemp, Log, TEXT("[FLY] test GOTOVO: dvostruki skok=%s, dizanje=%.0f (750), lebdenje vZ=%.0f, let=%.0f (1089), sprint=%.0f (2178), klizanje 0.53 s=%.2f (0.37), chunk ispod bez vizuala %d od %d (najvise nedovrsenih %d), slijetanje=%s, more=%s -> %s"),
+			R->bToggledOn ? TEXT("da") : TEXT("NE"), R->UpSpeed, R->HoverVZ, R->FlySpeed, R->SprintSpeed, R->GlideRatio,
+			R->StreamMissing, R->StreamSamples, R->MaxUnbuilt, *Landed,
+			R->bWaterSwimming ? TEXT("pliva, let ugasen") : TEXT("NE"), bOk ? TEXT("OK") : TEXT("FAIL"));
+	});
 	return EndAt;
 }
 

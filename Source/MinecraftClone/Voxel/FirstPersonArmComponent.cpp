@@ -337,6 +337,12 @@ void UFirstPersonArmComponent::UpdateBobbing(float DeltaTime)
 	FVector Velocity = OwnerCharacter->GetVelocity();
 	float Speed = Velocity.Size2D();  // Horizontal speed only
 
+	// U letu nema koraka - ruka se ne njise (inace bi se tresla kao pri trcanju)
+	if (OwnerCharacter->GetCharacterMovement() && OwnerCharacter->GetCharacterMovement()->IsFlying())
+	{
+		Speed = 0.0f;
+	}
+
 	const float MovementThreshold = 10.0f;
 
 	if (Speed > MovementThreshold)

@@ -25,6 +25,13 @@ plivanje mobova u kutiji oko igrača, drop koji prati val, linija vode uz obalu,
 bacanje predmeta (Q) i mob u dubokom moru. Popis je u `PLAN_Water.md`, odjeljak
 "Odgođeno".
 
+## 0d. Kopanje izvan tla nije sporije
+
+Minecraft dijeli brzinu kopanja s 5 kad igrač nije na tlu (`Player.getDestroySpeed`,
+provjereno u 1.21.11 jaru), što vrijedi za skok i za let u survivalu. Naš
+`UBlockMiningComponent` to pravilo nema, pa se iz zraka kopa jednako brzo kao
+sa tla. Odgođeno iz `PLAN_Flying.md` (letenje bez creative moda).
+
 ## 1. NavMeshBoundsVolume u leveli je divovski
 
 **Problem:** NavMeshBoundsVolume u `Lvl_ThirdPerson` je višestruko veći od

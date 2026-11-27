@@ -25,8 +25,16 @@
 #include "FirstPersonArmComponent.h"
 #include "ItemDrop.h"
 #include "MaceComponent.h"
+#include "VoxelCharacterMovement.h"
 
-AFirstPersonCharacter::AFirstPersonCharacter()
+/** voxel.fly.allow - smije li igrac letjeti (kasnije ga postavlja creative/survival) */
+static TAutoConsoleVariable<int32> CVarFlyAllow(
+	TEXT("voxel.fly.allow"),
+	1,
+	TEXT("1 = dvostruki skok ukljucuje let (Docs/PLAN_Flying.md), 0 = let zabranjen i ugasen."));
+
+AFirstPersonCharacter::AFirstPersonCharacter(const FObjectInitializer& ObjectInitializer)
+	: Super(ObjectInitializer.SetDefaultSubobjectClass<UVoxelCharacterMovement>(ACharacter::CharacterMovementComponentName))
 {
 	// Enable Tick
 	PrimaryActorTick.bCanEverTick = true;
@@ -132,7 +140,7 @@ void AFirstPersonCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInp
 			EnhancedInputComponent->BindAction(ToggleInventoryAction, ETriggerEvent::Started, this, &AFirstPersonCharacter::ToggleInventory);
 		}
 
-		// Sprint (uvjet za sprint-hit knockback)
+		// Sprint (uvjet za sprint-hit knockback); Ctrl kao u Minecraftu
 		if (SprintAction)
 		{
 			EnhancedInputComponent->BindAction(SprintAction, ETriggerEvent::Started, this, &AFirstPersonCharacter::StartSprint);
@@ -140,11 +148,15 @@ void AFirstPersonCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInp
 		}
 		else
 		{
-			// Bez IA_Sprint asseta: Shift se vezuje legacy putem, pa sprint radi
+			// Bez IA_Sprint asseta: Ctrl se vezuje legacy putem, pa sprint radi
 			// odmah. Kad asset postoji i postavi se u BP, ova grana se ne izvodi.
-			PlayerInputComponent->BindKey(EKeys::LeftShift, IE_Pressed, this, &AFirstPersonCharacter::StartSprint);
-			PlayerInputComponent->BindKey(EKeys::LeftShift, IE_Released, this, &AFirstPersonCharacter::StopSprint);
+			PlayerInputComponent->BindKey(EKeys::LeftControl, IE_Pressed, this, &AFirstPersonCharacter::StartSprint);
+			PlayerInputComponent->BindKey(EKeys::LeftControl, IE_Released, this, &AFirstPersonCharacter::StopSprint);
 		}
+
+		// Shift: u letu spustanje (kasnije sneak na tlu); nema IA asseta
+		PlayerInputComponent->BindKey(EKeys::LeftShift, IE_Pressed, this, &AFirstPersonCharacter::StartDescend);
+		PlayerInputComponent->BindKey(EKeys::LeftShift, IE_Released, this, &AFirstPersonCharacter::StopDescend);
 	}
 	else
 	{
@@ -198,6 +210,7 @@ void AFirstPersonCharacter::StartSprint()
 	BaseWalkSpeed = MoveComp->MaxWalkSpeed;
 	MoveComp->MaxWalkSpeed = BaseWalkSpeed * SprintSpeedMultiplier;
 	bIsSprinting = true;
+	SyncFlyInput();
 }
 
 void AFirstPersonCharacter::StopSprint()
@@ -212,18 +225,106 @@ void AFirstPersonCharacter::StopSprint()
 		MoveComp->MaxWalkSpeed = BaseWalkSpeed;
 	}
 	bIsSprinting = false;
+	SyncFlyInput();
 }
 
 void AFirstPersonCharacter::DoJumpStart()
 {
 	bJumpHeld = true;
+	SyncFlyInput();
+
+	// Vanilla: prvi pritisak pokrene prozor od 7 tickova, drugi unutar njega
+	// prebaci let. U vodi se pritisci ne broje (plivanje gore).
+	const bool bCanToggle = CVarFlyAllow.GetValueOnGameThread() != 0 && !GetCharacterMovement()->IsSwimming();
+	const double Now = GetWorld()->GetTimeSeconds();
+	if (bCanToggle && LastJumpPressTime >= 0.0 && Now - LastJumpPressTime <= FlyToggleWindow)
+	{
+		LastJumpPressTime = -1.0;
+		SetCreativeFlying(!bIsFlying);
+		return;
+	}
+	LastJumpPressTime = bCanToggle ? Now : -1.0;
 	Jump();
 }
 
 void AFirstPersonCharacter::DoJumpEnd()
 {
 	bJumpHeld = false;
+	SyncFlyInput();
 	StopJumping();
+}
+
+void AFirstPersonCharacter::StartDescend()
+{
+	bDescendHeld = true;
+	SyncFlyInput();
+}
+
+void AFirstPersonCharacter::StopDescend()
+{
+	bDescendHeld = false;
+	SyncFlyInput();
+}
+
+void AFirstPersonCharacter::SyncFlyInput()
+{
+	if (UVoxelCharacterMovement* Move = Cast<UVoxelCharacterMovement>(GetCharacterMovement()))
+	{
+		Move->SetCreativeFlyInput(bJumpHeld, bDescendHeld, bIsSprinting);
+	}
+}
+
+void AFirstPersonCharacter::SetCreativeFlying(bool bFly)
+{
+	UCharacterMovementComponent* Move = GetCharacterMovement();
+	UVoxelCharacterMovement* VoxelMove = Cast<UVoxelCharacterMovement>(Move);
+	if (!VoxelMove || bFly == bIsFlying)
+	{
+		return;
+	}
+	if (bFly && (CVarFlyAllow.GetValueOnGameThread() == 0 || Move->IsSwimming()))
+	{
+		return;
+	}
+
+	if (bFly)
+	{
+		// Vanilla na tlu odgurne lika skokom da se odvoji od poda
+		const bool bOnGround = Move->IsMovingOnGround();
+		bIsFlying = true;
+		VoxelMove->SetCreativeFlying(true);
+		SyncFlyInput();
+		Move->SetMovementMode(MOVE_Flying);
+		if (bOnGround)
+		{
+			Move->Velocity.Z = Move->JumpZVelocity;
+		}
+	}
+	else
+	{
+		// Gasi i OnMovementModeChanged kad lik sleti ili upadne u vodu
+		bIsFlying = false;
+		VoxelMove->SetCreativeFlying(false);
+		if (Move->MovementMode == MOVE_Flying)
+		{
+			Move->SetMovementMode(MOVE_Falling);
+		}
+	}
+	UE_LOG(LogTemp, Log, TEXT("[FLY] let %s (mod=%s, Z=%.0f)"), bIsFlying ? TEXT("UKLJUCEN") : TEXT("iskljucen"),
+		*StaticEnum<EMovementMode>()->GetNameStringByValue(Move->MovementMode).RightChop(5), GetActorLocation().Z);
+}
+
+void AFirstPersonCharacter::UpdateFlyFieldOfView(float DeltaTime)
+{
+	if (!FirstPersonCameraComponent || BaseFieldOfView <= 0.0f)
+	{
+		return;
+	}
+	// AbstractClientPlayer.getFieldOfViewModifier: x1.1 u letu; GameRenderer
+	// mu se primice za pola razlike po ticku
+	const float Target = bIsFlying ? 1.1f : 1.0f;
+	FieldOfViewModifier = Target + (FieldOfViewModifier - Target) * FMath::Pow(0.5f, DeltaTime * 20.0f);
+	FirstPersonCameraComponent->SetFieldOfView(BaseFieldOfView * FieldOfViewModifier);
 }
 
 void AFirstPersonCharacter::BeginPlay()
@@ -283,6 +384,11 @@ void AFirstPersonCharacter::BeginPlay()
 	// OpenScreen/CloseCurrentScreen im pale/gase vidljivost
 	InventoryScreen = CreateScreen(InventoryScreenClass);
 	CraftingTableScreen = CreateScreen(CraftingTableScreenClass);
+
+	if (FirstPersonCameraComponent)
+	{
+		BaseFieldOfView = FirstPersonCameraComponent->FieldOfView;
+	}
 
 	Super::BeginPlay();
 }
@@ -344,12 +450,29 @@ void AFirstPersonCharacter::OnMovementModeChanged(EMovementMode PrevMovementMode
 	// pa u vodi ostaje samo trenje fluida; na kopnu vrijedi default 2.
 	UCharacterMovementComponent* Move = GetCharacterMovement();
 	Move->BrakingFrictionFactor = Move->IsSwimming() ? 0.0f : 2.0f;
+
+	// Let zavrsava kad komponenta sleti na tlo ili UE prebaci lika u plivanje
+	// (PhysicsVolumeChanged pri ulasku u more)
+	if (bIsFlying && Move->MovementMode != MOVE_Flying)
+	{
+		SetCreativeFlying(false);
+	}
 }
 
 void AFirstPersonCharacter::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
 	UpdateBlockLookAt();
+
+	if (bIsFlying && CVarFlyAllow.GetValueOnGameThread() == 0)
+	{
+		SetCreativeFlying(false);
+	}
+	UpdateFlyFieldOfView(DeltaTime);
+	if (!TestMoveInput.IsZero())
+	{
+		DoMove(TestMoveInput.X, TestMoveInput.Y);
+	}
 
 	// U vodi skok ne radi (CanJump trazi tlo), pa drzanje skoka pliva prema gore
 	if (bJumpHeld && GetCharacterMovement()->IsSwimming())
