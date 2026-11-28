@@ -131,6 +131,11 @@ izračuna), prolaznost, fokus, ponovno učitavanje chunka, otpadanje i recept;
 prolaz. `voxel.light.intensity` (1.0) namješta jačinu svjetla blokova. Proces se nakon
 testa sam ugasi.
 
+Plamen i dim baklje provjerava `voxel.particletest`: mjesto nastanka čestica, trajanje,
+gibanje (dim staje pod stropom) i učestalost (očekivano 0.183 po ticku za baklju u ćeliji
+igrača); `[PARTICLE] test GOTOVO: neuspjelih provjera 0 -> OK` = prolaz. `voxel.particles 0`
+gasi čestice. Proces se nakon testa sam ugasi.
+
 Knockback se mjeri komandom `voxel.kbtest [jacina...]` (default `0.4 0.9`
 blokova/tick): odbaci stvorenje najbliže igraču i u log ispiše `[KB]` linije s
 jačinom, brzinom i dometom pri doskoku. U headless runu (`-ExecCmds="voxel.kbtest"`)
@@ -194,7 +199,7 @@ Source/MinecraftClone/
 - `Content/Data/Blocks.json`, `Items.json` - definicije blokova/itema; učitava ih `UBlockRegistry` (enum vrijednost bez JSON unosa dobije fallback: siva kocka + Error u logu)
 - `Content/Data/WorldGen/Underground.json` - podzemlje: `caves` (uključivanje po vrsti, pragovi, veličina, zaštita mora), `layers` (Bedrock, Deepslate) i `features` (nakupine kamena i rude: blok, što zamjenjuje, pokušaja po chunku, veličina, raspon visine, biomi). Čita ga `FUndergroundConfig::Load`. `layers` i `features` iz Minecraft jara upisuje `python Scripts/build_underground_config.py`; nova ruda = blok u `Blocks.json`, predmet u `Items.json` i unos u `features`
 - Svojstva bloka po Minecraftu u `Blocks.json` (Docs/PLAN_Torches.md): `collision` (false = nije puna kocka: ne sakriva susjede, prolazan, pogađa ga samo nišan), `blocksLight`, `sturdy` (oslonac za baklju), `lightLevel` (0-15), `behavior` (Torch/WallTorch = pravila oslonca), `properties` + `variants` (stanja bloka i zakret modela po stanju), `shape` (obris za ciljanje) i `model` (Minecraftov JSON modela). `Items.json`: `wallBlock` = zidna inačica bloka koji predmet postavlja
-- Teksturu baklje i materijale sa svjetlom blokova uvozi Tools > MinecraftClone > Import Torch (`Scripts/import_torch_assets.py`); `MPC_BlockLight` nosi jačinu svjetla za sve materijale blokova
+- Teksturu baklje, materijale sa svjetlom blokova i čestice plamena i dima (`Content/Blocks/Particles`) uvozi Tools > MinecraftClone > Import Torch (`Scripts/import_torch_assets.py`); `MPC_BlockLight` nosi jačinu svjetla za sve materijale blokova
 - Teksture blokova i predmeta podzemlja uvozi Tools > MinecraftClone > Import Underground Blocks (`Scripts/import_underground_assets.py`, izvlači ih iz jara i gradi materijale i ikone)
 - `Content/Data/Recipes/` - crafting recepti (JSON, file-per-recipe)
 - `Content/Data/BlockSounds.json` - sampleovi po sound grupi; assetovi u `Content/Audio/Blocks/` (uvozi ih `Scripts/import_block_sounds.py`)
@@ -314,7 +319,7 @@ Detailed docs in Croatian available in `Docs/`:
 - `PLAN_Oceans.md` - Razina mora (Z=0) i noise kontinentalnosti: oceani, obala, dno mora, spawn na kopnu (implementirano)
 - `PLAN_Water.md` - Realistična voda: vlastita ploha po chunku sa Single Layer Water materijalom, valovi, pogled ispod vode, plivanje, plutanje dropova, mobovi izvan mora (zatvoreno; ostatak odgođen)
 - `PLAN_Underground.md` - Podzemlje po Minecraftu: špilje iz šuma (dvorane, tuneli, uski prolazi), pravi Minecraftovi blokovi kamena i rude, konfiguracija u Underground.json (implementirano: špilje, slojevi kamena, nakupine i rude; kamena i željezna krampa još ne postoje)
-- `PLAN_Torches.md` - Baklje po Minecraftu: stanje bloka po ćeliji, svojstva bloka (kolizija, obris, oslonac), postavljanje, razine svjetla blokova (implementirano; svjetlo na igraču i mobovima te čestice još ne)
+- `PLAN_Torches.md` - Baklje po Minecraftu: stanje bloka po ćeliji, svojstva bloka (kolizija, obris, oslonac), postavljanje, razine svjetla blokova, plamen i dim (implementirano; svjetlo na igraču i mobovima još ne)
 - `PLAN_Chunks.md` - Chunk sustav i beskonačan svijet (streaming oko igrača, async generacija)
 - `PLAN_BlockOutline.md` - Minecraft obrub fokusiranog bloka (screen-space linije u vlastitom scene proxyju)
 - `PLAN_BlockSounds.md` - Zvukovi kopanja i lomljenja blokova (sound grupe po materijalu, plan)

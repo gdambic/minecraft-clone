@@ -7,6 +7,7 @@
 #include "BlockDefinition.h"
 #include "VoxelChunk.h"
 #include "ChunkGenerator.h"
+#include "Math/RandomStream.h"
 #include "VoxelWorld.generated.h"
 
 class ABlock;
@@ -18,9 +19,27 @@ class UBlockCrackComponent;
 class UMaterialInterface;
 class UMaterialInstanceDynamic;
 class UMaterialParameterCollection;
+class UStaticMesh;
 class UPostProcessComponent;
 class AVoxelWaterVolume;
 struct FHitResult;
+
+/**
+ * Cestica bloka (plamen ili dim baklje), u Minecraftovim jedinicama: pozicija
+ * i brzina u blokovima (srediste celije je cijeli broj), vrijeme u tickovima.
+ */
+struct FBlockParticle
+{
+	FVector Position = FVector::ZeroVector;
+	FVector PreviousPosition = FVector::ZeroVector;
+	FVector Velocity = FVector::ZeroVector;
+	int32 Age = 0;
+	int32 Lifetime = 1;
+	float QuadSize = 0.1f;
+	float Gravity = 0.f;
+	bool bCollides = false;
+	FLinearColor Color = FLinearColor::White;
+};
 
 /** Jedan unos u spawn listi pasivnih mobova: koja klasa i koliko komada. */
 USTRUCT(BlueprintType)
@@ -427,6 +446,12 @@ public:
 	 */
 	float RunTorchTest();
 
+	/**
+	 * Provjera cestica baklje ([PARTICLE] u logu): mjesto nastanka plamena i
+	 * dima, trajanje, gibanje i ucestalost. Vraca trajanje testa u sekundama.
+	 */
+	float RunParticleTest();
+
 	/** Vraća listu svih tipova blokova koji se mogu postaviti (bez Air) */
 	UFUNCTION(BlueprintCallable, Category = "World")
 	TArray<EBlockType> GetPlaceableBlockTypes() const;
@@ -818,6 +843,40 @@ private:
 	void UpdateLightIntensity();
 
 	TSet<FIntVector> DirtyLightCells;
+
+	// === CESTICE BLOKOVA (VoxelWorldParticles.cpp) ===
+
+	/** Svaki frame: Minecraftovi tickovi simulacije (20 u sekundi) i osvjezavanje vizuala. */
+	void TickBlockParticles(float DeltaSeconds);
+
+	/** ClientLevel.animateTick: nasumicne celije oko Center; vraca koliko ih je ispustilo cestice. */
+	int32 AnimateTickAround(const FIntVector& Center);
+
+	/** animateTick bloka: baklja ispusti cesticu dima i cesticu plamena. Vraca false za blok bez cestica. */
+	bool AnimateBlock(const FIntVector& Pos);
+
+	/** Stvori cesticu (0 = plamen, 1 = dim) na poziciji u blokovima. */
+	void SpawnBlockParticle(int32 Kind, const FVector& Position);
+
+	/** Jedan tick gibanja i starenja svih cestica. */
+	void StepBlockParticles();
+
+	/** Postavi instance cestica licem prema kameri; PartialTick 0..1 izgladuje gibanje izmedu tickova. */
+	void UpdateBlockParticleVisuals(float PartialTick);
+
+	void EnsureParticleComponents();
+
+	/** 0 = plamen, 1 = dim */
+	TArray<FBlockParticle> BlockParticles[2];
+
+	UPROPERTY(Transient)
+	TObjectPtr<UInstancedStaticMeshComponent> ParticleComponents[2];
+
+	UPROPERTY(Transient)
+	TObjectPtr<UStaticMesh> ParticleQuadMesh = nullptr;
+
+	float ParticleTickAccumulator = 0.f;
+	FRandomStream ParticleRandom;
 
 	UPROPERTY(Transient)
 	TObjectPtr<UMaterialParameterCollection> BlockLightCollection = nullptr;

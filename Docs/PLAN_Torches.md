@@ -1,8 +1,9 @@
 # Plan: baklje
 
 Status: faze 1 do 4 (stanje bloka, svojstva bloka, baklja, svjetlo blokova) implementirane
-i izmjerene bez prikaza 2026-11-28; vidi točku 7. Izgled u editoru još nitko nije
-pregledao. Faze 5 i 6 (svjetlo na igraču i mobovima, čestice) nisu započete.
+2026-11-28 i potvrđene u editoru (commit 801cc6b). Faza 6 (čestice) je implementirana i
+izmjerena bez prikaza, a u editoru još nije pregledana; vidi točku 7. Faza 5 (svjetlo
+na igraču i mobovima) nije započeta.
 
 Pravilo plana: uzima se Minecraftovo ponašanje i ponavlja se. Sve u točki 2 pročitano
 je iz jara 1.21.11 (podaci iz JSON datoteka, ponašanje iz bytecodea klasa `TorchBlock`,
@@ -241,12 +242,37 @@ Testovi cavetest, deeptest, cracktest, flytest, mobwatertest, pickuptest i zombi
 prolaze. Materijali su prevedeni s uključenim prikazom (`-AllowCommandletRendering`) bez
 ijedne greške u logu.
 
+### Čestice (faza 6)
+
+Pročitano iz jara: `ClientLevel.animateTick` svakog ticka 667 puta odabere po jednu
+nasumičnu ćeliju u dometu 16 i u dometu 32 blokova oko igrača, a pomak po osi je razlika
+dvaju nasumičnih brojeva, pa su ćelije bliže igraču češće na redu. Blok koji tako dođe
+na red ispusti svoje čestice; baklja ispusti jedan dim i jedan plamen. Baklja u ćeliji
+igrača dolazi na red oko 0,18 puta po ticku, to jest 3,7 puta u sekundi.
+
+Plamen (`FlameParticle`, `RisingParticle`) nastaje do 0,05 bloka od mjesta baklje, gotovo
+se ne miče, traje 12 do 44 ticka i pritom se smanji na polovicu. Dim (`SmokeParticle`,
+`BaseAshSmokeParticle`) je siv, diže se, traje 8 do 40 tickova, izmjenjuje osam sličica i
+zaustavlja se pod punim blokom.
+
+Kod nas je to u `VoxelWorldParticles.cpp`: isto uzorkovanje ćelija i isto gibanje, u
+Minecraftovim tickovima, s izglađivanjem između tickova. Čestica je kvadrat okrenut
+kameri (dva ISM-a, plamen i dim) s materijalom `M_BlockParticle` bez sjenčanja. Teksture
+uvozi Import Torch; osam sličica dima složi u jednu traku. `voxel.particles 0` gasi
+čestice.
+
+Razlika prema Minecraftu: Minecraft dim osvjetljava svjetlom ćelije u kojoj je, a naš dim
+uvijek ima svoju sivu boju.
+
+Izmjereno komandom `voxel.particletest` (7 provjera, sve prolaze): mjesto nastanka
+(stojeća baklja 0,2 bloka iznad središta ćelije, zidna još 0,22 gore i 0,27 prema zidu),
+trajanje plamena 12..43 i dima 8..39 tickova, dim se diže i staje pod stropom, učestalost
+0,195 po ticku uz očekivanih 0,183.
+
 Otvoreno:
 
-- Izgled u editoru: baklja, jačina i boja svjetla. Jačina se namješta s
-  `voxel.light.intensity`.
+- Izgled čestica u editoru: veličina, boja, jesu li uspravne.
 - Igrač, mobovi, dropovi i predmet u ruci nisu osvijetljeni bakljom (faza 5).
-- Čestice plamena i dima (faza 6).
 - `voxel.deeptest` je prije padao uz `UndergroundVisualRadius` veći od 4; sada igrača
   vraća vodoravno dovoljno daleko, pa prolazi uz bilo koju postavku.
 

@@ -234,6 +234,7 @@ void AVoxelWorld::Tick(float DeltaSeconds)
 	ApplyPendingChunkVisuals();
 	FlushLightDirty();
 	UpdateLightIntensity();
+	TickBlockParticles(DeltaSeconds);
 	UpdateWaterVolume();
 	UpdateUnderwater();
 	LogCreaturesInSea(DeltaSeconds);
