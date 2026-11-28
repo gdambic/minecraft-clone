@@ -57,5 +57,16 @@ enum class EItemType : uint8
 	Diamond,
 	Emerald,
 
-	Torch           // Baklja (postavlja blok Torch ili WallTorch)
+	Torch,          // Baklja (postavlja blok Torch ili WallTorch)
+
+	// Krampe po Minecraftu (WoodenPickaxe je gore) i poluge od kojih se rade.
+	// Poluge se dobivaju taljenjem u peci, koje jos nema.
+	StonePickaxe,
+	CopperPickaxe,
+	IronPickaxe,
+	GoldenPickaxe,
+	DiamondPickaxe,
+	CopperIngot,
+	IronIngot,
+	GoldIngot
 };

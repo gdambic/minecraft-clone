@@ -1,0 +1,15 @@
+{
+    "id": "stone_pickaxe",
+    "type": "shaped",
+    "pattern": [
+        "XXX",
+        " S ",
+        " S "
+    ],
+    "key": {
+        "X": { "item": "Cobblestone" },
+        "S": { "item": "Stick" }
+    },
+    "result": { "item": "StonePickaxe", "count": 1 },
+    "gridSize": 3
+}

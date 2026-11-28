@@ -1,0 +1,15 @@
+{
+    "id": "diamond_pickaxe",
+    "type": "shaped",
+    "pattern": [
+        "XXX",
+        " S ",
+        " S "
+    ],
+    "key": {
+        "X": { "item": "Diamond" },
+        "S": { "item": "Stick" }
+    },
+    "result": { "item": "DiamondPickaxe", "count": 1 },
+    "gridSize": 3
+}

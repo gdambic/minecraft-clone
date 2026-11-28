@@ -1,0 +1,15 @@
+{
+    "id": "copper_pickaxe",
+    "type": "shaped",
+    "pattern": [
+        "XXX",
+        " S ",
+        " S "
+    ],
+    "key": {
+        "X": { "item": "CopperIngot" },
+        "S": { "item": "Stick" }
+    },
+    "result": { "item": "CopperPickaxe", "count": 1 },
+    "gridSize": 3
+}

@@ -1,0 +1,15 @@
+{
+    "id": "golden_pickaxe",
+    "type": "shaped",
+    "pattern": [
+        "XXX",
+        " S ",
+        " S "
+    ],
+    "key": {
+        "X": { "item": "GoldIngot" },
+        "S": { "item": "Stick" }
+    },
+    "result": { "item": "GoldenPickaxe", "count": 1 },
+    "gridSize": 3
+}

@@ -31,6 +31,14 @@ const TMap<EItemType, FWeaponData>& UWeaponDataLibrary::GetWeaponRegistry()
 		// (bIsWeapon pali placeholder mac u ruci, pa ostaje false)
 		Registry.Add(EItemType::WoodenPickaxe, FWeaponData(2.0f, 1.2f, 1.0f, false));
 
+		// Ostale krampe: 2 + dodatak materijala iz ToolMaterial (kamen 1, bakar 1,
+		// zeljezo 2, dijamant 3, zlato 0)
+		Registry.Add(EItemType::StonePickaxe, FWeaponData(3.0f, 1.2f, 1.0f, false));
+		Registry.Add(EItemType::CopperPickaxe, FWeaponData(3.0f, 1.2f, 1.0f, false));
+		Registry.Add(EItemType::IronPickaxe, FWeaponData(4.0f, 1.2f, 1.0f, false));
+		Registry.Add(EItemType::GoldenPickaxe, FWeaponData(2.0f, 1.2f, 1.0f, false));
+		Registry.Add(EItemType::DiamondPickaxe, FWeaponData(5.0f, 1.2f, 1.0f, false));
+
 		// Mace - steta s Terraria tooltipa (stvarna osnovna je pola, let x2, vrtnja x1.2);
 		// useTime 45 tickova = 1.33 upotrebe/s. Napad vodi UMaceComponent, ne melee.
 		Registry.Add(EItemType::Mace, FWeaponData(6.0f, 60.0f / 45.0f, 1.0f, true));

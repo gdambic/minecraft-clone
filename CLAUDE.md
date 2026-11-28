@@ -142,6 +142,13 @@ su, a bez baklje nulu; `[ENTITYLIGHT] igrac: <mesh> ... prima svjetlo` ispiše m
 igrača; `[ENTITYLIGHT] test GOTOVO: neuspjelih provjera 0 -> OK` = prolaz. Proces se nakon
 testa sam ugasi.
 
+Krampe provjerava `voxel.pickaxetest`: recept svake krampe (3 komada materijala iznad 2
+štapa), ikonu, što koja krampa može požeti (ugljen, željezo, dijamant) i vrijeme kopanja
+kamena (drvena 1.15 s, kamena 0.60, bakrena 0.45, željezna 0.40, zlatna 0.20, dijamantna
+0.30) te, 5 s nakon starta, da svaka krampa leži kao drop u izložbi kod spawna;
+`[PICKAXE] test GOTOVO: neuspjelih provjera 0 -> OK` = prolaz. Proces se nakon
+testa sam ugasi.
+
 Knockback se mjeri komandom `voxel.kbtest [jacina...]` (default `0.4 0.9`
 blokova/tick): odbaci stvorenje najbliže igraču i u log ispiše `[KB]` linije s
 jačinom, brzinom i dometom pri doskoku. U headless runu (`-ExecCmds="voxel.kbtest"`)
@@ -180,6 +187,8 @@ proces se nakon testova sam ugasi da se log flusha.
 // EItemType: None, Dirt, Stone, Grass, OakLog, BirchLog, OakSapling, BirchSapling, ...
 //   podzemlje: Cobblestone, Deepslate, CobbledDeepslate, Granite, Diorite, Tuff, Flint, Coal,
 //   RawIron, RawCopper, RawGold, Redstone, LapisLazuli, Diamond, Emerald, Torch
+//   krampe: StonePickaxe, CopperPickaxe, IronPickaxe, GoldenPickaxe, DiamondPickaxe (brzine i razine u ToolData.cpp)
+//   poluge: CopperIngot, IronIngot, GoldIngot (zasad se ne mogu dobiti - nema peci)
 // Nove vrijednosti se dodaju NA KRAJ enuma.
 ```
 

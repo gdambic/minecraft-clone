@@ -12,7 +12,16 @@ const TMap<EItemType, FToolData>& UToolDataLibrary::GetToolRegistry()
 		// Format: ToolClass, MiningSpeed, Tier
 		Registry.Add(EItemType::WoodenAxe, FToolData(EToolClass::Axe, 2.0f, EToolTier::Wood));
 
+		// Krampe: brzina iz Minecraftove klase ToolMaterial (drvo 2, kamen 4,
+		// bakar 5, zeljezo 6, dijamant 8, zlato 12). Razina odreduje sto krampa
+		// moze pozeti (tagovi incorrect_for_*_tool): zlatna kao drvena, bakrena
+		// kao kamena.
 		Registry.Add(EItemType::WoodenPickaxe, FToolData(EToolClass::Pickaxe, 2.0f, EToolTier::Wood));
+		Registry.Add(EItemType::StonePickaxe, FToolData(EToolClass::Pickaxe, 4.0f, EToolTier::Stone));
+		Registry.Add(EItemType::CopperPickaxe, FToolData(EToolClass::Pickaxe, 5.0f, EToolTier::Stone));
+		Registry.Add(EItemType::IronPickaxe, FToolData(EToolClass::Pickaxe, 6.0f, EToolTier::Iron));
+		Registry.Add(EItemType::GoldenPickaxe, FToolData(EToolClass::Pickaxe, 12.0f, EToolTier::Wood));
+		Registry.Add(EItemType::DiamondPickaxe, FToolData(EToolClass::Pickaxe, 8.0f, EToolTier::Diamond));
 	}
 
 	return Registry;

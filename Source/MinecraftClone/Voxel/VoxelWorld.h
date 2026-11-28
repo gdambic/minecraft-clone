@@ -955,6 +955,12 @@ private:
 	// === MOBS ===
 	void SpawnMobs();
 
+	/**
+	 * Izlozba predmeta uz showcase blokova u chunku (0,0): po jedan drop svake
+	 * krampe, u redu iza stupa s bakljama. Dropovi se pokupe kad im igrac pride.
+	 */
+	void SpawnShowcaseItems();
+
 	// === LEAF DECAY ===
 
 	/** Lista lišća koje čeka provjeru decay-a */

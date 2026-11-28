@@ -342,5 +342,69 @@
       "type": "sprite",
       "texture": "Torch"
     }
+  },
+  {
+    "itemType": "StonePickaxe",
+    "displayName": "Stone Pickaxe",
+    "display": {
+      "type": "sprite",
+      "texture": "StonePickaxe"
+    }
+  },
+  {
+    "itemType": "CopperPickaxe",
+    "displayName": "Copper Pickaxe",
+    "display": {
+      "type": "sprite",
+      "texture": "CopperPickaxe"
+    }
+  },
+  {
+    "itemType": "IronPickaxe",
+    "displayName": "Iron Pickaxe",
+    "display": {
+      "type": "sprite",
+      "texture": "IronPickaxe"
+    }
+  },
+  {
+    "itemType": "GoldenPickaxe",
+    "displayName": "Golden Pickaxe",
+    "display": {
+      "type": "sprite",
+      "texture": "GoldenPickaxe"
+    }
+  },
+  {
+    "itemType": "DiamondPickaxe",
+    "displayName": "Diamond Pickaxe",
+    "display": {
+      "type": "sprite",
+      "texture": "DiamondPickaxe"
+    }
+  },
+  {
+    "itemType": "CopperIngot",
+    "displayName": "Copper Ingot",
+    "display": {
+      "type": "sprite",
+      "texture": "CopperIngot"
+    }
+  },
+  {
+    "itemType": "IronIngot",
+    "displayName": "Iron Ingot",
+    "display": {
+      "type": "sprite",
+      "texture": "IronIngot"
+    }
+  },
+  {
+    "itemType": "GoldIngot",
+    "displayName": "Gold Ingot",
+    "display": {
+      "type": "sprite",
+      "texture": "GoldIngot"
+    }
   }
 ]

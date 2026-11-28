@@ -1,0 +1,15 @@
+{
+    "id": "wooden_pickaxe",
+    "type": "shaped",
+    "pattern": [
+        "XXX",
+        " S ",
+        " S "
+    ],
+    "key": {
+        "X": { "item": "OakPlanks" },
+        "S": { "item": "Stick" }
+    },
+    "result": { "item": "WoodenPickaxe", "count": 1 },
+    "gridSize": 3
+}

@@ -15,6 +15,7 @@
 #include "ItemDrop.h"
 #include "Kismet/GameplayStatics.h"
 #include "TimerManager.h"
+#include "ToolData.h"
 
 using namespace VoxelGrid;
 
@@ -56,6 +57,158 @@ static FAutoConsoleCommandWithWorldAndArgs GVoxelTorchTestCmd(
 				}
 			}
 		}));
+
+/**
+ * voxel.pickaxetest - provjeri krampe ([PICKAXE] u logu): recept svake krampe,
+ * sto koja moze pozeti i koliko brzo kopa kamen. Headless run se nakon testa sam ugasi.
+ */
+static FAutoConsoleCommandWithWorldAndArgs GVoxelPickaxeTestCmd(
+	TEXT("voxel.pickaxetest"),
+	TEXT("Provjeri recepte krampi, sto koja krampa moze pozeti i brzinu kopanja."),
+	FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
+		{
+			AVoxelWorld* VoxelWorld = World ? FindVoxelWorldForRules(World) : nullptr;
+			const UCraftingRecipeRegistry* Recipes = VoxelWorld ? UCraftingRecipeRegistry::Get(VoxelWorld) : nullptr;
+			UBlockRegistry* Registry = VoxelWorld ? UBlockRegistry::Get(VoxelWorld) : nullptr;
+			if (!Recipes || !Registry)
+			{
+				UE_LOG(LogTemp, Warning, TEXT("[PICKAXE] test: nema svijeta ili registryja"));
+				return;
+			}
+
+			int32 Failures = 0;
+			const auto Check = [&Failures](bool bOk, const FString& What)
+			{
+				UE_LOG(LogTemp, Log, TEXT("[PICKAXE] %s -> %s"), *What, bOk ? TEXT("OK") : TEXT("FAIL"));
+				Failures += bOk ? 0 : 1;
+			};
+			const UEnum* ItemEnum = StaticEnum<EItemType>();
+			const auto NameOf = [ItemEnum](EItemType Item) { return ItemEnum->GetNameStringByValue((int64)Item); };
+
+			// Materijal -> krampa (Minecraftovi recepti: tri komada materijala iznad dva stapa)
+			struct FRecipeCase { EItemType Material; EItemType Pickaxe; };
+			const FRecipeCase RecipeCases[] = {
+				{ EItemType::OakPlanks, EItemType::WoodenPickaxe }, { EItemType::BirchPlanks, EItemType::WoodenPickaxe },
+				{ EItemType::Cobblestone, EItemType::StonePickaxe }, { EItemType::CobbledDeepslate, EItemType::StonePickaxe },
+				{ EItemType::CopperIngot, EItemType::CopperPickaxe }, { EItemType::IronIngot, EItemType::IronPickaxe },
+				{ EItemType::GoldIngot, EItemType::GoldenPickaxe }, { EItemType::Diamond, EItemType::DiamondPickaxe },
+			};
+			for (const FRecipeCase& Case : RecipeCases)
+			{
+				const TArray<EItemType> Grid = {
+					Case.Material, Case.Material, Case.Material,
+					EItemType::None, EItemType::Stick, EItemType::None,
+					EItemType::None, EItemType::Stick, EItemType::None };
+				const FCraftingRecipe* Recipe = Recipes->FindMatchingRecipe(Grid, 3);
+				const FItemDefinition* ItemDef = Registry->GetItemDefinition(Case.Pickaxe);
+				Check(Recipe && Recipe->Result.ItemType == Case.Pickaxe && Recipe->Result.Count == 1 && ItemDef
+					&& Registry->GetItemIconTexture(Case.Pickaxe) != nullptr,
+					FString::Printf(TEXT("recept 3 x %s + 2 x Stick: %s (ocekivano %s), ikona %s"), *NameOf(Case.Material),
+						Recipe ? *NameOf(Recipe->Result.ItemType) : TEXT("NEMA recepta"), *NameOf(Case.Pickaxe),
+						Registry->GetItemIconTexture(Case.Pickaxe) ? TEXT("postoji") : TEXT("NEDOSTAJE")));
+			}
+
+			// Sto koja krampa moze pozeti (ostavlja drop) i koliko joj treba za Stone
+			struct FToolCase { EItemType Pickaxe; bool bCoal; bool bIron; bool bDiamond; float StoneSeconds; };
+			const FToolCase ToolCases[] = {
+				// Stone: 7.5 s golom rukom bez dropa; s krampom 1.5 * 1.5 / brzina, zaokruzeno na tick navise
+				{ EItemType::WoodenPickaxe, true, false, false, 1.15f },
+				{ EItemType::StonePickaxe, true, true, false, 0.60f },
+				{ EItemType::CopperPickaxe, true, true, false, 0.45f },
+				{ EItemType::IronPickaxe, true, true, true, 0.40f },
+				{ EItemType::GoldenPickaxe, true, false, false, 0.20f },
+				{ EItemType::DiamondPickaxe, true, true, true, 0.30f },
+			};
+			const FBlockDefinition* Stone = Registry->GetBlockDefinition(EBlockType::Stone);
+			const auto Harvests = [Registry](EItemType Tool, EBlockType Block)
+			{
+				const FBlockDefinition* Def = Registry->GetBlockDefinition(Block);
+				return Def && UToolDataLibrary::CanHarvest(Tool, Def->ToolClass, Def->bRequiresTool, Def->RequiredToolTier);
+			};
+			for (const FToolCase& Case : ToolCases)
+			{
+				const bool bCoal = Harvests(Case.Pickaxe, EBlockType::CoalOre);
+				const bool bIron = Harvests(Case.Pickaxe, EBlockType::IronOre);
+				const bool bDiamond = Harvests(Case.Pickaxe, EBlockType::DiamondOre);
+
+				// Minecraft: sekunde = cvrstoca * 1.5 / brzina, zaokruzeno navise na tick od 0.05 s
+				const float Speed = UToolDataLibrary::GetMiningSpeed(Case.Pickaxe, EToolClass::Pickaxe);
+				const float Seconds = Stone ? FMath::CeilToFloat(Stone->TimeToDestroy / Speed / 0.05f - 1e-3f) * 0.05f : -1.f;
+				Check(bCoal == Case.bCoal && bIron == Case.bIron && bDiamond == Case.bDiamond && FMath::IsNearlyEqual(Seconds, Case.StoneSeconds, 0.001f),
+					FString::Printf(TEXT("%s: ugljen %s, zeljezo %s, dijamant %s; kamen za %.2f s (ocekivano %.2f)"), *NameOf(Case.Pickaxe),
+						bCoal ? TEXT("da") : TEXT("ne"), bIron ? TEXT("da") : TEXT("ne"), bDiamond ? TEXT("da") : TEXT("ne"),
+						Seconds, Case.StoneSeconds));
+			}
+
+			// Izlozba: 5 s nakon starta svaka krampa jos lezi kao drop na tlu
+			// (nije propala kroz svijet i igrac je nije pokupio sa svog mjesta)
+			TWeakObjectPtr<AVoxelWorld> WeakWorld(VoxelWorld);
+			const int32 FailuresSoFar = Failures;
+			FTimerHandle ShowcaseHandle;
+			World->GetTimerManager().SetTimer(ShowcaseHandle, FTimerDelegate::CreateLambda([WeakWorld, FailuresSoFar, NameOf]()
+			{
+				AVoxelWorld* W = WeakWorld.Get();
+				if (!W)
+				{
+					return;
+				}
+				static const EItemType Pickaxes[] = {
+					EItemType::WoodenPickaxe, EItemType::StonePickaxe, EItemType::CopperPickaxe,
+					EItemType::IronPickaxe, EItemType::GoldenPickaxe, EItemType::DiamondPickaxe
+				};
+				int32 Missing = 0;
+				for (const EItemType Pickaxe : Pickaxes)
+				{
+					int32 Count = 0;
+					float LowestZ = 0.f;
+					for (TActorIterator<AItemDrop> It(W->GetWorld()); It; ++It)
+					{
+						if (It->ItemType == Pickaxe)
+						{
+							LowestZ = Count == 0 ? It->GetActorLocation().Z : FMath::Min(LowestZ, (float)It->GetActorLocation().Z);
+							Count++;
+						}
+					}
+					// Drvena postoji i kao pocetni drop pokraj igraca
+					const bool bOk = Count >= 1 && LowestZ > -1000.f;
+					Missing += bOk ? 0 : 1;
+					UE_LOG(LogTemp, Log, TEXT("[PICKAXE] izlozba: %s - dropova %d, najnizi na Z=%.0f -> %s"),
+						*NameOf(Pickaxe), Count, LowestZ, bOk ? TEXT("OK") : TEXT("FAIL"));
+				}
+				const int32 Total = FailuresSoFar + Missing;
+				UE_LOG(LogTemp, Log, TEXT("[PICKAXE] test GOTOVO: neuspjelih provjera %d -> %s"), Total, Total == 0 ? TEXT("OK") : TEXT("FAIL"));
+				if (!GIsEditor)
+				{
+					FPlatformMisc::RequestExit(false);
+				}
+			}), 5.0f, false);
+		}));
+
+void AVoxelWorld::SpawnShowcaseItems()
+{
+	// Showcase je u chunku (0,0); bez njegovih vizuala dropovi ne bi imali na sto pasti
+	const FVoxelChunk* Showcase = FindChunk(FIntPoint::ZeroValue);
+	if (!Showcase || !Showcase->bVisualsBuilt)
+	{
+		return;
+	}
+
+	// Red na Y = 14, svaki drugi stupac: dovoljno daleko od starta igraca (4, 11)
+	// da ih ne pokupi prije nego ih vidi
+	static const EItemType Items[] = {
+		EItemType::WoodenPickaxe, EItemType::StonePickaxe, EItemType::CopperPickaxe,
+		EItemType::IronPickaxe, EItemType::GoldenPickaxe, EItemType::DiamondPickaxe
+	};
+	constexpr int32 RowY = 14;
+	int32 X = 4;
+	for (const EItemType Item : Items)
+	{
+		const int32 Ground = GetGroundHeightAt(X, RowY);
+		AItemDrop::SpawnItemDrop(this, Item, GridToWorld(X, RowY, Ground + 2));
+		X += 2;
+	}
+	UE_LOG(LogTemp, Log, TEXT("VoxelWorld: izlozba predmeta - %d krampi u redu Y=%d, X=4..%d"), (int32)UE_ARRAY_COUNT(Items), RowY, X - 2);
+}
 
 FTransform AVoxelWorld::GetBlockInstanceTransform(const FIntVector& Pos, EBlockType Type, uint8 State)
 {

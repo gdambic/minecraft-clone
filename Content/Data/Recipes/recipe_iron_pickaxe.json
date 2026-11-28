@@ -1,0 +1,15 @@
+{
+    "id": "iron_pickaxe",
+    "type": "shaped",
+    "pattern": [
+        "XXX",
+        " S ",
+        " S "
+    ],
+    "key": {
+        "X": { "item": "IronIngot" },
+        "S": { "item": "Stick" }
+    },
+    "result": { "item": "IronPickaxe", "count": 1 },
+    "gridSize": 3
+}

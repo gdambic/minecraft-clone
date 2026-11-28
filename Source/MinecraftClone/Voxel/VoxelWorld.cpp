@@ -708,6 +708,7 @@ void AVoxelWorld::GenerateWorld()
 	// --- Faza 4: mobovi (oko spawna - dalje od toga zive buduci per-chunk spawn, vidi BACKLOG) ---
 	SpawnEnemies();
 	SpawnMobs();
+	SpawnShowcaseItems();
 
 	const double T4 = FPlatformTime::Seconds();
 	UE_LOG(LogTemp, Warning, TEXT("[PERF] 4/4 Mobovi     %8.1f ms"), (T4 - T3) * 1000.0);

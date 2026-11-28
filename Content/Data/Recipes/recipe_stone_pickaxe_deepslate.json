@@ -1,0 +1,15 @@
+{
+    "id": "stone_pickaxe_deepslate",
+    "type": "shaped",
+    "pattern": [
+        "XXX",
+        " S ",
+        " S "
+    ],
+    "key": {
+        "X": { "item": "CobbledDeepslate" },
+        "S": { "item": "Stick" }
+    },
+    "result": { "item": "StonePickaxe", "count": 1 },
+    "gridSize": 3
+}

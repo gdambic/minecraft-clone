@@ -64,6 +64,15 @@ ITEMS = {
     "LapisLazuli": "lapis_lazuli",
     "Diamond": "diamond",
     "Emerald": "emerald",
+    # Krampe i poluge od kojih se rade (drvena krampa ima vlastitu sliku)
+    "StonePickaxe": "stone_pickaxe",
+    "CopperPickaxe": "copper_pickaxe",
+    "IronPickaxe": "iron_pickaxe",
+    "GoldenPickaxe": "golden_pickaxe",
+    "DiamondPickaxe": "diamond_pickaxe",
+    "CopperIngot": "copper_ingot",
+    "IronIngot": "iron_ingot",
+    "GoldIngot": "gold_ingot",
 }
 
 EAL = unreal.EditorAssetLibrary
