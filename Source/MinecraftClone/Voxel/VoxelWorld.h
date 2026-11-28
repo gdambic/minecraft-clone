@@ -358,6 +358,19 @@ public:
 	UFUNCTION(BlueprintPure, Category = "World")
 	int32 GetBlockLightAt(FIntVector GridPosition) const;
 
+	/**
+	 * Svjetlina od svjetla blokova na mjestu u svijetu, po Minecraftovoj krivulji
+	 * (0 = mrak, 1.17 = razina 14). Za sve sto nije blok: stvorenja, dropove i
+	 * igracevu ruku (UBlockLightReceiverComponent).
+	 */
+	float GetBlockLightBrightnessAt(const FVector& WorldLocation) const;
+
+	/**
+	 * Provjera svjetla na stvorenjima i dropovima ([ENTITYLIGHT] u logu): uz
+	 * baklju dobivaju svjetlinu svog mjesta, bez nje nulu. Vraca trajanje testa.
+	 */
+	float RunEntityLightTest();
+
 	/** Je li stranica Face bloka na poziciji cvrst oslonac (Minecraft isFaceSturdy); zrak i lisce nisu. */
 	bool IsFaceSturdy(FIntVector GridPosition, FIntVector Face) const;
 

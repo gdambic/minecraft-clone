@@ -1,4 +1,5 @@
 #include "FirstPersonCharacter.h"
+#include "BlockLightReceiverComponent.h"
 #include "Camera/CameraComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/StaticMeshComponent.h"
@@ -103,6 +104,9 @@ AFirstPersonCharacter::AFirstPersonCharacter(const FObjectInitializer& ObjectIni
 	MiningComponent = CreateDefaultSubobject<UBlockMiningComponent>(TEXT("BlockMining"));
 
 	MaceComponent = CreateDefaultSubobject<UMaceComponent>(TEXT("Mace"));
+
+	// Svjetlo baklje na ruci, predmetu u ruci i buzdovanu: svjetlina celije u kojoj su igracu oci
+	CreateDefaultSubobject<UBlockLightReceiverComponent>(TEXT("BlockLightReceiver"));
 }
 
 void AFirstPersonCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)

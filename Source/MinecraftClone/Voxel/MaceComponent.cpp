@@ -147,8 +147,14 @@ void UMaceComponent::BeginPlay()
 void UMaceComponent::CreateVisuals()
 {
 	USceneComponent* Root = OwnerCharacter->GetRootComponent();
+	// M_EntityColor prima svjetlo baklje (parametar Color kao Unrealov materijal kocke, koji ostaje rezerva)
 	UMaterialInterface* BaseMaterial = LoadObject<UMaterialInterface>(nullptr,
-		TEXT("/Engine/BasicShapes/BasicShapeMaterial.BasicShapeMaterial"));
+		TEXT("/Game/Blocks/Materials/M_EntityColor.M_EntityColor"));
+	if (!BaseMaterial)
+	{
+		BaseMaterial = LoadObject<UMaterialInterface>(nullptr,
+			TEXT("/Engine/BasicShapes/BasicShapeMaterial.BasicShapeMaterial"));
+	}
 
 	// Kugla i lanac stoje u svijetu: attachment je samo zbog zivotnog ciklusa
 	BallMesh = NewObject<UProceduralMeshComponent>(OwnerCharacter, TEXT("MaceBall"));

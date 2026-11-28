@@ -3,6 +3,7 @@
 #include "Components/SphereComponent.h"
 #include "ProceduralMeshComponent.h"
 #include "ItemMeshExtruder.h"
+#include "BlockLightReceiverComponent.h"
 #include "FirstPersonCharacter.h"
 #include "InventoryComponent.h"
 #include "Engine/Engine.h"
@@ -80,6 +81,9 @@ AItemDrop::AItemDrop()
 
 	// Ekstrudirani mesh za sprite iteme - aktivira ga InitializeFromRegistry
 	ExtrudedMeshComponent = CreateDefaultSubobject<UProceduralMeshComponent>(TEXT("ExtrudedMeshComponent"));
+
+	// Svjetlo baklje na dropu: svjetlina celije u kojoj lezi
+	CreateDefaultSubobject<UBlockLightReceiverComponent>(TEXT("BlockLightReceiver"));
 	ExtrudedMeshComponent->SetupAttachment(RootComponent);
 	ExtrudedMeshComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	ExtrudedMeshComponent->SetVisibility(false);

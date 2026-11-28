@@ -362,6 +362,11 @@ def main():
     with open(script, "r", encoding="utf-8") as handle:
         exec(compile(handle.read(), "build_block_materials.py", "exec"), {"__name__": "__main__"})
 
+    # Svjetlo blokova na stvorenjima, ruci i buzdovanu (treba MPC_BlockLight iz prethodnog koraka)
+    script = os.path.join(PROJECT_DIR, "Scripts", "build_entity_light.py")
+    with open(script, "r", encoding="utf-8") as handle:
+        exec(compile(handle.read(), "build_entity_light.py", "exec"), {"__name__": "__main__"})
+
     if _failures:
         for message in _failures:
             unreal.log_error("[Torch] NEUSPJEH: " + message)

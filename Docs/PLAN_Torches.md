@@ -2,8 +2,8 @@
 
 Status: faze 1 do 4 (stanje bloka, svojstva bloka, baklja, svjetlo blokova) implementirane
 2026-11-28 i potvrđene u editoru (commit 801cc6b). Faza 6 (čestice) je implementirana i
-izmjerena bez prikaza, a u editoru još nije pregledana; vidi točku 7. Faza 5 (svjetlo
-na igraču i mobovima) nije započeta.
+potvrđena u editoru (commit 7ff97d6). Faza 5 (svjetlo na igraču, mobovima i dropovima)
+je implementirana i izmjerena bez prikaza, a u editoru još nije pregledana; vidi točku 7.
 
 Pravilo plana: uzima se Minecraftovo ponašanje i ponavlja se. Sve u točki 2 pročitano
 je iz jara 1.21.11 (podaci iz JSON datoteka, ponašanje iz bytecodea klasa `TorchBlock`,
@@ -269,10 +269,34 @@ Izmjereno komandom `voxel.particletest` (7 provjera, sve prolaze): mjesto nastan
 trajanje plamena 12..43 i dima 8..39 tickova, dim se diže i staje pod stropom, učestalost
 0,195 po ticku uz očekivanih 0,183.
 
+### Svjetlo na onome što nije blok (faza 5)
+
+Pročitano iz jara (`EntityRenderer.getPackedLightCoords`): stvorenje dobiva jednu razinu
+svjetla, onu ćelije u kojoj su mu oči, i cijelo se oboji njome. Predmet u ruci dobiva
+razinu igrača.
+
+Kod nas to radi `UBlockLightReceiverComponent` na svakom stvorenju (`ACreatureBase`),
+dropu (`AItemDrop`) i igraču. Deset puta u sekundi pročita svjetlinu ćelije u kojoj su
+vlasniku oči (dropu: u kojoj leži) i upiše je u parametre `LightFallbackPos` i
+`LightFallbackNeg` svih materijala vlasnikovih mesheva. To su isti parametri kojima
+svjetlo prima blok pod nišanom. Materijal bez tih parametara ostaje neosvijetljen.
+
+Materijali: `M_ItemSprite` (sličice predmeta) dobiva svjetlo u `build_block_materials.py`.
+Nova skripta `build_entity_light.py` dodaje sjaj materijalima `M_Zombie` i `M_Sheep`, ne
+dirajući ono što je spojeno na Base Color, i gradi `M_EntityColor`, jednobojni materijal
+kojim su zamijenjeni Unrealovi materijali kocke na praznoj ruci i buzdovanu. Pokreće je
+Import Torch, a i Import Zombie, jer on `M_Zombie` gradi iz nule.
+
+Izmjereno komandom `voxel.entitylighttest` (11 provjera, sve prolaze): drop sličica, drop
+blok, zombi i ovca uz baklju imaju u materijalu točno svjetlinu svoje ćelije (razine 13,
+12, 10 i 9), a nakon uklanjanja baklje nulu.
+
 Otvoreno:
 
-- Izgled čestica u editoru: veličina, boja, jesu li uspravne.
-- Igrač, mobovi, dropovi i predmet u ruci nisu osvijetljeni bakljom (faza 5).
+- Izgled u editoru: osvijetljenost ruke, predmeta, dropova, zombija i ovce; jesu li prazna
+  ruka i buzdovan s novim materijalom ostali iste boje; je li ovca na danjem svjetlu ista.
+- Lik iz predloška (`FirstPersonMesh`, materijal `M_Mannequin`) ne prima svjetlo.
+- Svinja nema blueprint ni materijal, pa nije obuhvaćena.
 - `voxel.deeptest` je prije padao uz `UndergroundVisualRadius` veći od 4; sada igrača
   vraća vodoravno dovoljno daleko, pa prolazi uz bilo koju postavku.
 

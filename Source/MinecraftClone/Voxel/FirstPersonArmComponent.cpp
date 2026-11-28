@@ -93,10 +93,13 @@ void UFirstPersonArmComponent::SetupArmMesh()
 	ArmMesh->bCastDynamicShadow = false;
 	ArmMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 
-	// Set material if available
-	if (ArmMaterial)
+	// Set material if available. Bez zadanog materijala ruka dobiva M_EntityColor:
+	// Unrealov materijal kocke ne moze primiti svjetlo baklje.
+	UMaterialInterface* Material = ArmMaterial ? ArmMaterial
+		: LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Blocks/Materials/M_EntityColor.M_EntityColor"));
+	if (Material)
 	{
-		ArmMesh->SetMaterial(0, ArmMaterial);
+		ArmMesh->SetMaterial(0, Material);
 	}
 
 	// Zapamti materijal kocke da se moze vratiti nakon item sprite-a

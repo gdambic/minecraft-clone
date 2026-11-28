@@ -377,3 +377,10 @@ def main():
 
 
 main()
+
+# M_Zombie je izgraden iz nule, pa mu svjetlo blokova (baklje) treba dodati ponovno
+import os as _os
+_entity_light_script = _os.path.join(
+    unreal.Paths.convert_relative_path_to_full(unreal.Paths.project_dir()), "Scripts", "build_entity_light.py")
+with open(_entity_light_script, "r", encoding="utf-8") as _handle:
+    exec(compile(_handle.read(), "build_entity_light.py", "exec"), {"__name__": "__main__"})

@@ -640,7 +640,7 @@ def build_model_master(light_collection):
 # 2b. Sprite materijal za item u ruci (HOLDING)
 # ---------------------------------------------------------------------------
 
-def build_item_sprite_material():
+def build_item_sprite_material(light_collection=None):
     """
     Graf (jedan node, dvije zice):
 
@@ -681,6 +681,17 @@ def build_item_sprite_material():
 
     _connect_property(sampler, "", material, unreal.MaterialProperty.MP_BASE_COLOR)
     _connect_property(sampler, "A", material, unreal.MaterialProperty.MP_OPACITY_MASK)
+
+    # Svjetlo blokova na predmetu u ruci i na dropu: jedna svjetlina za cijeli
+    # predmet, upisuje je UBlockLightReceiverComponent u LightFallbackPos
+    own_light = light_vector(material, LIGHT_DATA_INDEX_POS, "LightFallbackPos", -900, 600)
+    mask_r = _expr(material, unreal.MaterialExpressionComponentMask, -500, 600)
+    mask_r.set_editor_property("r", True)
+    mask_r.set_editor_property("g", False)
+    mask_r.set_editor_property("b", False)
+    mask_r.set_editor_property("a", False)
+    _connect(own_light, "", mask_r, "")
+    connect_block_light(material, sampler, mask_r, light_collection, -300, 600)
 
     roughness = _expr(material, unreal.MaterialExpressionScalarParameter, -400, 300)
     roughness.set_editor_property("parameter_name", "Roughness")
@@ -843,7 +854,7 @@ def main():
         MASTER_MODEL: build_model_master(light_collection),
     }
 
-    sprite_material = build_item_sprite_material()
+    sprite_material = build_item_sprite_material(light_collection)
 
     created, skipped = build_material_instances(masters, blocks)
 
