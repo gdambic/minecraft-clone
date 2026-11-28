@@ -28,6 +28,9 @@ public class MinecraftClone : ModuleRules
 		// ImageCore: FImage za citanje piksela iz Texture->Source (ItemMeshExtruder)
 		PrivateDependencyModuleNames.AddRange(new string[] { "ImageCore" });
 
+		// MeshDescription/StaticMeshDescription: mesh bloka iz modela u Blocks.json (BlockModel.cpp)
+		PrivateDependencyModuleNames.AddRange(new string[] { "MeshDescription", "StaticMeshDescription", "PhysicsCore" });
+
 		PublicIncludePaths.AddRange(new string[] {
 			"MinecraftClone",
 			"MinecraftClone/Voxel",

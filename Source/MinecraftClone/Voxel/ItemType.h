@@ -55,5 +55,7 @@ enum class EItemType : uint8
 	Redstone,
 	LapisLazuli,
 	Diamond,
-	Emerald
+	Emerald,
+
+	Torch           // Baklja (postavlja blok Torch ili WallTorch)
 };

@@ -197,7 +197,7 @@ TArray<uint8> FChunkGenerator::GenerateChunkBiomes(const FChunkGenParams& Params
 }
 
 TArray<EBlockType> FChunkGenerator::GenerateChunkData(const FChunkGenParams& Params, const FIntPoint& Coord,
-	TArray<uint8>& OutBiomes)
+	TArray<uint8>& OutBiomes, TArray<uint8>* OutStates)
 {
 	using namespace VoxelGrid;
 
@@ -303,6 +303,48 @@ TArray<EBlockType> FChunkGenerator::GenerateChunkData(const FChunkGenParams& Par
 		{
 			UE_LOG(LogTemp, Warning, TEXT("ChunkGenerator: showcase ima %d definicija, stane %d - preskacem ostatak"),
 				Params.ShowcaseBlocks.Num(), MaxShowcase);
+		}
+
+		// Zidni blok (zidna baklja) treba oslonac: iza redova stoji stup od
+		// ShowcaseWallSupport, a na svakoj bocnoj stranici njegovog vrha po jedan
+		// zidni blok koji gleda od stupa
+		const int32 PillarX = ChunkSize / 2;
+		const int32 PillarY = ((Count + ChunkSize - 1) / ChunkSize) * 2 + 2;
+		if (Params.ShowcaseWallBlock != EBlockType::Air && PillarY + 1 < ChunkSize)
+		{
+			static const FIntVector Sides[4] = {
+				FIntVector(1, 0, 0), FIntVector(-1, 0, 0), FIntVector(0, 1, 0), FIntVector(0, -1, 0)
+			};
+
+			// Vrh stupa je iznad tla sva cetiri susjedna stupca, da nijedna baklja ne zavrsi u zemlji
+			const int32 PillarGround = GetTerrainHeight(Params, PillarX, PillarY);
+			int32 Top = PillarGround + 1;
+			for (const FIntVector& Side : Sides)
+			{
+				Top = FMath::Max(Top, GetTerrainHeight(Params, PillarX + Side.X, PillarY + Side.Y) + 1);
+			}
+			for (int32 Z = PillarGround + 1; Z <= Top; Z++)
+			{
+				WriteBlockIfAir(Blocks, Coord, FIntVector(PillarX, PillarY, Z), Params.ShowcaseWallSupport);
+			}
+
+			for (int32 Side = 0; Side < 4; Side++)
+			{
+				const FIntVector Pos = FIntVector(PillarX, PillarY, Top) + Sides[Side];
+				if (!IsValidZ(Pos.Z) || Blocks[LocalIndex(Pos)] != EBlockType::Air)
+				{
+					continue;
+				}
+				Blocks[LocalIndex(Pos)] = Params.ShowcaseWallBlock;
+				if (OutStates)
+				{
+					if (OutStates->Num() != BlocksPerChunk)
+					{
+						OutStates->SetNumZeroed(BlocksPerChunk);
+					}
+					(*OutStates)[LocalIndex(Pos)] = Params.ShowcaseWallStates[Side];
+				}
+			}
 		}
 	}
 

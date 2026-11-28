@@ -1,0 +1,14 @@
+{
+    "id": "torch",
+    "type": "shaped",
+    "pattern": [
+        "C",
+        "S"
+    ],
+    "key": {
+        "C": { "item": "Coal" },
+        "S": { "item": "Stick" }
+    },
+    "result": { "item": "Torch", "count": 4 },
+    "gridSize": 2
+}

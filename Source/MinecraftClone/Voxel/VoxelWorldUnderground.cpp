@@ -214,8 +214,8 @@ float AVoxelWorld::RunDeepVisualTest()
 	int32 BuiltBefore = 0;
 	int32 InstancesBefore = 0;
 	CountSections(BuiltBefore, InstancesBefore);
-	UE_LOG(LogTemp, Log, TEXT("[DEEP] test: igrac na povrsini (%d,%d,%d): %d odsjecaka podzemlja, %d instanci; spilja na (%d,%d,%d)"),
-		Start.X, Start.Y, Start.Z, BuiltBefore, InstancesBefore, Cave.X, Cave.Y, Cave.Z);
+	UE_LOG(LogTemp, Log, TEXT("[DEEP] test: igrac na povrsini (%d,%d,%d): %d odsjecaka podzemlja, %d instanci; spilja na (%d,%d,%d); UndergroundVisualRadius %d"),
+		Start.X, Start.Y, Start.Z, BuiltBefore, InstancesBefore, Cave.X, Cave.Y, Cave.Z, UndergroundVisualRadius);
 
 	TWeakObjectPtr<AVoxelWorld> WeakThis(this);
 	TWeakObjectPtr<AFirstPersonCharacter> WeakPlayer(Player);
@@ -286,9 +286,10 @@ float AVoxelWorld::RunDeepVisualTest()
 		UE_LOG(LogTemp, Log, TEXT("[DEEP] u spilji: igrac na Z=%d (spilja Z=%d), %d odsjecaka podzemlja, %d instanci; izlozenih blokova u krugu %d: %d, bez vizuala %d (ocekivano 0); predalekih odsjecaka %d (ocekivano 0)"),
 			PlayerGrid.Z, Cave.Z, Built, Instances, Reach, Exposed, Missing, FarBuilt);
 
-		// Natrag na povrsinu iznad spilje
-		P->SetCreativeFlying(false);
-		P->SetActorLocation(World->GridToWorld(Cave.X, Cave.Y, World->GetGroundHeightAt(Cave.X, Cave.Y) + 2),
+		// Natrag nad povrsinu, vodoravno dovoljno daleko da odsjecak spilje izade
+		// iz radijusa + 1 pri bilo kojoj postavci UndergroundVisualRadius
+		const int32 AwayX = Cave.X + (World->UndergroundVisualRadius + 3) * ChunkSize;
+		P->SetActorLocation(World->GridToWorld(AwayX, Cave.Y, World->GetGroundHeightAt(AwayX, Cave.Y) + 12),
 			false, nullptr, ETeleportType::TeleportPhysics);
 	}), 4.0f, false);
 
@@ -310,6 +311,7 @@ float AVoxelWorld::RunDeepVisualTest()
 		CountSections(Built, Instances);
 		UE_LOG(LogTemp, Log, TEXT("[DEEP] opet na povrsini: igrac na Z=%d, %d odsjecaka podzemlja, %d instanci; odsjecak spilje %s"),
 			PlayerZ, Built, Instances, bCaveSectionBuilt ? TEXT("JOS IZGRADEN") : TEXT("uklonjen"));
+		P->SetCreativeFlying(false);
 		UE_LOG(LogTemp, Log, TEXT("[DEEP] test GOTOVO: vizuali u spilji %s, uklanjanje %s -> %s"),
 			*bCaveOk ? TEXT("potpuni") : TEXT("NEPOTPUNI"), bCaveSectionBuilt ? TEXT("NIJE radilo") : TEXT("radi"),
 			*bCaveOk && !bCaveSectionBuilt ? TEXT("OK") : TEXT("FAIL"));

@@ -92,6 +92,8 @@
   },
   {
     "blockType": "OakLeaves",
+    "sturdy": false,
+    "blocksLight": false,
     "dropItemType": "OakSapling",
     "placeableFromItem": "None",
     "dropChance": 0.05,
@@ -103,6 +105,8 @@
   },
   {
     "blockType": "BirchLeaves",
+    "sturdy": false,
+    "blocksLight": false,
     "dropItemType": "BirchSapling",
     "placeableFromItem": "None",
     "dropChance": 0.05,
@@ -469,5 +473,79 @@
     "displayName": "Deepslate Emerald Ore",
     "material": "/Game/Blocks/Materials/MI_DeepslateEmeraldOre.MI_DeepslateEmeraldOre",
     "requiredToolTier": "Iron"
+  },
+  {
+    "blockType": "Torch",
+    "dropItemType": "Torch",
+    "placeableFromItem": "Torch",
+    "dropChance": 1.0,
+    "timeToDestroy": 0.0,
+    "soundGroup": "Wood",
+    "displayName": "Torch",
+    "material": "/Game/Blocks/Materials/MI_Torch.MI_Torch",
+    "behavior": "Torch",
+    "collision": false,
+    "blocksLight": false,
+    "sturdy": false,
+    "lightLevel": 14,
+    "shape": [6, 0, 6, 10, 10, 10],
+    "model": {
+      "elements": [
+        {
+          "from": [7, 0, 7],
+          "to": [9, 10, 9],
+          "faces": {
+            "down": { "uv": [7, 13, 9, 15] },
+            "up": { "uv": [7, 6, 9, 8] },
+            "north": { "uv": [7, 6, 9, 16] },
+            "south": { "uv": [7, 6, 9, 16] },
+            "west": { "uv": [7, 6, 9, 16] },
+            "east": { "uv": [7, 6, 9, 16] }
+          }
+        }
+      ]
+    }
+  },
+  {
+    "blockType": "WallTorch",
+    "dropItemType": "Torch",
+    "placeableFromItem": "None",
+    "dropChance": 1.0,
+    "timeToDestroy": 0.0,
+    "soundGroup": "Wood",
+    "displayName": "Torch",
+    "material": "/Game/Blocks/Materials/MI_Torch.MI_Torch",
+    "behavior": "WallTorch",
+    "collision": false,
+    "blocksLight": false,
+    "sturdy": false,
+    "lightLevel": 14,
+    "properties": {
+      "facing": ["north", "south", "west", "east"]
+    },
+    "variants": {
+      "facing=east": { "yaw": 0 },
+      "facing=south": { "yaw": 90 },
+      "facing=west": { "yaw": 180 },
+      "facing=north": { "yaw": 270 }
+    },
+    "shape": [0, 3, 5.5, 5, 13, 10.5],
+    "model": {
+      "elements": [
+        {
+          "from": [-1, 3.5, 7],
+          "to": [1, 13.5, 9],
+          "rotation": { "origin": [0, 3.5, 8], "axis": "z", "angle": -22.5 },
+          "faces": {
+            "down": { "uv": [7, 13, 9, 15] },
+            "up": { "uv": [7, 6, 9, 8] },
+            "north": { "uv": [7, 6, 9, 16] },
+            "south": { "uv": [7, 6, 9, 16] },
+            "west": { "uv": [7, 6, 9, 16] },
+            "east": { "uv": [7, 6, 9, 16] }
+          }
+        }
+      ]
+    }
   }
 ]

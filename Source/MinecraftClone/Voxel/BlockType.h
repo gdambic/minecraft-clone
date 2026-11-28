@@ -47,5 +47,10 @@ enum class EBlockType : uint8
 	DiamondOre,
 	DeepslateDiamondOre,
 	EmeraldOre,
-	DeepslateEmeraldOre
+	DeepslateEmeraldOre,
+
+	// Baklje (Docs/PLAN_Torches.md): stojeca i zidna su dvije vrste bloka kao u
+	// Minecraftu; smjer zidne je u stanju bloka (svojstvo facing)
+	Torch,
+	WallTorch
 };

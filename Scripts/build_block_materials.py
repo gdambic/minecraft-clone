@@ -10,6 +10,8 @@ Generira materijalni sustav za voxel blokove:
   3. izgradi MI instancu po bloku iz Content/Data/Blocks.json (jedini izvor
      istine): "material" polje daje putanju MI asseta, "masked" (default
      false) bira masked master (alpha-cutout, za lisce)
+  4. izgradi MPC_BlockLight i M_BlockModel: svjetlo blokova (baklje,
+     Docs/PLAN_Torches.md) i materijal blokova s modelom umjesto kocke
 
 Pokretanje iz editora:   Window > Developer Tools > Output Log > Python
                          exec(open(r"C:/RVS/C++GameDev/MinecraftClone/Scripts/build_block_materials.py").read())
@@ -40,6 +42,20 @@ ITEM_TEXTURE_DIR = "/Game/Items/Textures"
 
 MASTER_OPAQUE = "M_VoxelBlock"
 MASTER_MASKED = "M_VoxelBlock_Masked"
+
+# Blokovi s "model" poljem u Blocks.json (baklja): jedna tekstura T_<ime MI-ja
+# bez "MI_">, UV dolazi iz modela. C++ gradi mesh iz Blocks.json.
+MASTER_MODEL = "M_BlockModel"
+
+# Jacina svjetla blokova za sve materijale odjednom. C++ je postavlja iz
+# konzolne varijable voxel.light.intensity (AVoxelWorld::UpdateLightIntensity).
+LIGHT_COLLECTION = "MPC_BlockLight"
+LIGHT_COLLECTION_PARAM = "Intensity"
+
+# Svjetlina stranica od svjetla blokova: custom data floatovi 3-5 su stranice
+# +X +Y +Z, 6-8 su -X -Y -Z (AVoxelWorld::ComputeFaceLights). 0-2 je tint bioma.
+LIGHT_DATA_INDEX_POS = 3
+LIGHT_DATA_INDEX_NEG = 6
 
 # Sprite materijal za prikaz itema u ruci (HOLDING). C++ ga ucitava po ovoj
 # putanji (FirstPersonArmComponent) i mijenja SpriteTexture parametar po
@@ -144,7 +160,7 @@ def _pick_normal_space():
 
 def load_blocks_from_json():
     """
-    Vrati [(block_name, masked, mi_package_path, biome_tint)] iz
+    Vrati [(block_name, masked, mi_package_path, biome_tint, has_model)] iz
     Content/Data/Blocks.json.
 
     "material" polje odreduje putanju MI asseta koji se gradi - skripta time
@@ -173,7 +189,7 @@ def load_blocks_from_json():
 
         # "/Game/.../MI_X.MI_X" -> package path "/Game/.../MI_X"
         blocks.append((name, bool(entry.get("masked", False)), material.split(".")[0],
-                       entry.get("biomeTint")))
+                       entry.get("biomeTint"), "model" in entry))
 
     return blocks
 
@@ -224,7 +240,124 @@ def fix_texture_import_settings():
 # 2. Master materijali
 # ---------------------------------------------------------------------------
 
-def build_master_material(asset_name, masked, with_tint=False):
+def ensure_light_collection():
+    """
+    MPC_BlockLight sa skalarom Intensity (default 1). Postojeci se ne dira, jer
+    novi parametar dobiva novi GUID i cvorovi u materijalima bi ga izgubili.
+    """
+    package_path = "{0}/{1}".format(MATERIAL_DIR, LIGHT_COLLECTION)
+    collection = _load("{0}.{1}".format(package_path, LIGHT_COLLECTION))
+    if collection is None:
+        collection = unreal.AssetToolsHelpers.get_asset_tools().create_asset(
+            LIGHT_COLLECTION, MATERIAL_DIR, unreal.MaterialParameterCollection, None)
+        if collection is None:
+            _fail("ne mogu kreirati {0}".format(package_path))
+            return None
+        _info("kreiran {0}".format(package_path))
+
+    names = [str(p.get_editor_property("parameter_name"))
+             for p in collection.get_editor_property("scalar_parameters")]
+    if LIGHT_COLLECTION_PARAM not in names:
+        parameter = unreal.CollectionScalarParameter()
+        parameter.set_editor_property("parameter_name", LIGHT_COLLECTION_PARAM)
+        parameter.set_editor_property("default_value", 1.0)
+        collection.set_editor_property("scalar_parameters", [parameter])
+        EAL.save_loaded_asset(collection, only_if_is_dirty=False)
+    return collection
+
+
+def _scale_offset(material, source, scale, offset, x, y):
+    """source * scale + offset"""
+    multiply = _expr(material, unreal.MaterialExpressionMultiply, x, y)
+    multiply.set_editor_property("const_b", scale)
+    _connect(source, "", multiply, "A")
+    add = _expr(material, unreal.MaterialExpressionAdd, x + 150, y)
+    add.set_editor_property("const_b", offset)
+    _connect(multiply, "", add, "A")
+    return add
+
+
+def _product(material, a, b, x, y):
+    multiply = _expr(material, unreal.MaterialExpressionMultiply, x, y)
+    _connect(a, "", multiply, "A")
+    _connect(b, "", multiply, "B")
+    return multiply
+
+
+def connect_block_light(material, base_color, brightness, collection, x, y):
+    """
+    Emissive = boja bloka * boja svjetla * jacina.
+
+    brightness je svjetlina stranice koju racuna C++ (Minecraftov lightmap:
+    1.5 * l / (4 - 3l), l = razina / 15). Boja svjetla je iz istog shadera
+    (assets/minecraft/shaders/core/lightmap.fsh), toplo zuta pri srednjim
+    razinama i bijela pri punoj:
+
+        r = b
+        g = b * ((b * 0.6 + 0.4) * 0.6 + 0.4)
+        b = b * (b * b * 0.6 + 0.4)
+    """
+    green_inner = _scale_offset(material, brightness, 0.6, 0.4, x, y)
+    green_factor = _scale_offset(material, green_inner, 0.6, 0.4, x + 300, y)
+    green = _product(material, brightness, green_factor, x + 600, y)
+
+    squared = _product(material, brightness, brightness, x, y + 150)
+    blue_factor = _scale_offset(material, squared, 0.6, 0.4, x + 300, y + 150)
+    blue = _product(material, brightness, blue_factor, x + 600, y + 150)
+
+    red_green = _expr(material, unreal.MaterialExpressionAppendVector, x + 750, y)
+    _connect(brightness, "", red_green, "A")
+    _connect(green, "", red_green, "B")
+    color = _expr(material, unreal.MaterialExpressionAppendVector, x + 900, y)
+    _connect(red_green, "", color, "A")
+    _connect(blue, "", color, "B")
+
+    limited = _expr(material, unreal.MaterialExpressionClamp, x + 1050, y)
+    limited.set_editor_property("min_default", 0.0)
+    limited.set_editor_property("max_default", 1.0)
+    _connect(color, "", limited, "")
+
+    lit = _product(material, base_color, limited, x + 1200, y)
+
+    # Jacina iz MPC_BlockLight; bez kolekcije ostaje skalarni parametar
+    intensity = None
+    if collection is not None:
+        intensity = _expr(material, unreal.MaterialExpressionCollectionParameter, x + 1200, y + 150)
+        intensity.set_editor_property("collection", collection)
+        intensity.set_editor_property("parameter_name", LIGHT_COLLECTION_PARAM)
+        # Redoslijed je bitan: cvor pri postavljanju imena trazi parametar u vec
+        # postavljenoj kolekciji i pamti njegov GUID. Je li ga nasao vidi se tek
+        # pri prevodenju materijala (headless: dodaj -AllowCommandletRendering i
+        # u logu potrazi "Failed to compile").
+    if intensity is None:
+        intensity = _expr(material, unreal.MaterialExpressionScalarParameter, x + 1200, y + 150)
+        intensity.set_editor_property("parameter_name", "BlockLightIntensity")
+        intensity.set_editor_property("default_value", 1.0)
+
+    emissive = _product(material, lit, intensity, x + 1350, y)
+    _connect_property(emissive, "", material, unreal.MaterialProperty.MP_EMISSIVE_COLOR)
+
+
+def light_vector(material, data_index, fallback_name, x, y):
+    """
+    Svjetline tri stranice: custom data ISM instance + parametar za promovirani
+    actor (jedno od toga je uvijek nula, kao kod tinta).
+    """
+    custom_data = _expr(material, unreal.MaterialExpressionPerInstanceCustomData3Vector, x, y)
+    custom_data.set_editor_property("const_default_value", unreal.LinearColor(0.0, 0.0, 0.0, 0.0))
+    custom_data.set_editor_property("data_index", data_index)
+
+    fallback = _expr(material, unreal.MaterialExpressionVectorParameter, x, y + 200)
+    fallback.set_editor_property("parameter_name", fallback_name)
+    fallback.set_editor_property("default_value", unreal.LinearColor(0.0, 0.0, 0.0, 0.0))
+
+    total = _expr(material, unreal.MaterialExpressionAdd, x + 250, y)
+    _connect(custom_data, "", total, "A")
+    _connect(fallback, "", total, "B")
+    return total
+
+
+def build_master_material(asset_name, masked, with_tint=False, light_collection=None):
     """
     Graf:
 
@@ -397,6 +530,33 @@ def build_master_material(asset_name, masked, with_tint=False):
 
     _connect_property(lerp_bottom, "", material, unreal.MaterialProperty.MP_BASE_COLOR)
 
+    # --- svjetlo blokova: svjetlina stranice odabrana po normali ---
+    #   dot(saturate(N), svjetline +X +Y +Z) + dot(saturate(-N), svjetline -X -Y -Z)
+    def clamp01(source, x, y):
+        node = _expr(material, unreal.MaterialExpressionClamp, x, y)
+        node.set_editor_property("min_default", 0.0)
+        node.set_editor_property("max_default", 1.0)
+        _connect(source, "", node, "")
+        return node
+
+    flipped = _expr(material, unreal.MaterialExpressionMultiply, -700, 1300)
+    flipped.set_editor_property("const_b", -1.0)
+    _connect(normal_source, "", flipped, "A")
+
+    dot_pos = _expr(material, unreal.MaterialExpressionDotProduct, -300, 1200)
+    _connect(clamp01(normal_source, -500, 1200), "", dot_pos, "A")
+    _connect(light_vector(material, LIGHT_DATA_INDEX_POS, "LightFallbackPos", -1100, 1100), "", dot_pos, "B")
+
+    dot_neg = _expr(material, unreal.MaterialExpressionDotProduct, -300, 1500)
+    _connect(clamp01(flipped, -500, 1500), "", dot_neg, "A")
+    _connect(light_vector(material, LIGHT_DATA_INDEX_NEG, "LightFallbackNeg", -1100, 1550), "", dot_neg, "B")
+
+    face_brightness = _expr(material, unreal.MaterialExpressionAdd, -100, 1350)
+    _connect(dot_pos, "", face_brightness, "A")
+    _connect(dot_neg, "", face_brightness, "B")
+
+    connect_block_light(material, lerp_bottom, face_brightness, light_collection, 100, 1350)
+
     # --- hrapavost kao parametar da se moze podesiti po bloku ---
     roughness = _expr(material, unreal.MaterialExpressionScalarParameter, -350, 850)
     roughness.set_editor_property("parameter_name", "Roughness")
@@ -408,6 +568,68 @@ def build_master_material(asset_name, masked, with_tint=False):
         # Sve tri strane lisca koriste istu teksturu, pa je alpha bocne dovoljna.
         _connect_property(samplers["Side"], "A", material,
                           unreal.MaterialProperty.MP_OPACITY_MASK)
+
+    MEL.recompile_material(material)
+    EAL.save_loaded_asset(material, only_if_is_dirty=False)
+    return material
+
+
+# ---------------------------------------------------------------------------
+# 2a. Materijal blokova s modelom (baklja)
+# ---------------------------------------------------------------------------
+
+def build_model_master(light_collection):
+    """
+    Graf:
+
+        TextureSampleParameter2D "Texture" (UV iz modela)
+            RGB -> Base Color
+            A   -> Opacity Mask
+
+    Blok s modelom nije puna kocka, pa je cijeli osvijetljen razinom svoje
+    celije: C++ u svih 6 svjetlina upise istu vrijednost i materijal cita samo
+    prvu (R). Dvostran je da model ne ovisi o redoslijedu vrhova trokuta.
+    """
+    package_path = "{0}/{1}".format(MATERIAL_DIR, MASTER_MODEL)
+
+    material = _load("{0}.{1}".format(package_path, MASTER_MODEL))
+    if material is None:
+        material = unreal.AssetToolsHelpers.get_asset_tools().create_asset(
+            MASTER_MODEL, MATERIAL_DIR, unreal.Material, unreal.MaterialFactoryNew())
+        if material is None:
+            _fail("ne mogu kreirati materijal {0}".format(package_path))
+            return None
+        _info("kreiran {0}".format(package_path))
+    else:
+        MEL.delete_all_material_expressions(material)
+        _info("postojeci {0} - graf ocisen i gradi se ponovno".format(package_path))
+
+    material.set_editor_property("blend_mode", unreal.BlendMode.BLEND_MASKED)
+    material.set_editor_property("two_sided", True)
+    material.set_editor_property("opacity_mask_clip_value", 0.333)
+
+    sampler = _expr(material, unreal.MaterialExpressionTextureSampleParameter2D, -600, 0)
+    sampler.set_editor_property("parameter_name", "Texture")
+    fallback = _load(FALLBACK_TEXTURE)
+    if fallback is not None:
+        sampler.set_editor_property("texture", fallback)
+
+    _connect_property(sampler, "", material, unreal.MaterialProperty.MP_BASE_COLOR)
+    _connect_property(sampler, "A", material, unreal.MaterialProperty.MP_OPACITY_MASK)
+
+    own_light = light_vector(material, LIGHT_DATA_INDEX_POS, "LightFallbackPos", -1100, 500)
+    mask_r = _expr(material, unreal.MaterialExpressionComponentMask, -700, 500)
+    mask_r.set_editor_property("r", True)
+    mask_r.set_editor_property("g", False)
+    mask_r.set_editor_property("b", False)
+    mask_r.set_editor_property("a", False)
+    _connect(own_light, "", mask_r, "")
+    connect_block_light(material, sampler, mask_r, light_collection, -500, 500)
+
+    roughness = _expr(material, unreal.MaterialExpressionScalarParameter, -600, 300)
+    roughness.set_editor_property("parameter_name", "Roughness")
+    roughness.set_editor_property("default_value", DEFAULT_ROUGHNESS)
+    _connect_property(roughness, "", material, unreal.MaterialProperty.MP_ROUGHNESS)
 
     MEL.recompile_material(material)
     EAL.save_loaded_asset(material, only_if_is_dirty=False)
@@ -487,11 +709,50 @@ def _resolve_face_texture(block_name, face):
     return _load("{0}/{1}.{2}".format(TEXTURE_DIR, name, name)), name
 
 
+def build_model_instance(parent, mi_package):
+    """MI bloka s modelom: jedna tekstura T_<ime MI-ja bez "MI_"> (MI_Torch -> T_Torch)."""
+    if parent is None:
+        return False
+
+    mi_dir, mi_name = mi_package.rsplit("/", 1)
+    texture_name = "T_" + (mi_name[3:] if mi_name.startswith("MI_") else mi_name)
+    texture = _load("{0}/{1}.{2}".format(TEXTURE_DIR, texture_name, texture_name))
+    if texture is None:
+        _info("preskocen {0}: nedostaje {1}".format(mi_name, texture_name))
+        return False
+
+    instance = _load("{0}.{1}".format(mi_package, mi_name))
+    if instance is None:
+        instance = unreal.AssetToolsHelpers.get_asset_tools().create_asset(
+            mi_name, mi_dir, unreal.MaterialInstanceConstant,
+            unreal.MaterialInstanceConstantFactoryNew())
+        if instance is None:
+            _fail("ne mogu kreirati {0}".format(mi_package))
+            return False
+
+    MEL.set_material_instance_parent(instance, parent)
+    MEL.set_material_instance_texture_parameter_value(instance, "Texture", texture)
+    EAL.save_loaded_asset(instance, only_if_is_dirty=False)
+    _info("{0}  <-  Texture={1}".format(mi_name, texture_name))
+    return True
+
+
 def build_material_instances(masters, blocks):
     created = 0
     skipped = []
+    built_model_instances = set()
 
-    for block_name, masked, mi_package, biome_tint in blocks:
+    for block_name, masked, mi_package, biome_tint, has_model in blocks:
+        if has_model:
+            # Vise blokova smije dijeliti isti MI (stojeca i zidna baklja)
+            if mi_package not in built_model_instances:
+                built_model_instances.add(mi_package)
+                if build_model_instance(masters.get(MASTER_MODEL), mi_package):
+                    created += 1
+                else:
+                    skipped.append((block_name, "MI modela nije izgraden"))
+            continue
+
         parent = masters[MASTER_MASKED if masked else MASTER_OPAQUE]
         if parent is None:
             skipped.append((block_name, "master materijal nije izgraden"))
@@ -573,9 +834,13 @@ def main():
 
     # Tint grana samo u opaque masteru - lisce (masked) je izvan opsega dok
     # se biome tint ne prosiri na foliage (PLAN_Biomes.md)
+    light_collection = ensure_light_collection()
     masters = {
-        MASTER_OPAQUE: build_master_material(MASTER_OPAQUE, masked=False, with_tint=True),
-        MASTER_MASKED: build_master_material(MASTER_MASKED, masked=True),
+        MASTER_OPAQUE: build_master_material(MASTER_OPAQUE, masked=False, with_tint=True,
+                                             light_collection=light_collection),
+        MASTER_MASKED: build_master_material(MASTER_MASKED, masked=True,
+                                             light_collection=light_collection),
+        MASTER_MODEL: build_model_master(light_collection),
     }
 
     sprite_material = build_item_sprite_material()

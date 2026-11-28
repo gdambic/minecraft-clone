@@ -17,6 +17,7 @@ class ANavMeshBoundsVolume;
 class UBlockCrackComponent;
 class UMaterialInterface;
 class UMaterialInstanceDynamic;
+class UMaterialParameterCollection;
 class UPostProcessComponent;
 class AVoxelWaterVolume;
 struct FHitResult;
@@ -293,9 +294,10 @@ public:
 	 * Kutija za obrub bloka, u lokalnom prostoru bloka (ishodiste = pozicija
 	 * koju vrati GridToWorld). Dolazi iz bounds samog mesha, pa obrub prati
 	 * vizual bez pretpostavke o pivotu; ako tip nema mesh, vraca punu kocku.
-	 * Kad dodu ploce i stepenice, oblik ide odavde.
+	 * Blok s poljem "shape" u Blocks.json (baklja) vraca taj obris, zakrenut
+	 * prema stanju bloka.
 	 */
-	FBox GetBlockOutlineBox(EBlockType Type);
+	FBox GetBlockOutlineBox(EBlockType Type, uint8 State = 0);
 
 	/**
 	 * Ukloni instancu i spawnaj ABlock actor za fokusirani blok. Vraca
@@ -323,6 +325,25 @@ public:
 	/** Tip bloka iz podataka chunka; Air ako chunk nije ucitan ili je celija prazna. */
 	UFUNCTION(BlueprintPure, Category = "World")
 	EBlockType GetBlockTypeAt(FIntVector GridPosition) const;
+
+	/**
+	 * Stanje bloka na poziciji: indeks stanja unutar njegove vrste (npr. smjer
+	 * zidne baklje). 0 ako chunk nije ucitan ili blok nema svojstava.
+	 */
+	uint8 GetBlockStateAt(FIntVector GridPosition) const;
+
+	/**
+	 * Razina svjetla blokova u celiji, 0..15 (Minecraft block light): baklja
+	 * daje 14, svaki korak kroz zrak jedan manje, kroz pune blokove ne prolazi.
+	 */
+	UFUNCTION(BlueprintPure, Category = "World")
+	int32 GetBlockLightAt(FIntVector GridPosition) const;
+
+	/** Je li stranica Face bloka na poziciji cvrst oslonac (Minecraft isFaceSturdy); zrak i lisce nisu. */
+	bool IsFaceSturdy(FIntVector GridPosition, FIntVector Face) const;
+
+	/** Moze li blok te vrste i stanja opstati na poziciji (Minecraft canSurvive): baklja treba oslonac. */
+	bool CanBlockSurvive(EBlockType Type, uint8 State, FIntVector GridPosition) const;
 
 	/**
 	 * Visina površine na stupcu (X,Y) PRIJE špilja - FChunkGenerator::GetTerrainHeight
@@ -384,9 +405,27 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "World")
 	FVector GridToWorld(int32 X, int32 Y, int32 Z);
 
-	/** Postavi novi blok na zadanu grid poziciju (kao instancu). Vraca false ako je pozicija zauzeta ili chunk nije ucitan. */
+	/**
+	 * Postavi novi blok na zadanu grid poziciju (kao instancu). Vraca false ako
+	 * je pozicija zauzeta, chunk nije ucitan ili blok tu ne moze opstati.
+	 */
 	UFUNCTION(BlueprintCallable, Category = "World")
-	bool PlaceBlockAt(FIntVector GridPosition, EBlockType Type);
+	bool PlaceBlockAt(FIntVector GridPosition, EBlockType Type, uint8 State = 0);
+
+	/**
+	 * Postavi blok iz predmeta u celiju GridPosition, kao Minecraftov BlockItem.
+	 * Predmet sa zidnom inacicom (baklja) bira izmedu stojeceg i zidnog bloka
+	 * redom smjerova najblizih pogledu, s tim da je smjer suprotan kliknutoj
+	 * stranici prvi (StandingAndWallBlockItem). Vraca false ako nista nije postavljeno.
+	 */
+	bool PlaceItemAt(FIntVector GridPosition, EItemType Item, FIntVector ClickedFace, FVector LookDirection);
+
+	/**
+	 * Provjera baklji ([TORCH] u logu, Docs/PLAN_Torches.md): postavljanje na pod
+	 * i zid, odbijanje bez oslonca i na liscu, prolaznost, razine svjetla i
+	 * otpadanje kad nestane oslonac. Vraca trajanje testa u sekundama.
+	 */
+	float RunTorchTest();
 
 	/** Vraća listu svih tipova blokova koji se mogu postaviti (bez Air) */
 	UFUNCTION(BlueprintCallable, Category = "World")
@@ -438,7 +477,7 @@ private:
 	 * spremi njegov Blocks array ovdje; reload ga vraca umjesto regeneracije.
 	 * Neizmijenjeni chunkovi se bacaju u cijelosti (formula ih vraca identicne).
 	 */
-	TMap<FIntPoint, TArray<EBlockType>> RetainedModifiedChunks;
+	TMap<FIntPoint, FRetainedChunkData> RetainedModifiedChunks;
 
 	/** Hit komponenta -> (chunk, tip) za ResolveHitToGrid. Unosi zive tocno koliko i komponente. */
 	TMap<const UPrimitiveComponent*, TPair<FIntPoint, EBlockType>> ComponentToChunk;
@@ -455,7 +494,7 @@ private:
 	const FVoxelChunk* FindChunk(const FIntPoint& Coord) const;
 
 	/** Upisi tip u podatke chunka (bez vizuala). Vraca false ako chunk nije ucitan ili je Z izvan svijeta. */
-	bool SetBlockData(const FIntVector& GridPos, EBlockType Type, bool bMarkModified);
+	bool SetBlockData(const FIntVector& GridPos, EBlockType Type, bool bMarkModified, uint8 State = 0);
 
 	// === GENERACIJA ===
 
@@ -720,6 +759,70 @@ private:
 	 * None. Racuna se iz (X,Y) na zahtjev - nula stanja po bloku.
 	 */
 	FLinearColor GetBiomeTintAt(FIntVector Pos, EBiomeTintType TintType) const;
+
+	// === SVOJSTVA VRSTA BLOKOVA (Docs/PLAN_Torches.md) ===
+
+	/**
+	 * Tablice po vrsti bloka, popunjene iz registryja u BuildBlockAssetCache.
+	 * Citaju ih vruce petlje (izlozenost, svjetlo) pa ne idu kroz mapu definicija.
+	 */
+	bool bFullCubeByType[256];        // puna kocka: sakriva stranice susjeda i ima koliziju
+	bool bBlocksLightByType[256];     // ne propusta svjetlo blokova
+	uint8 EmissionByType[256];        // razina svjetla koju blok daje
+	bool bStateTransformByType[256];  // stanje bloka zakrece model
+	EBlockBehavior BehaviorByType[256];
+
+	bool IsFullCube(EBlockType Type) const { return bFullCubeByType[(uint8)Type]; }
+
+	/** Transformacija ISM instance bloka: pozicija celije i zakret prema stanju. */
+	FTransform GetBlockInstanceTransform(const FIntVector& Pos, EBlockType Type, uint8 State);
+
+	/**
+	 * Nakon promjene bloka na Pos pitaj 6 susjeda mogu li jos opstati (Minecraft
+	 * updateShape); onaj koji ne moze se unisti i ispusti predmet.
+	 */
+	void NotifyNeighborsChanged(const FIntVector& Pos);
+
+	// === SVJETLO BLOKOVA ===
+
+	/** Broj custom data floatova po instanci: 3 tint + 6 svjetlina stranica (+X +Y +Z -X -Y -Z). */
+	static constexpr int32 NumBlockCustomFloats = 9;
+
+	void SetBlockLightAt(const FIntVector& Pos, uint8 Level);
+
+	/** Sirenje svjetla iz celija u Queue (Minecraftov flood fill: susjed dobiva razinu manju za 1). */
+	void PropagateLight(TArray<FIntVector>& Queue);
+
+	/** Ugasi svjetlo celije i svega sto je iz nje dobilo svjetlo; celije s drugim izvorom idu u OutRelight. */
+	void RemoveLight(const FIntVector& Pos, TArray<FIntVector>& OutRelight);
+
+	/** Preracunaj svjetlo nakon sto je blok na Pos zamijenjen blokom NewType. */
+	void UpdateLightForBlockChange(const FIntVector& Pos, EBlockType NewType);
+
+	/** Svjetlo tek ucitanog chunka: iz izvora u njemu i iz svjetla na rubu susjednih chunkova. */
+	void InitChunkLight(FVoxelChunk& Chunk);
+
+	/** Ima li chunk ili neki od 4 susjeda ikakvo svjetlo - inace su svjetline stranica nule. */
+	bool ChunkMayHaveLight(const FVoxelChunk& Chunk) const;
+
+	/** Svjetlina 6 stranica bloka (red kao custom data); blok koji nije puna kocka svijetli razinom svoje celije. */
+	void ComputeFaceLights(const FIntVector& Pos, EBlockType Type, float* OutSix) const;
+
+	/** Upisi svjetline stranica u vizual bloka (ISM instanca ili promovirani actor). */
+	void RefreshBlockLightVisual(const FIntVector& Pos);
+
+	/** Osvjezi vizuale blokova uz celije kojima se svjetlo promijenilo (jednom po frameu). */
+	void FlushLightDirty();
+
+	/** Prenesi voxel.light.intensity u MPC_BlockLight kad se promijeni. */
+	void UpdateLightIntensity();
+
+	TSet<FIntVector> DirtyLightCells;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UMaterialParameterCollection> BlockLightCollection = nullptr;
+
+	float AppliedLightIntensity = -1.f;
 
 	/** Ima li blok barem jednu izloženu (vidljivu) stranu. Dno svijeta (Z<WorldMinZ) se tretira kao čvrsto. */
 	bool IsBlockExposed(FIntVector Pos) const;

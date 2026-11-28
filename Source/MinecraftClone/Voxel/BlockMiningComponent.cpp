@@ -99,9 +99,19 @@ float UBlockMiningComponent::GetBreakTime(FIntVector GridPos, EItemType HeldItem
 	const UBlockRegistry* Registry = UBlockRegistry::Get(this);
 	const FBlockDefinition* Def = Registry && Type != EBlockType::Air
 		? Registry->GetBlockDefinition(Type) : nullptr;
-	if (!Def || Def->TimeToDestroy <= 0.0f)
+	if (!Def || Def->TimeToDestroy < 0.0f)
 	{
 		return -1.0f;
+	}
+
+	// Minecraft instabreak (baklja): blok puca na prvi udarac bilo cime
+	if (Def->TimeToDestroy == 0.0f)
+	{
+		if (bOutCanHarvest)
+		{
+			*bOutCanHarvest = true;
+		}
+		return 0.0f;
 	}
 
 	// Minecraft model: pravi alat kopa brze za svoj mining speed, a blok koji

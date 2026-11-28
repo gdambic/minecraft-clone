@@ -574,7 +574,7 @@ void AFirstPersonCharacter::ShowBlockOutline(FIntVector GridPos, EBlockType Type
 	}
 
 	OutlineGridPos = GridPos;
-	BlockOutlineComponent->SetOutlineBox(VoxelWorld->GetBlockOutlineBox(Type));
+	BlockOutlineComponent->SetOutlineBox(VoxelWorld->GetBlockOutlineBox(Type, VoxelWorld->GetBlockStateAt(GridPos)));
 	BlockOutlineComponent->SetWorldLocation(
 		VoxelWorld->GridToWorld(GridPos.X, GridPos.Y, GridPos.Z));
 	BlockOutlineComponent->SetVisibility(true);
@@ -664,13 +664,6 @@ void AFirstPersonCharacter::PlaceBlock()
 		return;
 	}
 
-	// Konvertiraj u BlockType
-	EBlockType BlockToPlace = UInventoryComponent::ItemTypeToBlockType(Slot.ItemType);
-	if (BlockToPlace == EBlockType::Air)
-	{
-		return; // Ovaj item se ne može postaviti kao blok
-	}
-
 	// Izračunaj poziciju novog bloka na temelju normale
 	FIntVector CurrentGridPos = CurrentlyLookedAtBlock->GridPosition;
 	FIntVector NormalOffset(
@@ -680,8 +673,11 @@ void AFirstPersonCharacter::PlaceBlock()
 	);
 	FIntVector NewBlockPos = CurrentGridPos + NormalOffset;
 
-	// Postavi novi blok
-	const bool bPlaced = VoxelWorld->PlaceBlockAt(NewBlockPos, BlockToPlace);
+	// Postavi novi blok. Koji blok i u kojem stanju odlucuje svijet (baklja
+	// bira pod ili zid prema kliknutoj stranici i pogledu, kao u Minecraftu).
+	const FVector LookDirection = FirstPersonCameraComponent
+		? FirstPersonCameraComponent->GetForwardVector() : GetActorForwardVector();
+	const bool bPlaced = VoxelWorld->PlaceItemAt(NewBlockPos, Slot.ItemType, NormalOffset, LookDirection);
 	if (bPlaced)
 	{
 		// Oduzmi item iz hotbar slota

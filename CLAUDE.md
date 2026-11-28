@@ -124,6 +124,13 @@ vrati na površinu; `[DEEP] u spilji: ... bez vizuala 0 ... predalekih odsjecaka
 test na kraju ispiše `[PERF] vizuali u streamingu` (prosjek ms i instanci po chunku) i
 `[PERF] vizuali podzemlja` (broj i trajanje odsječaka). Proces se nakon testa sam ugasi.
 
+Baklje provjerava `voxel.torchtest`: nad igračem sagradi mali poligon, postavi baklju na
+pod i na zid, pokuša na strop i na lišće, provjeri razine svjetla (i protiv neovisnog
+izračuna), prolaznost, fokus, ponovno učitavanje chunka, otpadanje i recept;
+`[TORCH] ... -> OK` po provjeri i `[TORCH] test GOTOVO: neuspjelih provjera 0 -> OK` =
+prolaz. `voxel.light.intensity` (1.0) namješta jačinu svjetla blokova. Proces se nakon
+testa sam ugasi.
+
 Knockback se mjeri komandom `voxel.kbtest [jacina...]` (default `0.4 0.9`
 blokova/tick): odbaci stvorenje najbliže igraču i u log ispiše `[KB]` linije s
 jačinom, brzinom i dometom pri doskoku. U headless runu (`-ExecCmds="voxel.kbtest"`)
@@ -144,6 +151,7 @@ proces se nakon testova sam ugasi da se log flusha.
 | `FChunkGenerator` | Čista, thread-safe generacija podataka chunka (teren+špilje+stabla+showcase, `ChunkGenerator.h`) |
 | `FCaveGenerator` | Špilje po Minecraftovim formulama (dvorane, tuneli, uski prolazi, ulazi); čista funkcija seeda i koordinata (`CaveGenerator.h`) |
 | `FUndergroundGenerator` | Slojevi kamena (Bedrock, Deepslate) i nakupine kamena i ruda - port Minecraftovog `OreFeature` (`UndergroundGenerator.h`) |
+| `BlockModel` | Model bloka koji nije kocka: Minecraftov JSON modela iz `Blocks.json` -> static mesh u memoriji (`BlockModel.h`) |
 | `ABlock` | Individual voxel actor with mesh, destruction system, drop spawning |
 | `AItemDrop` | Physics-enabled dropped items with auto-pickup |
 | `UInventoryComponent` | Slot-based player inventory (36 slots: 27 main + 9 hotbar) |
@@ -156,9 +164,10 @@ proces se nakon testova sam ugasi da se log flusha.
 // EBlockType: Air, Dirt, Stone, Grass, OakLog, BirchLog, OakLeaves, BirchLeaves, ...
 //   podzemlje: Cobblestone, Deepslate, CobbledDeepslate, Bedrock, Granite, Diorite, Tuff,
 //   pa po dvije inacice svake rude: CoalOre/DeepslateCoalOre, Iron, Copper, Gold, Redstone, Lapis, Diamond, Emerald
+//   baklje: Torch, WallTorch (smjer zidne je u stanju bloka)
 // EItemType: None, Dirt, Stone, Grass, OakLog, BirchLog, OakSapling, BirchSapling, ...
 //   podzemlje: Cobblestone, Deepslate, CobbledDeepslate, Granite, Diorite, Tuff, Flint, Coal,
-//   RawIron, RawCopper, RawGold, Redstone, LapisLazuli, Diamond, Emerald
+//   RawIron, RawCopper, RawGold, Redstone, LapisLazuli, Diamond, Emerald, Torch
 // Nove vrijednosti se dodaju NA KRAJ enuma.
 ```
 
@@ -184,6 +193,8 @@ Source/MinecraftClone/
 
 - `Content/Data/Blocks.json`, `Items.json` - definicije blokova/itema; učitava ih `UBlockRegistry` (enum vrijednost bez JSON unosa dobije fallback: siva kocka + Error u logu)
 - `Content/Data/WorldGen/Underground.json` - podzemlje: `caves` (uključivanje po vrsti, pragovi, veličina, zaštita mora), `layers` (Bedrock, Deepslate) i `features` (nakupine kamena i rude: blok, što zamjenjuje, pokušaja po chunku, veličina, raspon visine, biomi). Čita ga `FUndergroundConfig::Load`. `layers` i `features` iz Minecraft jara upisuje `python Scripts/build_underground_config.py`; nova ruda = blok u `Blocks.json`, predmet u `Items.json` i unos u `features`
+- Svojstva bloka po Minecraftu u `Blocks.json` (Docs/PLAN_Torches.md): `collision` (false = nije puna kocka: ne sakriva susjede, prolazan, pogađa ga samo nišan), `blocksLight`, `sturdy` (oslonac za baklju), `lightLevel` (0-15), `behavior` (Torch/WallTorch = pravila oslonca), `properties` + `variants` (stanja bloka i zakret modela po stanju), `shape` (obris za ciljanje) i `model` (Minecraftov JSON modela). `Items.json`: `wallBlock` = zidna inačica bloka koji predmet postavlja
+- Teksturu baklje i materijale sa svjetlom blokova uvozi Tools > MinecraftClone > Import Torch (`Scripts/import_torch_assets.py`); `MPC_BlockLight` nosi jačinu svjetla za sve materijale blokova
 - Teksture blokova i predmeta podzemlja uvozi Tools > MinecraftClone > Import Underground Blocks (`Scripts/import_underground_assets.py`, izvlači ih iz jara i gradi materijale i ikone)
 - `Content/Data/Recipes/` - crafting recepti (JSON, file-per-recipe)
 - `Content/Data/BlockSounds.json` - sampleovi po sound grupi; assetovi u `Content/Audio/Blocks/` (uvozi ih `Scripts/import_block_sounds.py`)
@@ -212,7 +223,12 @@ Configured in `MinecraftClone.Build.cs`:
 EBlockType GetBlockTypeAt(FIntVector GridPosition);   // tip na poziciji (izvor istine)
 ABlock* GetBlock(int32 X, int32 Y, int32 Z);          // SAMO promovirani (fokusirani) blok
 void SetBlockType(int32 X, int32 Y, int32 Z, EBlockType Type);
-bool PlaceBlockAt(FIntVector GridPosition, EBlockType Type);
+bool PlaceBlockAt(FIntVector GridPosition, EBlockType Type, uint8 State = 0);
+// Celija = vrsta bloka + stanje (Minecraft block state) + razina svjetla blokova.
+uint8 GetBlockStateAt(FIntVector GridPosition);       // indeks stanja unutar vrste (smjer zidne baklje)
+int32 GetBlockLightAt(FIntVector GridPosition);       // 0..15; baklja 14, pad 1 po bloku, ne prolazi kroz pune blokove
+bool PlaceItemAt(FIntVector Pos, EItemType Item, FIntVector ClickedFace, FVector LookDir);  // Minecraftovo postavljanje (baklja: pod ili zid)
+bool CanBlockSurvive(EBlockType Type, uint8 State, FIntVector Pos);  // oslonac; blok bez oslonca otpada kad mu se promijeni susjed
 FVector GridToWorld(int32 X, int32 Y, int32 Z);
 int32 GetTerrainHeightAt(int32 X, int32 Y);           // povrsina PRIJE spilja (more, pretrage kopna)
 int32 GetGroundHeightAt(int32 X, int32 Y);            // najvisi cvrsti blok - za postavljanje igraca/mobova
@@ -254,7 +270,8 @@ void AVoxelWorld::DestroyBlockAt(FIntVector Pos, bool bDropItems = true);
 // Drop i alat (Blocks.json): "requiresTool" + "requiredToolTier" (Stone/Iron/Diamond) =
 // slabijim alatom se blok razbije bez dropa; "dropCountMin"/"dropCountMax" = broj komada;
 // "rareDropItemType" + "rareDropChance" = rijedak drop umjesto obicnog (Gravel -> Flint);
-// "timeToDestroy" <= 0 = blok se ne moze iskopati (Bedrock). Razine alata su u ToolData.cpp.
+// "timeToDestroy" 0 = puca trenutno (baklja), negativno = ne moze se iskopati (Bedrock).
+// Razine alata su u ToolData.cpp.
 static bool UToolDataLibrary::CanHarvest(EItemType Item, EToolClass BlockToolClass,
                                          bool bBlockRequiresTool, EToolTier RequiredTier);
 
@@ -297,6 +314,7 @@ Detailed docs in Croatian available in `Docs/`:
 - `PLAN_Oceans.md` - Razina mora (Z=0) i noise kontinentalnosti: oceani, obala, dno mora, spawn na kopnu (implementirano)
 - `PLAN_Water.md` - Realistična voda: vlastita ploha po chunku sa Single Layer Water materijalom, valovi, pogled ispod vode, plivanje, plutanje dropova, mobovi izvan mora (zatvoreno; ostatak odgođen)
 - `PLAN_Underground.md` - Podzemlje po Minecraftu: špilje iz šuma (dvorane, tuneli, uski prolazi), pravi Minecraftovi blokovi kamena i rude, konfiguracija u Underground.json (implementirano: špilje, slojevi kamena, nakupine i rude; kamena i željezna krampa još ne postoje)
+- `PLAN_Torches.md` - Baklje po Minecraftu: stanje bloka po ćeliji, svojstva bloka (kolizija, obris, oslonac), postavljanje, razine svjetla blokova (implementirano; svjetlo na igraču i mobovima te čestice još ne)
 - `PLAN_Chunks.md` - Chunk sustav i beskonačan svijet (streaming oko igrača, async generacija)
 - `PLAN_BlockOutline.md` - Minecraft obrub fokusiranog bloka (screen-space linije u vlastitom scene proxyju)
 - `PLAN_BlockSounds.md` - Zvukovi kopanja i lomljenja blokova (sound grupe po materijalu, plan)

@@ -1,5 +1,6 @@
 #include "BlockRegistry.h"
 #include "Engine/GameInstance.h"
+#include "Engine/World.h"
 #include "Engine/Texture2D.h"
 #include "Sound/SoundBase.h"
 #include "Sound/SoundAttenuation.h"
@@ -52,6 +53,122 @@ namespace
 			if (Value.IsValid() && Value->TryGetString(PackagePath) && !PackagePath.IsEmpty())
 			{
 				OutPaths.Add(MakeAssetPath(PackagePath));
+			}
+		}
+	}
+
+	/**
+	 * Polja bloka koja JsonObjectToUStruct ne zna procitati: boolovi s citljivim
+	 * imenom, svojstva stanja, varijante, obris i model (Docs/PLAN_Torches.md).
+	 */
+	void ReadBlockExtras(const TSharedPtr<FJsonObject>& Entry, FBlockDefinition& Def)
+	{
+		const FString BlockName = StaticEnum<EBlockType>()->GetNameStringByValue((int64)Def.BlockType);
+
+		Entry->TryGetBoolField(TEXT("requiresTool"), Def.bRequiresTool);
+		Entry->TryGetBoolField(TEXT("collision"), Def.bHasCollision);
+		Entry->TryGetBoolField(TEXT("blocksLight"), Def.bBlocksLight);
+		Entry->TryGetBoolField(TEXT("sturdy"), Def.bSturdy);
+
+		// "properties": { "facing": ["north", "south", "west", "east"] }
+		const TSharedPtr<FJsonObject>* Properties = nullptr;
+		if (Entry->TryGetObjectField(TEXT("properties"), Properties))
+		{
+			for (const TPair<FString, TSharedPtr<FJsonValue>>& Pair : (*Properties)->Values)
+			{
+				FBlockStateProperty Property;
+				Property.Name = Pair.Key;
+				const TArray<TSharedPtr<FJsonValue>>* Values = nullptr;
+				if (Pair.Value.IsValid() && Pair.Value->TryGetArray(Values))
+				{
+					for (const TSharedPtr<FJsonValue>& Value : *Values)
+					{
+						Property.Values.Add(Value->AsString());
+					}
+				}
+				if (Property.Values.Num() > 0)
+				{
+					Def.StateProperties.Add(Property);
+				}
+			}
+			if (Def.GetNumStates() > 256)
+			{
+				UE_LOG(LogTemp, Error, TEXT("BlockRegistry: blok '%s' ima vise od 256 stanja - svojstva odbacena"), *BlockName);
+				Def.StateProperties.Reset();
+			}
+		}
+
+		// "variants": { "facing=east": { "yaw": 0 }, ... } - kao Minecraftov blockstates JSON
+		const TSharedPtr<FJsonObject>* Variants = nullptr;
+		if (Entry->TryGetObjectField(TEXT("variants"), Variants))
+		{
+			Def.StateYaw.Init(0.f, Def.GetNumStates());
+			for (const TPair<FString, TSharedPtr<FJsonValue>>& Pair : (*Variants)->Values)
+			{
+				const TSharedPtr<FJsonObject>* Variant = nullptr;
+				if (!Pair.Value.IsValid() || !Pair.Value->TryGetObject(Variant))
+				{
+					continue;
+				}
+
+				// Kljuc "svojstvo=vrijednost[,svojstvo=vrijednost]" -> indeks stanja
+				uint8 State = 0;
+				bool bKeyOk = true;
+				TArray<FString> Parts;
+				Pair.Key.ParseIntoArray(Parts, TEXT(","));
+				for (const FString& Part : Parts)
+				{
+					FString Name, Value;
+					if (!Part.Split(TEXT("="), &Name, &Value) || Def.GetStatePropertyValue(0, Name).IsEmpty())
+					{
+						bKeyOk = false;
+						break;
+					}
+					const uint8 Before = State;
+					State = Def.WithStatePropertyValue(State, Name, Value);
+					bKeyOk &= State != Before || Def.GetStatePropertyValue(State, Name) == Value;
+				}
+				if (!bKeyOk)
+				{
+					UE_LOG(LogTemp, Error, TEXT("BlockRegistry: blok '%s' ima nepoznatu varijantu '%s'"), *BlockName, *Pair.Key);
+					continue;
+				}
+
+				double Yaw = 0.0;
+				(*Variant)->TryGetNumberField(TEXT("yaw"), Yaw);
+				Def.StateYaw[State] = (float)Yaw;
+			}
+		}
+
+		// "shape": [x1, y1, z1, x2, y2, z2] u Minecraftovim pikselima celije
+		const TArray<TSharedPtr<FJsonValue>>* Shape = nullptr;
+		if (Entry->TryGetArrayField(TEXT("shape"), Shape))
+		{
+			if (Shape->Num() == 6)
+			{
+				const FVector A = BlockModel::McToLocal(FVector3f((float)(*Shape)[0]->AsNumber(), (float)(*Shape)[1]->AsNumber(), (float)(*Shape)[2]->AsNumber()), 1.f);
+				const FVector B = BlockModel::McToLocal(FVector3f((float)(*Shape)[3]->AsNumber(), (float)(*Shape)[4]->AsNumber(), (float)(*Shape)[5]->AsNumber()), 1.f);
+				Def.Shape = FBox(A.ComponentMin(B), A.ComponentMax(B));
+				Def.bHasShape = true;
+			}
+			else
+			{
+				UE_LOG(LogTemp, Error, TEXT("BlockRegistry: blok '%s' - 'shape' treba 6 brojeva"), *BlockName);
+			}
+		}
+
+		const TSharedPtr<FJsonObject>* ModelJson = nullptr;
+		if (Entry->TryGetObjectField(TEXT("model"), ModelJson))
+		{
+			TSharedPtr<FBlockModel> Model = MakeShared<FBlockModel>();
+			FString Error;
+			if (BlockModel::Parse(*ModelJson, *Model, Error))
+			{
+				Def.Model = Model;
+			}
+			else
+			{
+				UE_LOG(LogTemp, Error, TEXT("BlockRegistry: blok '%s' - %s"), *BlockName, *Error);
 			}
 		}
 	}
@@ -162,13 +279,9 @@ void UBlockRegistry::LoadBlocksFromJson()
 		}
 
 		// JsonObjectToUStruct trazi polje imena "bRequiresTool" (authored name
-		// bool propertyja); JSON koristi citljiviji "requiresTool" pa ga
-		// ucitavamo rucno.
-		bool bRequiresTool = false;
-		if ((*EntryObject)->TryGetBoolField(TEXT("requiresTool"), bRequiresTool))
-		{
-			Def.bRequiresTool = bRequiresTool;
-		}
+		// bool propertyja); JSON koristi citljiviji "requiresTool" pa se boolovi
+		// i slozena polja ucitavaju rucno.
+		ReadBlockExtras(*EntryObject, Def);
 
 		if (Def.Mesh.IsNull())
 		{

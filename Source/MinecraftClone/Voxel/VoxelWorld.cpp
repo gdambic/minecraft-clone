@@ -33,6 +33,7 @@
 #include "FirstPersonCharacter.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Math/RandomStream.h"
+#include "Materials/MaterialParameterCollection.h"
 #include "Tasks/Task.h"
 
 using namespace VoxelGrid;
@@ -165,6 +166,16 @@ AVoxelWorld::AVoxelWorld()
 	BootstrapRadius = 2;
 	UndergroundVisualRadius = 2;
 	SurfaceVisualDepth = 8;
+
+	// Dok registry ne popuni tablice, svaki blok osim zraka je puna kocka
+	for (int32 Type = 0; Type < 256; Type++)
+	{
+		bFullCubeByType[Type] = Type != (int32)EBlockType::Air;
+		bBlocksLightByType[Type] = Type != (int32)EBlockType::Air;
+		EmissionByType[Type] = 0;
+		bStateTransformByType[Type] = false;
+		BehaviorByType[Type] = EBlockBehavior::None;
+	}
 	WaterMaterial = TSoftObjectPtr<UMaterialInterface>(FSoftObjectPath(TEXT("/Game/Water/MI_Water.MI_Water")));
 	WaterSubdivisions = 2;
 	WaterSurfaceHeight = 0.875f;
@@ -221,6 +232,8 @@ void AVoxelWorld::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
 	ApplyPendingChunkVisuals();
+	FlushLightDirty();
+	UpdateLightIntensity();
 	UpdateWaterVolume();
 	UpdateUnderwater();
 	LogCreaturesInSea(DeltaSeconds);
@@ -341,7 +354,17 @@ EBlockType AVoxelWorld::GetBlockTypeAt(FIntVector GridPosition) const
 	return Chunk->GetBlock(GridToLocal(GridPosition));
 }
 
-bool AVoxelWorld::SetBlockData(const FIntVector& GridPos, EBlockType Type, bool bMarkModified)
+uint8 AVoxelWorld::GetBlockStateAt(FIntVector GridPosition) const
+{
+	const FVoxelChunk* Chunk = IsValidZ(GridPosition.Z) ? FindChunk(GridToChunk(GridPosition)) : nullptr;
+	if (!Chunk || Chunk->State == EChunkState::Generating)
+	{
+		return 0;
+	}
+	return Chunk->GetState(GridToLocal(GridPosition));
+}
+
+bool AVoxelWorld::SetBlockData(const FIntVector& GridPos, EBlockType Type, bool bMarkModified, uint8 State)
 {
 	if (!IsValidZ(GridPos.Z))
 	{
@@ -357,7 +380,7 @@ bool AVoxelWorld::SetBlockData(const FIntVector& GridPos, EBlockType Type, bool 
 		return false;
 	}
 
-	Chunk->SetBlock(GridToLocal(GridPos), Type);
+	Chunk->SetBlock(GridToLocal(GridPos), Type, State);
 	if (bMarkModified)
 	{
 		Chunk->bModified = true;
@@ -503,6 +526,19 @@ FChunkGenParams AVoxelWorld::MakeChunkGenParams() const
 		});
 		for (const FBlockDefinition& Def : Definitions)
 		{
+			// Zidni blok ne moze stajati sam u redu: ide na stup iza redova
+			if (Def.Behavior == EBlockBehavior::WallTorch)
+			{
+				static const FIntVector Sides[4] = {
+					FIntVector(1, 0, 0), FIntVector(-1, 0, 0), FIntVector(0, 1, 0), FIntVector(0, -1, 0)
+				};
+				Params.ShowcaseWallBlock = Def.BlockType;
+				for (int32 Side = 0; Side < 4; Side++)
+				{
+					Params.ShowcaseWallStates[Side] = Def.WithStatePropertyValue(0, TEXT("facing"), BlockFacing::NameFromDirection(Sides[Side]));
+				}
+				continue;
+			}
 			Params.ShowcaseBlocks.Add(Def.BlockType);
 		}
 	}
@@ -854,21 +890,28 @@ FVoxelChunk& AVoxelWorld::LoadChunkData(const FIntPoint& Coord)
 	TUniquePtr<FVoxelChunk> Chunk = MakeUnique<FVoxelChunk>(Coord);
 
 	// Sacuvani izmijenjeni podaci POBJEDUJU regeneraciju (plan, rizik 6)
-	if (TArray<EBlockType>* Retained = RetainedModifiedChunks.Find(Coord))
+	if (FRetainedChunkData* Retained = RetainedModifiedChunks.Find(Coord))
 	{
-		Chunk->Blocks = MoveTemp(*Retained);
+		Chunk->Blocks = MoveTemp(Retained->Blocks);
+		Chunk->States = MoveTemp(Retained->States);
 		Chunk->Biomes = FChunkGenerator::GenerateChunkBiomes(CachedGenParams, Coord);
 		Chunk->bModified = true;
 		RetainedModifiedChunks.Remove(Coord);
 	}
 	else
 	{
-		Chunk->Blocks = FChunkGenerator::GenerateChunkData(CachedGenParams, Coord, Chunk->Biomes);
+		TArray<uint8> States;
+		Chunk->Blocks = FChunkGenerator::GenerateChunkData(CachedGenParams, Coord, Chunk->Biomes, &States);
+		if (States.Num() == BlocksPerChunk)
+		{
+			Chunk->States = MoveTemp(States);
+		}
 	}
 
 	Chunk->State = EChunkState::DataReady;
 	FVoxelChunk& Added = *Chunks.Add(Coord, MoveTemp(Chunk));
 	SoakVerifyChunkData(Added);
+	InitChunkLight(Added);
 	return Added;
 }
 
@@ -897,7 +940,7 @@ void AVoxelWorld::RequestChunkDataAsync(const FIntPoint& Coord)
 		Done.RequestId = RequestId;
 
 		const double Start = FPlatformTime::Seconds();
-		Done.Blocks = FChunkGenerator::GenerateChunkData(Params, Coord, Done.Biomes);
+		Done.Blocks = FChunkGenerator::GenerateChunkData(Params, Coord, Done.Biomes, &Done.States);
 		Done.GenMs = (FPlatformTime::Seconds() - Start) * 1000.0;
 
 		Queue->Enqueue(MoveTemp(Done));
@@ -919,8 +962,13 @@ void AVoxelWorld::DrainCompletedChunkData()
 
 		Chunk->Blocks = MoveTemp(Done.Blocks);
 		Chunk->Biomes = MoveTemp(Done.Biomes);
+		if (Done.States.Num() == BlocksPerChunk)
+		{
+			Chunk->States = MoveTemp(Done.States);
+		}
 		Chunk->State = EChunkState::DataReady;
 		SoakVerifyChunkData(*Chunk);
+		InitChunkLight(*Chunk);
 		UE_LOG(LogTemp, Verbose, TEXT("[PERF] Chunk (%d,%d) gen=%.2fms (worker)"),
 			Done.Coord.X, Done.Coord.Y, Done.GenMs);
 	}
@@ -1003,7 +1051,9 @@ void AVoxelWorld::UnloadChunk(const FIntPoint& Coord)
 	// neizmijenjeni se baca u cijelosti (formula ga vraca identicnog)
 	if (Chunk->bModified)
 	{
-		RetainedModifiedChunks.Add(Coord, MoveTemp(Chunk->Blocks));
+		FRetainedChunkData& Retained = RetainedModifiedChunks.Add(Coord);
+		Retained.Blocks = MoveTemp(Chunk->Blocks);
+		Retained.States = MoveTemp(Chunk->States);
 	}
 
 	Chunks.Remove(Coord);
@@ -1322,7 +1372,7 @@ void AVoxelWorld::BuildDeepSection(FVoxelChunk& Chunk, int32 Section)
 				const FIntVector Local(LocalX, LocalY, Z);
 				const EBlockType Type = Chunk.Blocks[LocalIndex(Local)];
 				// Promovirani actor vec predstavlja svoj blok (instanca i actor nikad zajedno)
-				if (Type != EBlockType::Air && IsBlockExposedInChunk(Chunk, Local) && !Blocks.Contains(Origin + Local))
+				if (Type != EBlockType::Air && (!IsFullCube(Type) || IsBlockExposedInChunk(Chunk, Local)) && !Blocks.Contains(Origin + Local))
 				{
 					ExposedByType.FindOrAdd(Type).Add(Origin + Local);
 				}
@@ -1476,7 +1526,7 @@ void AVoxelWorld::ApplyChunkVisuals(FVoxelChunk& Chunk)
 				{
 					continue;
 				}
-				if (IsBlockExposedInChunk(Chunk, FIntVector(LocalX, LocalY, Z)))
+				if (!IsFullCube(Type) || IsBlockExposedInChunk(Chunk, FIntVector(LocalX, LocalY, Z)))
 				{
 					ExposedByType.FindOrAdd(Type).Add(Origin + FIntVector(LocalX, LocalY, Z));
 				}
@@ -2356,7 +2406,8 @@ bool AVoxelWorld::IsBlockExposed(FIntVector Pos) const
 			continue;
 		}
 
-		if (GetBlockTypeAt(N) == EBlockType::Air)
+		// Blok koji nije puna kocka (zrak, baklja) ne sakriva stranicu
+		if (!IsFullCube(GetBlockTypeAt(N)))
 		{
 			return true;
 		}
@@ -2392,7 +2443,7 @@ bool AVoxelWorld::IsBlockExposedInChunk(const FVoxelChunk& Chunk, const FIntVect
 		const EBlockType NeighborType = bInsideChunk
 			? Chunk.Blocks[LocalIndex(N)]
 			: GetBlockTypeAt(ChunkOrigin(Chunk.Coord) + N);
-		if (NeighborType == EBlockType::Air)
+		if (!IsFullCube(NeighborType))
 		{
 			return true;
 		}
@@ -2401,8 +2452,18 @@ bool AVoxelWorld::IsBlockExposedInChunk(const FVoxelChunk& Chunk, const FIntVect
 	return false;
 }
 
-FBox AVoxelWorld::GetBlockOutlineBox(EBlockType Type)
+FBox AVoxelWorld::GetBlockOutlineBox(EBlockType Type, uint8 State)
 {
+	// Blok s vlastitim obrisom (baklja): obris je zadan za stanje bez zakreta,
+	// a zakret stanja ga okrece oko okomite osi
+	UBlockRegistry* Registry = UBlockRegistry::Get(this);
+	const FBlockDefinition* Def = Registry ? Registry->GetBlockDefinition(Type) : nullptr;
+	if (Def && Def->bHasShape)
+	{
+		const FBox Shape(Def->Shape.Min * BlockSize, Def->Shape.Max * BlockSize);
+		return Shape.TransformBy(FTransform(FRotator(0.f, Def->GetStateYaw(State), 0.f)));
+	}
+
 	// Mesh je izvor istine o tome gdje blok vizualno pocinje i gdje zavrsava:
 	// i ISM instanca i promovirani actor stoje na GridToWorld(Pos), pa su
 	// bounds mesha u lokalnom prostoru upravo kutija koju treba obrubiti.
@@ -2456,8 +2517,9 @@ ABlock* AVoxelWorld::PromoteToActor(FIntVector Pos)
 	SpawnParams.Owner = this;
 	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
 
-	// Spawn generički ABlock i inicijaliziraj iz registry-a
-	ABlock* NewBlock = GetWorld()->SpawnActor<ABlock>(ABlock::StaticClass(), WorldPos, FRotator::ZeroRotator, SpawnParams);
+	// Spawn generički ABlock i inicijaliziraj iz registry-a; zakret dolazi iz stanja bloka
+	const FRotator Rotation(0.f, BlockDefinition->GetStateYaw(GetBlockStateAt(Pos)), 0.f);
+	ABlock* NewBlock = GetWorld()->SpawnActor<ABlock>(ABlock::StaticClass(), WorldPos, Rotation, SpawnParams);
 
 	if (NewBlock)
 	{
@@ -2465,21 +2527,33 @@ ABlock* AVoxelWorld::PromoteToActor(FIntVector Pos)
 		// tek nakon uspjesnog spawna (neuspjeh ne smije "izbrisati" vizual)
 		RemoveBlockInstance(Pos);
 
-		// Actor nije ISM instanca pa custom data tint za njega ne postoji -
-		// isti tint ide kroz TintFallback parametar (na ISM putu je bijel,
-		// ovdje custom data pada na bijeli default: uvijek mnozi tocno jedna boja)
+		// Actor nije ISM instanca pa custom data za njega ne postoji - tint i
+		// svjetlo blokova idu kroz parametre (TintFallback, LightFallbackPos/Neg).
+		// Na ISM putu su parametri neutralni, ovdje custom data pada na default.
 		UMaterialInterface* Material = BlockAssets.Material;
-		if (Material && BlockDefinition->BiomeTint != EBiomeTintType::None)
+		if (Material)
 		{
-			UMaterialInstanceDynamic* TintedMID = UMaterialInstanceDynamic::Create(Material, NewBlock);
-			TintedMID->SetVectorParameterValue(TEXT("TintFallback"),
-				GetBiomeTintAt(Pos, BlockDefinition->BiomeTint));
-			Material = TintedMID;
+			UMaterialInstanceDynamic* MID = UMaterialInstanceDynamic::Create(Material, NewBlock);
+			if (BlockDefinition->BiomeTint != EBiomeTintType::None)
+			{
+				MID->SetVectorParameterValue(TEXT("TintFallback"), GetBiomeTintAt(Pos, BlockDefinition->BiomeTint));
+			}
+			Material = MID;
 		}
 
 		NewBlock->SetGridPosition(Pos);
 		NewBlock->InitializeFromRegistry(Type, *BlockDefinition, BlockAssets.Mesh, Material);
+
+		// Blok bez kolizije: igrac prolazi, pogada ga samo zraka nisana
+		if (!BlockDefinition->bHasCollision && NewBlock->MeshComponent)
+		{
+			NewBlock->MeshComponent->SetCollisionResponseToAllChannels(ECR_Ignore);
+			NewBlock->MeshComponent->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
+			NewBlock->MeshComponent->SetCanEverAffectNavigation(false);
+		}
+
 		Blocks.Add(Pos, NewBlock);
+		RefreshBlockLightVisual(Pos);
 	}
 
 	return NewBlock;
@@ -2550,17 +2624,22 @@ FChunkInstanceSet* AVoxelWorld::EnsureChunkInstanceSet(FVoxelChunk& Chunk, EBloc
 	ISM->SetCollisionProfileName(TEXT("BlockAll"));
 	ISM->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
 	ISM->SetCanEverAffectNavigation(true);
+	if (!Def->bHasCollision)
+	{
+		// Blok bez kolizije (baklja): igrac, mobovi i dropovi prolaze, pogada
+		// ga samo zraka nisana (ECC_Visibility), a navmesh ga ne vidi
+		ISM->SetCollisionResponseToAllChannels(ECR_Ignore);
+		ISM->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
+		ISM->SetCanEverAffectNavigation(false);
+	}
 	// RemoveInstance u 5.6 po defaultu radi order-preserving RemoveAt;
 	// bookkeeping u RemoveBlockInstance racuna na RemoveAtSwap semantiku
 	ISM->SetRemoveSwap();
 
-	// Blokovi s biome tintom nose RGB tint kao 3 custom data floata po
-	// instanci - mora se postaviti PRIJE prve AddInstance. Engine pri
-	// RemoveAtSwap sam premjesta i custom data (InstancedStaticMesh.cpp:3827).
-	if (Def->BiomeTint != EBiomeTintType::None)
-	{
-		ISM->SetNumCustomDataFloats(3);
-	}
+	// Custom data po instanci: RGB tint bioma (0-2) i svjetlina 6 stranica od
+	// svjetla blokova (3-8). Mora se postaviti PRIJE prve AddInstance. Engine
+	// pri RemoveAtSwap sam premjesta i custom data (InstancedStaticMesh.cpp:3827).
+	ISM->SetNumCustomDataFloats(NumBlockCustomFloats);
 
 	ISM->SetupAttachment(GetRootComponent());
 	ISM->RegisterComponent();
@@ -2599,7 +2678,7 @@ void AVoxelWorld::AddBlockInstance(FIntVector Pos, EBlockType Type)
 	}
 
 	const int32 Index = Set->Component->AddInstance(
-		FTransform(GridToWorld(Pos.X, Pos.Y, Pos.Z)), /*bWorldSpace=*/true);
+		GetBlockInstanceTransform(Pos, Type, Chunk->GetState(GridToLocal(Pos))), /*bWorldSpace=*/true);
 
 	// AddInstance appenda na kraj pa indeks mora pratiti nas paralelni niz
 	if (Index != Set->InstanceToGrid.Num())
@@ -2608,13 +2687,11 @@ void AVoxelWorld::AddBlockInstance(FIntVector Pos, EBlockType Type)
 			Index, Set->InstanceToGrid.Num(), (int32)Type);
 	}
 
-	// RGB tint bioma - bez njega bi custom data ostao 0 (crna trava)
-	if (Set->BiomeTint != EBiomeTintType::None)
-	{
-		const FLinearColor Tint = GetBiomeTintAt(Pos, Set->BiomeTint);
-		const float TintFloats[3] = { Tint.R, Tint.G, Tint.B };
-		Set->Component->SetCustomData(Index, MakeArrayView(TintFloats, 3));
-	}
+	// RGB tint bioma (bez njega bi custom data ostao 0 = crna trava) i svjetlina stranica
+	const FLinearColor Tint = GetBiomeTintAt(Pos, Set->BiomeTint);
+	float Custom[NumBlockCustomFloats] = { Tint.R, Tint.G, Tint.B };
+	ComputeFaceLights(Pos, Type, Custom + 3);
+	Set->Component->SetCustomData(Index, MakeArrayView(Custom, NumBlockCustomFloats));
 
 	Set->GridToInstance.Add(Pos, Index);
 	Set->InstanceToGrid.Add(Pos);
@@ -2635,9 +2712,12 @@ void AVoxelWorld::AddChunkInstancesBatch(FVoxelChunk& Chunk, EBlockType Type, co
 
 	TArray<FTransform> Transforms;
 	Transforms.Reserve(Positions.Num());
+	const bool bStateTransform = bStateTransformByType[(uint8)Type];
 	for (const FIntVector& Pos : Positions)
 	{
-		Transforms.Add(FTransform(GridToWorld(Pos.X, Pos.Y, Pos.Z)));
+		Transforms.Add(bStateTransform
+			? GetBlockInstanceTransform(Pos, Type, Chunk.GetState(GridToLocal(Pos)))
+			: FTransform(GridToWorld(Pos.X, Pos.Y, Pos.Z)));
 	}
 
 	// Indeksi batcha su kontinuirani: AddInstances appenda na kraj
@@ -2651,20 +2731,29 @@ void AVoxelWorld::AddChunkInstancesBatch(FVoxelChunk& Chunk, EBlockType Type, co
 		Set->InstanceToGrid.Add(Pos);
 	}
 
-	// RGB tint bioma za cijeli batch - range overload je jedan memcpy, a
-	// delta tracker (CustomDataChanged) sam gura promjenu na GPU krajem framea
-	if (Set->BiomeTint != EBiomeTintType::None)
+	// Custom data za cijeli batch (tint bioma + svjetlina stranica) - range
+	// overload je jedan memcpy, a delta tracker (CustomDataChanged) sam gura
+	// promjenu na GPU krajem framea. Tint se upisuje UVIJEK, i blokovima bez
+	// tinta (bijelo): AddInstances custom data puni nulama, a materijal gornju
+	// stranicu mnozi tintom, pa bi nula dala crnu plohu.
+	const bool bWithLight = ChunkMayHaveLight(Chunk);
 	{
-		TArray<float> TintFloats;
-		TintFloats.Reserve(Positions.Num() * 3);
+		TArray<float> Custom;
+		Custom.SetNumZeroed(Positions.Num() * NumBlockCustomFloats);
+		float* Out = Custom.GetData();
 		for (const FIntVector& Pos : Positions)
 		{
 			const FLinearColor Tint = GetBiomeTintAt(Pos, Set->BiomeTint);
-			TintFloats.Add(Tint.R);
-			TintFloats.Add(Tint.G);
-			TintFloats.Add(Tint.B);
+			Out[0] = Tint.R;
+			Out[1] = Tint.G;
+			Out[2] = Tint.B;
+			if (bWithLight)
+			{
+				ComputeFaceLights(Pos, Type, Out + 3);
+			}
+			Out += NumBlockCustomFloats;
 		}
-		Set->Component->SetCustomData(StartIndex, StartIndex + Positions.Num() - 1, TintFloats);
+		Set->Component->SetCustomData(StartIndex, StartIndex + Positions.Num() - 1, Custom);
 	}
 
 	// Engine registrira komponentu u nav octree kod PRVE instance, s bounds
@@ -2830,6 +2919,7 @@ void AVoxelWorld::NotifyBlockDestroyed(FIntVector GridPosition, EBlockType Destr
 		GridToWorld(GridPosition.X, GridPosition.Y, GridPosition.Z));
 
 	SetBlockData(GridPosition, EBlockType::Air, /*bMarkModified=*/true);
+	UpdateLightForBlockChange(GridPosition, EBlockType::Air);
 
 	// Pukotina ne smije ostati u zraku, ni kad blok srusi netko drugi
 	if (CrackComponent)
@@ -2866,6 +2956,9 @@ void AVoxelWorld::NotifyBlockDestroyed(FIntVector GridPosition, EBlockType Destr
 	{
 		OnLeafDecayed(GridPosition);
 	}
+
+	// Baklja koja se oslanjala na ovaj blok otpada
+	NotifyNeighborsChanged(GridPosition);
 }
 
 ABlock* AVoxelWorld::GetBlock(int32 X, int32 Y, int32 Z)
@@ -2929,12 +3022,14 @@ void AVoxelWorld::SetBlockType(int32 X, int32 Y, int32 Z, EBlockType NewType)
 	{
 		// Air = prazna celija - ukloni podatke i vizual
 		SetBlockData(GridPos, EBlockType::Air, /*bMarkModified=*/true);
+		UpdateLightForBlockChange(GridPos, EBlockType::Air);
 		RemoveBlockInstance(GridPos);
 		if (ABlock* Actor = Blocks.FindRef(GridPos))
 		{
 			Blocks.Remove(GridPos);
 			Actor->Destroy();
 		}
+		NotifyNeighborsChanged(GridPos);
 		return;
 	}
 
@@ -2942,19 +3037,22 @@ void AVoxelWorld::SetBlockType(int32 X, int32 Y, int32 Z, EBlockType NewType)
 	{
 		return;
 	}
+	UpdateLightForBlockChange(GridPos, NewType);
 
 	if (ABlock* Actor = Blocks.FindRef(GridPos))
 	{
 		Actor->SetBlockType(NewType);
+		NotifyNeighborsChanged(GridPos);
 		return;
 	}
 
 	// Tip se mozda promijenio -> instanca mora u drugi set
 	RemoveBlockInstance(GridPos);
-	if (IsBlockExposed(GridPos))
+	if (!IsFullCube(NewType) || IsBlockExposed(GridPos))
 	{
 		AddBlockInstance(GridPos, NewType);
 	}
+	NotifyNeighborsChanged(GridPos);
 }
 
 FVector AVoxelWorld::GridToWorld(int32 X, int32 Y, int32 Z)
@@ -2963,7 +3061,7 @@ FVector AVoxelWorld::GridToWorld(int32 X, int32 Y, int32 Z)
 	return GetActorLocation() + FVector(X * BlockSize, Y * BlockSize, Z * BlockSize);
 }
 
-bool AVoxelWorld::PlaceBlockAt(FIntVector GridPosition, EBlockType Type)
+bool AVoxelWorld::PlaceBlockAt(FIntVector GridPosition, EBlockType Type, uint8 State)
 {
 	if (!IsValidZ(GridPosition.Z))
 	{
@@ -2996,8 +3094,15 @@ bool AVoxelWorld::PlaceBlockAt(FIntVector GridPosition, EBlockType Type)
 		return false;
 	}
 
-	Chunk->SetBlock(GridToLocal(GridPosition), Type);
+	// Blok s uvjetom opstanka (baklja) se ne postavlja gdje bi odmah otpao
+	if (!CanBlockSurvive(Type, State, GridPosition))
+	{
+		return false;
+	}
+
+	Chunk->SetBlock(GridToLocal(GridPosition), Type, State);
 	Chunk->bModified = true;
+	UpdateLightForBlockChange(GridPosition, Type);
 
 	// Postavljeni blok je po definiciji izlozen - odmah dodaj instancu
 	AddBlockInstance(GridPosition, Type);
@@ -3005,6 +3110,7 @@ bool AVoxelWorld::PlaceBlockAt(FIntVector GridPosition, EBlockType Type)
 	UBlockSoundLibrary::PlayBlockSound(this, Type, EBlockSoundEvent::Place,
 		GridToWorld(GridPosition.X, GridPosition.Y, GridPosition.Z));
 
+	NotifyNeighborsChanged(GridPosition);
 	return true;
 }
 
@@ -3321,9 +3427,29 @@ void AVoxelWorld::BuildBlockAssetCache()
 	for (const FBlockDefinition& Def : AllBlocks)
 	{
 		FBlockAssets Assets;
-		Assets.Mesh = Cast<UStaticMesh>(Def.Mesh.TryLoad());
 		Assets.Material = Cast<UMaterialInterface>(Def.Material.TryLoad());
+		if (Def.Model.IsValid())
+		{
+			// Blok s modelom (baklja): mesh se gradi iz Blocks.json, a kolizija mu je obris za ciljanje
+			const float Half = BlockSize * 0.5f;
+			const FBox Shape = Def.bHasShape ? FBox(Def.Shape.Min * BlockSize, Def.Shape.Max * BlockSize)
+				: FBox(FVector(-Half), FVector(Half));
+			const FString MeshName = FString::Printf(TEXT("SM_BlockModel_%s"),
+				*StaticEnum<EBlockType>()->GetNameStringByValue((int64)Def.BlockType));
+			Assets.Mesh = BlockModel::BuildStaticMesh(this, FName(*MeshName), *Def.Model, Assets.Material, Shape, BlockSize);
+		}
+		else
+		{
+			Assets.Mesh = Cast<UStaticMesh>(Def.Mesh.TryLoad());
+		}
 		BlockAssetCache.Add(Def.BlockType, Assets);
+
+		const uint8 TypeIndex = (uint8)Def.BlockType;
+		bFullCubeByType[TypeIndex] = Def.bHasCollision;
+		bBlocksLightByType[TypeIndex] = Def.bBlocksLight;
+		EmissionByType[TypeIndex] = (uint8)FMath::Clamp(Def.LightLevel, 0, 15);
+		bStateTransformByType[TypeIndex] = Def.StateYaw.Num() > 0;
+		BehaviorByType[TypeIndex] = Def.Behavior;
 
 		// Statistika za [PERF] log
 		const FSoftObjectPath* Paths[2] = { &Def.Mesh, &Def.Material };
@@ -3344,6 +3470,14 @@ void AVoxelWorld::BuildBlockAssetCache()
 				UE_LOG(LogTemp, Warning, TEXT("[PERF]     NEUSPJEH: %s"), *Paths[i]->ToString());
 			}
 		}
+	}
+
+	// Jacina svjetla blokova u materijalima (Scripts/build_block_materials.py)
+	BlockLightCollection = LoadObject<UMaterialParameterCollection>(nullptr,
+		TEXT("/Game/Blocks/Materials/MPC_BlockLight.MPC_BlockLight"));
+	if (!BlockLightCollection)
+	{
+		UE_LOG(LogTemp, Error, TEXT("VoxelWorld: nema MPC_BlockLight - pokreni Tools > MinecraftClone > Build Block Materials"));
 	}
 
 	WaterMaterialLoaded = WaterMaterial.LoadSynchronous();

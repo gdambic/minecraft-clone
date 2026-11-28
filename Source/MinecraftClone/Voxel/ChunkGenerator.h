@@ -93,6 +93,15 @@ struct FChunkGenParams
 
 	/** Showcase za chunk (0,0): po jedan blok svake registrirane definicije, u redovima po 16. Prazno = bez showcasea. */
 	TArray<EBlockType> ShowcaseBlocks;
+
+	/**
+	 * Zidni blok u showcaseu (zidna baklja): ne stoji u redu, nego po jedan na
+	 * svakoj bocnoj stranici bloka ShowcaseWallSupport iza redova. Air = nema ga.
+	 * ShowcaseWallStates su stanja za strane +X, -X, +Y, -Y (blok gleda od oslonca).
+	 */
+	EBlockType ShowcaseWallBlock = EBlockType::Air;
+	EBlockType ShowcaseWallSupport = EBlockType::Stone;
+	uint8 ShowcaseWallStates[4] = { 0, 0, 0, 0 };
 };
 
 /** Deterministicki kandidat stabla - izracunljiv za BILO KOJI chunk samo iz seeda i koordinate. */
@@ -119,9 +128,13 @@ struct FTreeCandidate
 class MINECRAFTCLONE_API FChunkGenerator
 {
 public:
-	/** Blokovi chunka; OutBiomes dobiva biom svakog stupca (VoxelGrid::ColumnIndex). */
+	/**
+	 * Blokovi chunka; OutBiomes dobiva biom svakog stupca (VoxelGrid::ColumnIndex).
+	 * OutStates (ako je zadan) dobiva stanja blokova samo kad chunk ima blok u
+	 * stanju razlicitom od pocetnog (showcase); inace ostaje prazan = sve nule.
+	 */
 	static TArray<EBlockType> GenerateChunkData(const FChunkGenParams& Params, const FIntPoint& Coord,
-		TArray<uint8>& OutBiomes);
+		TArray<uint8>& OutBiomes, TArray<uint8>* OutStates = nullptr);
 
 	/** Samo biomi stupaca chunka - za chunk ciji blokovi dolaze iz memorije (izmijenjeni chunk). */
 	static TArray<uint8> GenerateChunkBiomes(const FChunkGenParams& Params, const FIntPoint& Coord);

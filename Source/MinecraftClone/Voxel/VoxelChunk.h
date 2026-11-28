@@ -149,6 +149,13 @@ struct FChunkInstanceSet
 	TArray<FIntVector> InstanceToGrid;
 };
 
+/** Podaci izmijenjenog chunka sacuvani pri unloadu (AVoxelWorld::RetainedModifiedChunks). */
+struct FRetainedChunkData
+{
+	TArray<EBlockType> Blocks;
+	TArray<uint8> States;
+};
+
 /** Zivotni ciklus chunka: podaci se generiraju (worker), pa primjenjuju (game thread = vizuali). */
 enum class EChunkState : uint8
 {
@@ -164,6 +171,9 @@ struct FCompletedChunkData
 	uint64 RequestId = 0;
 	double GenMs = 0.0;
 	TArray<EBlockType> Blocks;
+
+	/** Prazno ako su sva stanja pocetna (FChunkGenerator::GenerateChunkData) */
+	TArray<uint8> States;
 	TArray<uint8> Biomes;
 };
 
@@ -178,6 +188,20 @@ struct FVoxelChunk
 
 	/** Izvor istine: flat array BlocksPerChunk celija, Air = odsutnost bloka. Indeksira SAMO VoxelGrid::LocalIndex. */
 	TArray<EBlockType> Blocks;
+
+	/**
+	 * Stanje bloka po celiji, paralelno s Blocks (Docs/PLAN_Torches.md): indeks
+	 * stanja unutar vrste bloka, npr. smjer zidne baklje. Kao u Minecraftu,
+	 * celija = vrsta bloka + vrijednosti njezinih svojstava. Generator pise
+	 * samo Blocks, pa generirani teren ima pocetno stanje 0.
+	 */
+	TArray<uint8> States;
+
+	/**
+	 * Razina svjetla blokova po celiji, 0..15 (Minecraft block light). Prazno =
+	 * u chunku nema svjetla (sve nule); niz nastaje kad prva celija dobije svjetlo.
+	 */
+	TArray<uint8> BlockLight;
 
 	/**
 	 * Indeks bioma po stupcu (VoxelGrid::ColumnIndex, ColumnsPerChunk elemenata)
@@ -233,6 +257,7 @@ struct FVoxelChunk
 		: Coord(InCoord)
 	{
 		Blocks.SetNumZeroed(VoxelGrid::BlocksPerChunk);
+		States.SetNumZeroed(VoxelGrid::BlocksPerChunk);
 		static_assert((int32)EBlockType::Air == 0, "SetNumZeroed pretpostavlja Air == 0");
 	}
 
@@ -245,11 +270,35 @@ struct FVoxelChunk
 		return Blocks[VoxelGrid::LocalIndex(Local)];
 	}
 
-	void SetBlock(const FIntVector& Local, EBlockType Type)
+	void SetBlock(const FIntVector& Local, EBlockType Type, uint8 BlockState = 0)
 	{
 		if (VoxelGrid::IsValidZ(Local.Z))
 		{
 			Blocks[VoxelGrid::LocalIndex(Local)] = Type;
+			States[VoxelGrid::LocalIndex(Local)] = BlockState;
 		}
+	}
+
+	uint8 GetState(const FIntVector& Local) const
+	{
+		return VoxelGrid::IsValidZ(Local.Z) ? States[VoxelGrid::LocalIndex(Local)] : 0;
+	}
+
+	uint8 GetLight(const FIntVector& Local) const
+	{
+		return BlockLight.Num() > 0 && VoxelGrid::IsValidZ(Local.Z) ? BlockLight[VoxelGrid::LocalIndex(Local)] : 0;
+	}
+
+	void SetLight(const FIntVector& Local, uint8 Level)
+	{
+		if (!VoxelGrid::IsValidZ(Local.Z) || (BlockLight.Num() == 0 && Level == 0))
+		{
+			return;
+		}
+		if (BlockLight.Num() == 0)
+		{
+			BlockLight.SetNumZeroed(VoxelGrid::BlocksPerChunk);
+		}
+		BlockLight[VoxelGrid::LocalIndex(Local)] = Level;
 	}
 };

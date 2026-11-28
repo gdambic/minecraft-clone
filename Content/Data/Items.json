@@ -333,5 +333,14 @@
       "type": "sprite",
       "texture": "Emerald"
     }
+  },
+  {
+    "itemType": "Torch",
+    "displayName": "Torch",
+    "wallBlock": "WallTorch",
+    "display": {
+      "type": "sprite",
+      "texture": "Torch"
+    }
   }
 ]
